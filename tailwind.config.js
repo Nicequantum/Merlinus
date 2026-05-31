@@ -6,8 +6,11 @@ export default {
   ],
   theme: {
     extend: {
-      fontFamily: {
-        'sf': ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Inter', 'system-ui', 'sans-serif'],
+      colors: {
+        'benz-dark': '#0a0a0a',
+        'benz-surface': '#1c1c1e',
+        'benz-surface-2': '#2c2c2e',
+        'benz-accent': '#0a84ff',
       }
     },
   },
