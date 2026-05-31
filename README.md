@@ -1,72 +1,71 @@
 # BenzTech — Mercedes-Benz Technician PWA
 
-Professional, native-feeling Progressive Web App for Mercedes-Benz technicians. Built to look and behave like a premium iOS app with a dark professional theme.
+Professional, native-feeling Progressive Web App for Mercedes-Benz technicians. Built with **Vite + React** and designed to feel like a premium iOS app (dark professional theme).
 
-## Features
+## Tech Stack
 
-- **Large "Scan Repair Order" button** — instantly opens the device camera
-- **Automatic OCR** — uses Tesseract.js (loads ~15-20 MB language data once) to extract text from RO photos
-- **Smart repair line extraction** — parses numbered lines, complaints, and VIN where possible
-- **Clean repair line list** — tap any line to open the full detail view
-- **Xentry image analysis** — upload screenshots; app runs OCR + heuristics to pull:
-  - SDS / DTC codes
-  - Guided Test names
-  - Voltage, pressure, and measurement values
-  - Component IDs (A7/3, N10/1, B6/1, etc.)
-  - Wiring circuits and pin references
-- **Technician notes** per line (autosaved)
-- **Exact-spec warranty story generator** that strictly follows the supplied master technician prompt:
-  - Always uses 3 C’s structure (Concern, Cause, Correction)
-  - Always states battery charger + voltage > 12.5 V
-  - Always references Xentry Quick Test + cloud review under VIN
-  - Weaves in specific Guided Test names, pin numbers, measurements, and component locations from uploaded images
-  - Natural first-person language with variation between lines
-  - Punch times included
-- **Copy button** — one tap copies the finished story ready for Xentry or warranty submission
-- **Installable PWA** — Add to Home Screen on iOS/Android. Works offline after first load.
+- Vite 6 + React 18
+- Tailwind CSS 3
+- Tesseract.js (client-side OCR)
+- vite-plugin-pwa (automatic service worker + manifest)
+- Fully offline capable after first load
 
-## How to Use
+## Development
 
-1. Open `index.html` in Safari (iOS) or Chrome (Android) — or serve via any static host.
-2. Tap **SCAN REPAIR ORDER** and photograph the repair order.
-3. Review / edit the extracted lines and vehicle info.
-4. Tap any repair line → add notes, upload Xentry screenshots.
-5. Tap **ANALYZE UPLOADED IMAGES** (optional but powerful).
-6. Tap **GENERATE WARRANTY STORY** (or "Generate All" from the RO screen).
-7. Review, regenerate if desired, then **COPY** and paste into your warranty system.
+```bash
+npm install
+npm run dev
+```
 
-**Pro tip:** Use the "LOAD SAMPLE RO" button to instantly explore the full feature set without a real repair order.
+## Production Build
 
-## Installation (Home Screen)
+```bash
+npm run build
+npm run preview
+```
 
-- **iOS Safari**: Tap Share → "Add to Home Screen"
-- **Android Chrome**: Menu → "Install app" or "Add to Home Screen"
+## Deployment to Vercel
 
-After install it runs full-screen like a native app with its own icon.
+This project is pre-configured for Vercel:
 
-## Offline Behavior
+1. Push to GitHub
+2. Import the repo in Vercel
+3. Vercel auto-detects Vite → deploys correctly
+4. `vercel.json` handles SPA routing + PWA headers
 
-- Core UI and previously loaded ROs work completely offline.
-- First-time OCR (Tesseract) and Tailwind require a network connection.
-- Once Tesseract language data is cached by the browser it continues to work offline.
+## Key Features
 
-## Technical Notes
+- Large **Scan Repair Order** button (opens camera)
+- Automatic OCR using Tesseract.js
+- Clean repair line list
+- Per-line detail view with:
+  - Editable technician notes
+  - Multiple Xentry image uploads + automatic analysis (DTCs, Guided Tests, measurements, component locations, wiring/pins)
+- **Exact-spec warranty story generator** following the 18-year master technician prompt (3 C’s, battery charger statement, Xentry cloud reference, natural first-person language with variation)
+- One-tap copy + regenerate
+- Proper PWA (installable on iOS/Android home screen, works offline)
 
-- Single-file SPA (index.html) + manifest + service worker.
-- Camera uses the native `<input type="file" capture="environment">` for maximum compatibility.
-- OCR and Xentry analysis are 100% client-side.
-- All data stays in your browser (localStorage). Nothing is sent anywhere.
-- The warranty story generator is deterministic JavaScript that strictly obeys the provided ruleset and produces varied natural-sounding output.
+## Project Structure
 
-## Recommended Workflow for Real Use
+```
+src/
+├── App.jsx          # Main application (all core logic)
+├── main.jsx
+└── index.css        # Tailwind + custom iOS styling
 
-1. Photograph the physical RO at the start of the job.
-2. As you work, upload the important Xentry screenshots to the relevant line.
-3. Generate the story immediately after the repair while details are fresh.
-4. Copy the story and paste it into the warranty claim before closing the RO.
+public/              # Static assets (add your icons here)
+vercel.json          # Vercel + SPA + PWA config
+```
+
+## Adding PWA Icons
+
+For best results, add these files to the `public` folder:
+
+- `pwa-192x192.png`
+- `pwa-512x512.png`
+
+You can generate them from the star logo in the app or use any Mercedes-Benz style icon.
 
 ---
 
-Built for technicians who hate writing warranty stories but need every one to pass review the first time.
-
-**BenzTech v1.2**
+Built for technicians who need fast, reliable, review-proof warranty stories.
