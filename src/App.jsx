@@ -208,7 +208,7 @@ Write only the warranty story for this specific line following all the rules in 
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    if (response.status === 401) throw new Error('INVALID_API_KEY');
+    if (response.status === 401 || response.status === 403) throw new Error('INVALID_API_KEY');
     if (response.status === 429) throw new Error('RATE_LIMIT');
     throw new Error(`API_ERROR: ${response.status} ${errorText}`);
   }
@@ -739,15 +739,23 @@ function App() {
       haptic('success');
       showToast('Real warranty story generated with Grok');
     } catch (err) {
-      console.error(err);
+      console.error('Grok API error:', err);
       if (err.message === 'NO_API_KEY' || err.message === 'INVALID_API_KEY') {
         showToast('Invalid or missing Grok API key. Check Settings.', 'error');
         setShowSettings(true);
       } else if (err.message === 'RATE_LIMIT') {
         showToast('Rate limit reached. Please wait a moment and try again.', 'error');
+      } else if (err.name === 'TypeError' || err.message.includes('fetch') || err.message.includes('CORS') || err.message.includes('Network')) {
+        showToast('Network/CORS error. Check your internet connection or try from a different network. Falling back to template.', 'error');
+        const fallback = buildWarrantyStory(currentRO, line);
+        updateRO(ro => ({
+          ...ro,
+          repairLines: ro.repairLines.map(l =>
+            l.id === currentLineId ? { ...l, warrantyStory: fallback } : l
+          )
+        }));
       } else {
-        showToast('Failed to generate story with Grok. Using template fallback.', 'error');
-        // Fallback to old template generator
+        showToast('Failed to generate with Grok. Using template fallback.', 'error');
         const fallback = buildWarrantyStory(currentRO, line);
         updateRO(ro => ({
           ...ro,
@@ -861,6 +869,38 @@ function App() {
     showToast('API key cleared');
   };
 
+  const testApiKey = async () => {
+    if (!apiKey) {
+      showToast('Please enter an API key first', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(GROK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: GROK_MODEL,
+          messages: [{ role: 'user', content: 'Reply with exactly: "BenzTech API test successful"' }],
+          max_tokens: 20
+        })
+      });
+      if (!res.ok) throw new Error('Bad response');
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content || '';
+      if (text.toLowerCase().includes('successful')) {
+        showToast('API key works! Grok is reachable.');
+      } else {
+        showToast('Key accepted but unexpected response. Check key permissions.');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Test failed — possible invalid key, CORS block, or no internet.', 'error');
+    }
+  };
+
   const renderRepairLinesList = () => {
     if (!currentRO?.repairLines?.length) {
       return (
@@ -947,7 +987,7 @@ function App() {
         <div className="text-center pb-8">
           <div className="inline-flex items-center gap-x-2 px-4 py-1.5 bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl text-xs text-[#8e8e93]">
             <div className="w-1.5 h-1.5 bg-[#30d158] rounded-full animate-pulse"></div>
-            WORKS OFFLINE AFTER FIRST LOAD
+            STORY GENERATION REQUIRES INTERNET + API KEY
           </div>
         </div>
 
@@ -1158,7 +1198,10 @@ function App() {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6 px-1">
-          <div className="font-bold text-2xl tracking-tight">Settings</div>
+          <div>
+            <div className="font-bold text-2xl tracking-tight">Settings</div>
+            <div className="text-[10px] text-[#8e8e93] -mt-1">v1.4.0</div>
+          </div>
           <button onClick={() => setShowSettings(false)} className="text-[#0a84ff] font-semibold text-lg">Done</button>
         </div>
 
@@ -1191,23 +1234,33 @@ function App() {
                 SAVE KEY
               </button>
               {apiKey && (
-                <button 
-                  onClick={clearApiKey}
-                  className="px-6 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm text-[#ff9f0a]"
-                >
-                  CLEAR
-                </button>
+                <>
+                  <button 
+                    onClick={testApiKey}
+                    className="px-5 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm"
+                  >
+                    TEST
+                  </button>
+                  <button 
+                    onClick={clearApiKey}
+                    className="px-5 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm text-[#ff9f0a]"
+                  >
+                    CLEAR
+                  </button>
+                </>
               )}
             </div>
             
             <div className="mt-3 text-[11px] text-[#8e8e93] leading-snug px-1">
-              Get your free Grok API key at <span className="text-[#0a84ff]">console.grok.com</span> or xAI developer portal.
-              The key never leaves your device.
+              Get your Grok API key at console.x.ai. 
+              Requires internet connection. The key is stored only on this device and sent directly to the Grok API from your browser.
             </div>
           </div>
 
           <div className="border-t border-[#38383a] pt-4 text-xs text-[#8e8e93] px-1">
             BenzTech uses the Grok API to generate high-quality, review-passing Mercedes-Benz warranty stories following your exact master technician prompt.
+            <br /><br />
+            <span className="text-[#ff9f0a]">To get the latest version:</span> Close and reopen the installed PWA, or hard-refresh the browser (Ctrl/Cmd + Shift + R).
           </div>
         </div>
       </div>
