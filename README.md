@@ -41,9 +41,20 @@ This project is pre-configured for Vercel:
 - Per-line detail view with:
   - Editable technician notes
   - Multiple Xentry image uploads + automatic analysis (DTCs, Guided Tests, measurements, component locations, wiring/pins)
-- **Exact-spec warranty story generator** following the 18-year master technician prompt (3 C’s, battery charger statement, Xentry cloud reference, natural first-person language with variation)
+- **Real Grok API integration** — generates true AI warranty stories using the exact senior master technician prompt
+- Dedicated **Settings screen** to enter and save your Grok (xAI) API key locally
 - One-tap copy + regenerate
-- Proper PWA (installable on iOS/Android home screen, works offline)
+- Proper PWA (installable on iOS/Android home screen, works offline for scanning/editing; story generation requires internet + key)
+
+## Grok API Setup (Required for AI Stories)
+
+1. Get a free API key at [console.x.ai](https://console.x.ai)
+2. Open the app → tap the gear icon (top right)
+3. Paste your key (starts with `xai-`) and tap **SAVE KEY**
+4. Use the **TEST CONNECTION** button to verify
+5. Now "Generate Warranty Story" will call Grok with the full master tech prompt instead of the local template fallback
+
+**Note:** The key is stored only in your browser. All API calls are made directly from your device.
 
 ## Project Structure
 

@@ -283,14 +283,13 @@ function extractXentryDataFromText(ocrText, existing = {}) {
 function App() {
   const [currentRO, setCurrentRO] = useState(null);
   const [currentLineId, setCurrentLineId] = useState(null);
-  const [view, setView] = useState('home'); // home | ro | line
+  const [view, setView] = useState('home'); // home | ro | line | settings
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   // Grok API Key (stored only locally)
   const [apiKey, setApiKey] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Load from localStorage on mount
@@ -355,6 +354,13 @@ function App() {
   const closeLineDetail = () => {
     setCurrentLineId(null);
     setView('ro');
+  };
+
+  // ==================== SETTINGS NAVIGATION ====================
+  const openSettings = () => setView('settings');
+  const closeSettings = () => {
+    if (currentRO) setView('ro');
+    else setView('home');
   };
 
   // ==================== SAMPLE DATA ====================
@@ -722,7 +728,7 @@ function App() {
     if (!line || !currentRO) return;
 
     if (!apiKey) {
-      setShowSettings(true);
+      openSettings();
       showToast('Please add your Grok API key in Settings first', 'error');
       return;
     }
@@ -742,7 +748,7 @@ function App() {
       console.error('Grok API error:', err);
       if (err.message === 'NO_API_KEY' || err.message === 'INVALID_API_KEY') {
         showToast('Invalid or missing Grok API key. Check Settings.', 'error');
-        setShowSettings(true);
+        openSettings();
       } else if (err.message === 'RATE_LIMIT') {
         showToast('Rate limit reached. Please wait a moment and try again.', 'error');
       } else if (err.name === 'TypeError' || err.message.includes('fetch') || err.message.includes('CORS') || err.message.includes('Network')) {
@@ -774,7 +780,7 @@ function App() {
     if (!line || !currentRO) return;
 
     if (!apiKey) {
-      setShowSettings(true);
+      openSettings();
       showToast('Add your Grok API key in Settings to regenerate with AI', 'error');
       return;
     }
@@ -814,7 +820,7 @@ function App() {
     if (!currentRO) return;
 
     if (!apiKey) {
-      setShowSettings(true);
+      openSettings();
       showToast('Add your Grok API key in Settings to generate real stories', 'error');
       return;
     }
@@ -860,7 +866,7 @@ function App() {
     } else {
       localStorage.removeItem('benztech_grok_api_key');
     }
-    setShowSettings(false);
+    // Don't auto close - user can tap Back
   };
 
   const clearApiKey = () => {
@@ -948,7 +954,7 @@ function App() {
     return (
       <div className="app-container mx-auto min-h-dvh flex flex-col bg-[#0a0a0a] text-[#f5f5f7]">
         <header className="ios-header sticky top-0 z-50 safe-top px-5 h-14 flex items-center justify-end">
-          <button onClick={() => setShowSettings(true)} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]">
+          <button onClick={() => openSettings()} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -993,7 +999,7 @@ function App() {
 
         {/* Toast container */}
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
-        {showSettings && <SettingsModal />}
+
       </div>
     );
   }
@@ -1013,7 +1019,7 @@ function App() {
             </div>
             <div className="flex items-center gap-x-2">
               <button onClick={() => editVehicleInfo()} className="px-3 py-1.5 text-xs font-bold rounded-full bg-[#2c2c2e] active:bg-[#38383a]">EDIT</button>
-              <button onClick={() => setShowSettings(true)} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="Settings">
+              <button onClick={() => openSettings()} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="Settings">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1069,7 +1075,7 @@ function App() {
         </div>
 
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
-        {showSettings && <SettingsModal />}
+
       </div>
     );
   }
@@ -1085,7 +1091,7 @@ function App() {
               <span className="font-bold">Back</span>
             </button>
             <div className="flex-1 text-center pr-8 relative">
-              <button onClick={() => setShowSettings(true)} className="absolute right-4 top-3 w-8 h-8 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="API Settings">
+              <button onClick={() => openSettings()} className="absolute right-4 top-3 w-8 h-8 flex items-center justify-center rounded-full active:bg-[#2c2c2e] text-[#8e8e93]" title="API Settings">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.25">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 002.572 1.065c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-2.572-1.065c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1185,51 +1191,55 @@ function App() {
         </div>
 
         <div id="toast-root" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[460px] px-4" />
-        {showSettings && <SettingsModal />}
+
       </div>
     );
   }
 
-  // ==================== SETTINGS MODAL ====================
-  const SettingsModal = () => (
-    <div className="fixed inset-0 z-[110] bg-black/80 flex items-end" onClick={() => setShowSettings(false)}>
-      <div 
-        className="w-full max-w-[460px] mx-auto bg-[#1c1c1e] rounded-t-3xl p-6 pb-8 safe-bottom"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex justify-between items-center mb-6 px-1">
-          <div>
-            <div className="font-bold text-2xl tracking-tight">Settings</div>
-            <div className="text-[10px] text-[#8e8e93] -mt-1">v1.4.0</div>
+  // ==================== SETTINGS SCREEN ====================
+  if (view === 'settings') {
+    return (
+      <div className="app-container mx-auto min-h-dvh flex flex-col bg-[#0a0a0a] text-[#f5f5f7]">
+        <header className="ios-header sticky top-0 z-50 safe-top">
+          <div className="px-4 h-14 flex items-center">
+            <button onClick={closeSettings} className="flex items-center gap-x-1 text-[#0a84ff] font-semibold pl-1 pr-3">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3.25">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="font-bold">Back</span>
+            </button>
+            <div className="flex-1 text-center pr-12">
+              <div className="font-bold text-[17px]">Settings</div>
+              <div className="text-[10px] text-[#8e8e93] -mt-0.5">v1.4.0</div>
+            </div>
           </div>
-          <button onClick={() => setShowSettings(false)} className="text-[#0a84ff] font-semibold text-lg">Done</button>
-        </div>
+        </header>
 
-        <div className="space-y-5">
-          {/* Grok API Key */}
-          <div>
-            <div className="flex items-center justify-between mb-2 px-1">
+        <div className="flex-1 overflow-y-auto px-5 pt-6 pb-8 space-y-6" style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
+          {/* Grok API Key Section */}
+          <div className="ios-card p-5">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="font-semibold text-[15px]">Grok API Key</div>
-                <div className="text-xs text-[#8e8e93]">Stored only in your browser</div>
+                <div className="font-semibold text-[17px]">Grok API Key</div>
+                <div className="text-xs text-[#8e8e93]">Stored only in your browser (localStorage)</div>
               </div>
               {apiKey && (
-                <div className="text-[10px] px-2 py-0.5 rounded bg-[#0a3c1f] text-[#30d158] font-medium">CONNECTED</div>
+                <div className="text-[10px] px-3 py-1 rounded-full bg-[#0a3c1f] text-[#30d158] font-bold tracking-wider">CONNECTED</div>
               )}
             </div>
-            
+
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="xai-..."
-              className="ios-input w-full font-mono text-sm tracking-wider"
+              placeholder="xai-YourKeyHere..."
+              className="ios-input w-full font-mono text-sm tracking-[1px] mb-4"
             />
-            
-            <div className="flex gap-x-3 mt-3">
+
+            <div className="flex gap-x-3">
               <button 
                 onClick={() => saveApiKey(apiKey)}
-                className="flex-1 h-12 rounded-2xl bg-[#0a84ff] active:bg-[#0066cc] font-semibold text-sm"
+                className="flex-1 h-12 rounded-2xl bg-[#0a84ff] active:bg-[#0066cc] font-bold text-sm"
               >
                 SAVE KEY
               </button>
@@ -1237,43 +1247,45 @@ function App() {
                 <>
                   <button 
                     onClick={testApiKey}
-                    className="px-5 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm"
+                    className="flex-1 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#38383a] font-semibold text-sm"
                   >
-                    TEST
+                    TEST CONNECTION
                   </button>
                   <button 
                     onClick={clearApiKey}
-                    className="px-5 h-12 rounded-2xl bg-[#2c2c2e] active:bg-[#3a3a3c] font-semibold text-sm text-[#ff9f0a]"
+                    className="px-6 h-12 rounded-2xl bg-[#3a2a2a] active:bg-[#4a3a3a] font-semibold text-sm text-[#ff9f0a]"
                   >
                     CLEAR
                   </button>
                 </>
               )}
             </div>
-            
-            <div className="mt-3 text-[11px] text-[#8e8e93] leading-snug px-1">
-              Get your Grok API key at console.x.ai. 
-              Requires internet connection. The key is stored only on this device and sent directly to the Grok API from your browser.
+          </div>
+
+          <div className="ios-card p-5 text-sm leading-relaxed text-[#d1d1d6]">
+            <div className="font-semibold text-[#f5f5f7] mb-2">How to get your key</div>
+            <ol className="list-decimal pl-5 space-y-1 text-[13px]">
+              <li>Go to <span className="text-[#0a84ff] font-medium">console.x.ai</span></li>
+              <li>Create or log into your xAI account</li>
+              <li>Generate an API key (starts with xai-)</li>
+              <li>Paste it above and tap Save</li>
+            </ol>
+            <div className="mt-4 pt-4 border-t border-[#38383a] text-xs text-[#8e8e93]">
+              Real warranty stories are generated by calling the Grok API directly from your device using the prompt below. The key is never sent to any server except the official Grok API.
             </div>
           </div>
 
-          <div className="border-t border-[#38383a] pt-4 text-xs text-[#8e8e93] px-1">
-            BenzTech uses the Grok API to generate high-quality, review-passing Mercedes-Benz warranty stories following your exact master technician prompt.
-            <br /><br />
-            <span className="text-[#ff9f0a]">To get the latest version:</span> Close and reopen the installed PWA, or hard-refresh the browser (Ctrl/Cmd + Shift + R).
+          <div className="text-center text-[11px] text-[#8e8e93] px-4">
+            Story generation requires a working internet connection.<br />
+            Without a valid key, the app will use a local template as fallback.
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   // Fallback
-  return (
-    <>
-      <div className="p-8 text-center">Loading BenzTech...</div>
-      {showSettings && <SettingsModal />}
-    </>
-  );
+  return <div className="p-8 text-center">Loading BenzTech...</div>;
 }
 
 export default App;
