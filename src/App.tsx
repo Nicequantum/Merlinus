@@ -272,32 +272,36 @@ function App() {
 
   // Render helpers
   const renderHome = () => (
-    <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center">
-      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-6">
-        <span className="text-white text-4xl font-bold">★</span>
-      </div>
-      <h1 className="text-4xl font-semibold tracking-tighter mb-2">BenzTech</h1>
-      <p className="text-[#8e8e93] mb-10">Mercedes-Benz Warranty Stories</p>
-
-      <button
-        onClick={handleScanRO}
-        disabled={isProcessingOCR}
-        className="primary-btn w-full max-w-xs h-14 flex items-center justify-center gap-3 text-lg mb-4"
-      >
-        <Camera size={22} />
-        {isProcessingOCR ? `SCANNING... ${ocrProgress}%` : 'SCAN REPAIR ORDER'}
-      </button>
-
+    <div className="relative min-h-dvh">
+      {/* Gear icon in top right of main screen */}
       <button
         onClick={() => setView('settings')}
-        className="secondary-btn w-full max-w-xs h-12 flex items-center justify-center gap-2 text-sm"
+        className="absolute top-4 right-4 p-2 text-[#8e8e93] z-10 touch-target"
+        aria-label="Settings"
       >
-        <Settings size={18} /> SETTINGS (API KEY)
+        <Settings size={22} />
       </button>
 
-      <p className="text-xs text-[#8e8e93] mt-8 max-w-[260px]">
-        Real AI stories powered by Grok. Requires internet + valid API key.
-      </p>
+      <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center pt-12">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-6">
+          <span className="text-white text-4xl font-bold">★</span>
+        </div>
+        <h1 className="text-4xl font-semibold tracking-tighter mb-2">BenzTech</h1>
+        <p className="text-[#8e8e93] mb-10">Mercedes-Benz Warranty Stories</p>
+
+        <button
+          onClick={handleScanRO}
+          disabled={isProcessingOCR}
+          className="primary-btn w-full max-w-xs h-14 flex items-center justify-center gap-3 text-lg mb-4"
+        >
+          <Camera size={22} />
+          {isProcessingOCR ? `SCANNING... ${ocrProgress}%` : 'SCAN REPAIR ORDER'}
+        </button>
+
+        <p className="text-xs text-[#8e8e93] mt-8 max-w-[260px]">
+          Real AI stories powered by Grok. Requires internet + valid API key.
+        </p>
+      </div>
     </div>
   );
 
@@ -457,14 +461,15 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="ios-header h-14 px-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="font-semibold tracking-tight">BenzTech</div>
-        {view !== 'settings' && (
+      {/* Global header for non-main screens */}
+      {view !== 'home' && view !== 'settings' && (
+        <header className="ios-header h-14 px-4 flex items-center justify-between sticky top-0 z-50">
+          <div className="font-semibold tracking-tight">BenzTech</div>
           <button onClick={() => setView('settings')} className="p-2 text-[#8e8e93]">
             <Settings size={20} />
           </button>
-        )}
-      </header>
+        </header>
+      )}
 
       {view === 'home' && renderHome()}
       {view === 'ro' && renderRO()}
