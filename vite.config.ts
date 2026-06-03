@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'BenzTech - Mercedes-Benz Technician',
-        short_name: 'BenzTech',
-        description: 'Professional tool for Mercedes-Benz technicians to scan repair orders and generate warranty stories with Grok AI.',
+        name: 'Maybach Tech - Mercedes-Maybach Technician',
+        short_name: 'MaybachTech',
+        description: 'Professional tool for Mercedes-Maybach technicians to scan repair orders and generate warranty stories with Grok AI.',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',

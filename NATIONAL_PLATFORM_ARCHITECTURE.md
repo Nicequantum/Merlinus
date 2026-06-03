@@ -1,5 +1,5 @@
-# BenzTech National Platform Architecture
-## Mercedes-Benz Dealer Network Warranty Story System
+# Maybach Tech National Platform Architecture
+## Mercedes-Maybach Dealer Network Warranty Story System
 
 **Document Version:** 1.0  
 **Date:** 2026-05-31  
@@ -9,11 +9,11 @@
 
 ## 1. Executive Summary
 
-BenzTech started as a high-quality client-side PWA that helps individual Mercedes-Benz technicians generate compliant, natural-sounding warranty stories using Grok AI and a carefully engineered master technician prompt.
+Maybach Tech started as a high-quality client-side PWA that helps individual Mercedes-Maybach technicians generate compliant, natural-sounding warranty stories using Grok AI and a carefully engineered master technician prompt.
 
-This document outlines how to evolve BenzTech from a **single-technician tool** into a **national-scale platform** that can be deployed across hundreds or thousands of dealerships, delivering massive throughput, standardization, compliance, and business intelligence while maintaining the core strength of high-quality AI-generated warranty stories.
+This document outlines how to evolve Maybach Tech from a **single-technician tool** into a **national-scale platform** that can be deployed across hundreds or thousands of dealerships, delivering massive throughput, standardization, compliance, and business intelligence while maintaining the core strength of high-quality AI-generated warranty stories.
 
-**Vision:** Become the de facto internal warranty story platform for Mercedes-Benz dealerships across North America (and eventually globally).
+**Vision:** Become the de facto internal warranty story platform for Mercedes-Maybach dealerships across North America (and eventually globally).
 
 ---
 
@@ -198,7 +198,7 @@ warranty_submission_logs
 - Predictive repair suggestions
 - Cost optimization engine
 - Anomaly / fraud detection in claims
-- Corporate oversight tools (for Mercedes-Benz or large dealer groups)
+- Corporate oversight tools (for Mercedes-Maybach or large dealer groups)
 
 ### Phase 4: Platform & Ecosystem
 
@@ -220,7 +220,7 @@ warranty_submission_logs
 - **Data Retention**: Configurable per dealer + corporate rules
 - **Right to be Forgotten** support
 - **SOC 2 / ISO 27001** path (required for large dealer groups)
-- **Mercedes-Benz Security Review** (they will demand it)
+- **Mercedes-Maybach Security Review** (they will demand it)
 
 ---
 
@@ -253,7 +253,7 @@ Build the analytics and AI advantage that creates network effects.
 - **Pricing Tiers**: Per technician + per story (after allowance) + Enterprise
 - **Onboarding**: Self-serve for small dealers + white-glove for large groups
 - **Change Management**: This is the #1 risk. Technicians hate extra work.
-- **Mercedes-Benz Relationship**: Decide early — partner, independent, or acquisition target.
+- **Mercedes-Maybach Relationship**: Decide early — partner, independent, or acquisition target.
 - **Competitive Moat**: The quality of your prompt library + approved story corpus will be extremely hard to replicate.
 
 ---
@@ -271,13 +271,13 @@ Build the analytics and AI advantage that creates network effects.
 
 ## Conclusion
 
-The current BenzTech app contains **one of the most valuable assets** for this vision: a battle-tested, high-quality prompt that produces stories that actually pass review.
+The current Maybach Tech app contains **one of the most valuable assets** for this vision: a battle-tested, high-quality prompt that produces stories that actually pass review.
 
 The technology to scale it exists today. The biggest challenges will be:
 
 - **Product**: Making it faster and less work for technicians than current methods
 - **Go-to-Market**: Getting dealer groups to trust and adopt it
-- **Partnerships**: Xentry/DMS integrations and relationship with Mercedes-Benz
+- **Partnerships**: Xentry/DMS integrations and relationship with Mercedes-Maybach
 
 Would you like me to expand any section into a full spec (e.g., detailed database schema, API design, or Phase 1 project plan with user stories)?
 
@@ -524,7 +524,7 @@ All endpoints enforce tenant isolation and RBAC.
   - GDPR/CCPA data export/delete endpoints.
   - Annual third-party pen test.
 
-**Mercedes-Benz Specific**: Expect them to require:
+**Mercedes-Maybach Specific**: Expect them to require:
 - Data residency in US.
 - Ability to audit all stories.
 - Integration with their warranty submission system (eventual auto-submit).

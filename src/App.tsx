@@ -41,8 +41,8 @@ interface RepairOrder {
   createdAt?: string;
 }
 
-// Full system prompt - now includes new mandatory Mercedes-Benz warranty requirements
-const SYSTEM_PROMPT = `Act as a senior Mercedes-Benz master technician with 18 years experience writing warranty stories that always pass review.
+// Full system prompt - now includes new mandatory Mercedes-Maybach warranty requirements
+const SYSTEM_PROMPT = `Act as a senior Mercedes-Maybach master technician with 18 years experience writing warranty stories that always pass review.
 Strict rules you must follow:
 
 Always mention that a battery charger was connected during the entire repair.
@@ -172,7 +172,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
 
   // IndexedDB helpers for persistent multi-RO storage
-  const DB_NAME = 'benztech_db';
+  const DB_NAME = 'maybachtech_db';
   const STORE_NAME = 'repairOrders';
 
   async function openDB(): Promise<IDBDatabase> {
@@ -240,7 +240,7 @@ function App() {
     (async () => {
       const saved = await loadAllROs();
       setAllROs(saved);
-      const savedKey = localStorage.getItem('benztech_grok_key');
+      const savedKey = localStorage.getItem('maybachtech_grok_key');
       if (savedKey) setApiKey(savedKey);
     })();
   }, []);
@@ -264,7 +264,7 @@ function App() {
 
   const saveApiKey = (key: string) => {
     setApiKey(key);
-    localStorage.setItem('benztech_grok_key', key);
+    localStorage.setItem('maybachtech_grok_key', key);
   };
 
   const deleteRO = async (id: string) => {
@@ -593,8 +593,8 @@ function App() {
             <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-3">
               <span className="text-white text-3xl font-bold">★</span>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tighter">BenzTech</h1>
-            <p className="text-[#8e8e93] text-sm">Mercedes-Benz Warranty Stories • History</p>
+            <h1 className="text-3xl font-semibold tracking-tighter">Maybach Tech</h1>
+            <p className="text-[#8e8e93] text-sm">Maybach Tech • Warranty Stories</p>
           </div>
 
           <div className="flex gap-2 mb-4">
@@ -853,7 +853,7 @@ function App() {
         />
         <div className="flex gap-3">
           <button onClick={() => saveApiKey(apiKey)} className="flex-1 secondary-btn h-11">Save Key</button>
-          <button onClick={() => { setApiKey(''); localStorage.removeItem('benztech_grok_key'); }} className="secondary-btn h-11 px-6 text-[#ff9f0a]">Clear</button>
+          <button onClick={() => { setApiKey(''); localStorage.removeItem('maybachtech_grok_key'); }} className="secondary-btn h-11 px-6 text-[#ff9f0a]">Clear</button>
         </div>
         <p className="text-xs text-[#8e8e93] mt-3 leading-snug">
           Get your key at console.x.ai. Stored locally only. Required for real AI-generated stories.
@@ -861,7 +861,7 @@ function App() {
       </div>
 
       <div className="text-xs text-[#8e8e93] px-1 leading-relaxed">
-        This app uses the official Grok API with the exact Mercedes-Benz master technician prompt for warranty stories.
+        This app uses the official Grok API with the exact Mercedes-Maybach master technician prompt for warranty stories.
       </div>
     </div>
   );
@@ -871,7 +871,7 @@ function App() {
       {/* Global header for non-main screens */}
       {view !== 'home' && view !== 'settings' && (
         <header className="ios-header h-14 px-4 flex items-center justify-between sticky top-0 z-50">
-          <div className="font-semibold tracking-tight">BenzTech</div>
+          <div className="font-semibold tracking-tight">Maybach Tech</div>
           <button onClick={() => setView('settings')} className="p-2 text-[#8e8e93]">
             <Settings size={20} />
           </button>

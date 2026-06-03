@@ -1,6 +1,6 @@
-# BenzTech
+# Maybach Tech
 
-Clean, professional Mercedes-Benz technician tool for generating warranty stories using Grok AI.
+Clean, professional Mercedes-Maybach technician tool for generating warranty stories using Grok AI.
 
 ## Features
 - Scan repair orders (camera + OCR with Tesseract.js) - auto extracts vehicle info AND all A/B/C/D complaint lines
