@@ -1,25 +1,35 @@
-# Maybach Tech
+# Benz Tech (v2)
 
-Clean, professional Mercedes-Maybach technician tool for generating warranty stories using Grok AI.
+Professional Mercedes-Benz technician warranty story assistant. Scan ROs or manual entry → pre-populated vehicle (year/make/model/VIN/mileage) + labeled A/B/C complaints → diagnostic line pages with photo uploads (Xentry, guided tests, wiring, continuity) + AI analysis → one-click professional audit-resistant warranty story via Grok.
 
-## Features
-- Scan repair orders (camera + OCR with Tesseract.js) - auto extracts vehicle info AND all A/B/C/D complaint lines
-- Home screen with searchable history list of all past ROs (reopen anytime, nothing lost)
-- Manage repair lines with full persistence (IndexedDB)
-- On line detail page: "ADD XENTRY / DIAGNOSTIC PHOTOS" button for multiple Xentry/Quick Test/Guided Test images
-- Robust multi-image analysis: OCR + parse codes, Guided Tests, measurements, components, circuits/pins from Xentry screens; raw OCR sent to AI
-- Real Grok API calls using the official senior master technician system prompt, enhanced with RO complaints, Xentry raw data, and examples from your saved history for "learning"
-- Clean dark professional UI (PWA-ready)
-- Dedicated Settings screen for Grok API key (gear icon top-right on main screen)
+## Core Features (as specified)
+- **Settings gear**: Encrypted xAI Grok API key (AES-GCM + PBKDF2 with user passphrase). Supports unlock flow. No plain text storage.
+- **RO input**: Manual or photo scan. Greatly improved OCR (preprocess: grayscale/contrast/binarize + tuned Tesseract) reliably extracts year, make, model, VIN, mileage, customer complaints.
+- **Pre-populate**: RO review page shows fully editable vehicle/customer fields + labeled (A. B. C...) editable complaints list auto-filled from scan.
+- **Main diagnostic (line) page**: Shows customer/vehicle summary + all complaints reference. Supports multiple complaints. Upload photos of Xentry tests, fault codes, guided tests, wiring diagrams, continuity checks. AI (Grok) + client smart analysis.
+- **Smart defaults**: Built-in Mercedes-Benz KB of common issues by model family + mileage band + standard test values (fuel pressure, adaptations, battery etc). "APPLY FOR THIS VEHICLE" seeds notes + expected measurements. Auto-suggests after photo uploads.
+- **One-click GENERATE WARRANTY STORY**: Uses heavily engineered master tech prompt (3 C's explicit, battery charger always, initial + final XENTRY QT, realistic test drives in/out miles, verification drive, natural first-person, technical depth from Xentry data + suggestions, variety templates). Designed to produce detailed, consistent, audit-avoiding documentation.
+
+## Improved from prior
+- Reliable OCR via preprocessing + enhanced extractors (VIN fixes, more RO patterns, complaint section awareness).
+- Editable pre-pop on RO page (was display-only).
+- Client-side suggestions + standard values (not just AI black box).
+- Proper encrypted key (not plain localStorage).
+- Better labeling, summaries, and UX for tech workflow.
 
 ## Setup
 
 1. `npm install`
 2. `npm run dev`
-3. Go to Settings and paste your Grok API key from https://console.x.ai
-4. Start scanning repair orders and generating real AI warranty stories.
+3. Tap gear (top right) → enter xAI key + a passphrase → SAVE ENCRYPTED KEY. Unlock with same pass on restarts.
+4. SCAN NEW RO (camera) or NEW MANUAL. Review/edit prefilled data + complaints on RO screen.
+5. Open a line → add diagnostic photos → APPLY smart defaults → GENERATE WARRANTY STORY.
+
+Get Grok key: https://console.x.ai
 
 ## Deployment
-Works great on Vercel. Push to GitHub and import the repo.
+Vite + PWA. Works on Vercel/Netlify. `npm run build`
 
-**Important:** Story generation requires internet + a valid Grok API key.
+**New ultra-premium futuristic Mercedes-Benz app icon** (official 3-point star next-gen tech design) is used for PWA, favicon, apple-touch, and in-app logos.
+
+**Note:** Requires internet for Grok calls. All processing (OCR, encryption, suggestions) client-side for privacy.

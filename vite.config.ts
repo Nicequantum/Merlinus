@@ -7,25 +7,32 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico'],
+      includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png', 'icon-1024.png'],
       manifest: {
-        name: 'Maybach Tech - Mercedes-Maybach Technician',
-        short_name: 'MaybachTech',
-        description: 'Professional tool for Mercedes-Maybach technicians to scan repair orders and generate warranty stories with Grok AI.',
+        name: 'Benz Tech - Mercedes-Benz Warranty Stories',
+        short_name: 'BenzTech',
+        description: 'Mercedes-Benz technician tool: improved RO scan + prefill, Xentry photo analysis, smart defaults, encrypted xAI key, one-click audit-resistant warranty stories.',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
           {
-            src: '/logo.svg',
+            src: '/icon-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: '/logo.svg',
+            src: '/icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: '/icon-1024.png',
+            sizes: '1024x1024',
+            type: 'image/png'
           }
         ]
       }
@@ -37,6 +44,20 @@ export default defineConfig({
   build: {
     // Force esbuild minifier (avoids terser/serialize-javascript crypto issues in some envs)
     minify: 'esbuild',
-    sourcemap: false
+    sourcemap: false,
+    // Extra: prevent any terser fallback
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  // Help esbuild in restricted envs
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   }
 })
