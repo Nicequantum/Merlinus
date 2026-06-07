@@ -180,6 +180,9 @@ export async function preprocessImageForOCR(file: File): Promise<Blob> {
 
 export async function runOCR(imageSource: Blob | File, onProgress?: (p: number) => void): Promise<string> {
   const worker = await Tesseract.createWorker('eng', 1, {
+    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+    langPath: 'https://tesseract.projectnaptha.com/4.0.0',
+    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
     logger: (m) => {
       if (m.status === 'recognizing text' && onProgress) {
         onProgress(Math.round(m.progress * 100));
