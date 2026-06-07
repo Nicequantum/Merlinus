@@ -81,7 +81,7 @@ export async function loginTechnician(email: string, password: string): Promise<
     where: { email: email.toLowerCase().trim() },
     include: { dealership: true },
   });
-  if (!tech) return null;
+  if (!tech || !tech.isActive) return null;
   const valid = await verifyPassword(password, tech.passwordHash);
   if (!valid) return null;
   return {
