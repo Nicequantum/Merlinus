@@ -96,10 +96,10 @@ Open [http://localhost:3000](http://localhost:3000)
 
 | Email | Password | Role |
 |-------|----------|------|
-| `admin@dealership.com` | `changeme123` | Manager |
+| `admin@dealership.com` | Set via seed (secure) | Manager |
 | `tech@dealership.com` | `changeme123` | Technician |
 
-Change these passwords before any shared or production deployment.
+Re-run `npm run db:seed` to apply the manager password. Change the technician password before any shared deployment.
 
 ## Production Deployment (Vercel)
 

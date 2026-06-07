@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { FlaskConical } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LoginViewProps {
   onLogin: (email: string, password: string) => Promise<unknown>;
+  demoMode?: boolean;
 }
 
-export function LoginView({ onLogin }: LoginViewProps) {
+export function LoginView({ onLogin, demoMode = false }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,6 +30,19 @@ export function LoginView({ onLogin }: LoginViewProps) {
   return (
     <div className="login-shell">
       <div className="w-full max-w-sm">
+        {demoMode && (
+          <div className="mb-4 ios-card p-3 border border-[#0a84ff]/40 bg-[#0a84ff]/10 flex items-start gap-2">
+            <FlaskConical size={16} className="text-[#0a84ff] mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-[#0a84ff]">Demo / Pilot Mode</p>
+              <p className="text-[10px] text-[#8e8e93] mt-1 leading-relaxed">
+                Synthetic data only. Do not enter real customer information until xAI DPA is finalized and production
+                mode is enabled.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-4 p-1">
             <img src="/icon-512.png" alt="Benz Tech" className="w-full h-full rounded-2xl" />
@@ -65,7 +80,8 @@ export function LoginView({ onLogin }: LoginViewProps) {
         </form>
 
         <p className="text-center text-[10px] text-[#666] mt-6 leading-relaxed px-4">
-          Authorized dealership personnel only. Demo: tech@dealership.com / changeme123
+          Authorized dealership personnel only.
+          {demoMode ? ' Technician demo: tech@dealership.com' : ''}
         </p>
       </div>
     </div>

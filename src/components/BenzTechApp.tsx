@@ -17,7 +17,11 @@ import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
 
-export function BenzTechApp() {
+interface BenzTechAppProps {
+  demoMode?: boolean;
+}
+
+export function BenzTechApp({ demoMode = false }: BenzTechAppProps) {
   const { session, loading: sessionLoading, login, logout, acceptConsent } = useSession();
   const ocr = useOcrProgress();
   const ro = useRepairOrders({
@@ -50,7 +54,7 @@ export function BenzTechApp() {
   }
 
   if (!session) {
-    return <LoginView onLogin={login} />;
+    return <LoginView onLogin={login} demoMode={demoMode} />;
   }
 
   if (!session.consentAt) {

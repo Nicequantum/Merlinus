@@ -1,5 +1,6 @@
 import { BenzTechApp } from '@/components/BenzTechApp';
 
 export default function HomePage() {
-  return <BenzTechApp />;
+  const demoMode = process.env.DEMO_MODE !== 'false';
+  return <BenzTechApp demoMode={demoMode} />;
 }
