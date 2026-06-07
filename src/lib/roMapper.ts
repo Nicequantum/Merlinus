@@ -1,6 +1,7 @@
 import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
-import { decryptPII, encryptPII } from './encryption';
+import { decryptPII, decryptStringArray, encryptPII, encryptStringArray } from './encryption';
+import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 
 function parseJson<T>(raw: string, fallback: T): T {
   try {
@@ -10,22 +11,28 @@ function parseJson<T>(raw: string, fallback: T): T {
   }
 }
 
-function parseImageUrls(raw: string): ImageAttachment[] {
+function parseImageAttachments(raw: string): ImageAttachment[] {
   const parsed = parseJson<unknown>(raw, []);
   if (!Array.isArray(parsed)) return [];
 
   return parsed
     .map((item) => {
       if (typeof item === 'string') {
-        return { id: `img-${item.slice(-12)}`, url: item, name: 'image.jpg' };
+        const pathname = extractPathnameFromImageRef(item);
+        if (!pathname) return null;
+        return { id: `img-${pathname.slice(-12)}`, pathname, url: buildImageProxyUrl(pathname), name: 'image.jpg' };
       }
       if (item && typeof item === 'object') {
         const record = item as Record<string, unknown>;
-        const url = typeof record.url === 'string' ? record.url : typeof record.dataUrl === 'string' && record.dataUrl.startsWith('http') ? record.dataUrl : null;
-        if (!url) return null;
+        const pathname =
+          typeof record.pathname === 'string'
+            ? record.pathname
+            : extractPathnameFromImageRef(typeof record.url === 'string' ? record.url : '');
+        if (!pathname || !pathname.startsWith('benz-tech/')) return null;
         return {
           id: typeof record.id === 'string' ? record.id : `img-${Date.now()}`,
-          url,
+          pathname,
+          url: buildImageProxyUrl(pathname),
           name: typeof record.name === 'string' ? record.name : 'image.jpg',
         };
       }
@@ -34,14 +41,38 @@ function parseImageUrls(raw: string): ImageAttachment[] {
     .filter((img): img is ImageAttachment => img !== null);
 }
 
-export function sanitizeImageAttachments(images?: ImageAttachment[]): ImageAttachment[] {
+export function normalizeImageAttachments(
+  images?: Array<{ id: string; pathname?: string; url?: string; name: string }>
+): ImageAttachment[] {
   return (images || [])
-    .filter((img) => img.url && img.url.startsWith('http'))
-    .map((img) => ({ id: img.id, url: img.url, name: img.name }));
+    .map((img) => {
+      const pathname = img.pathname || extractPathnameFromImageRef(img.url || '');
+      if (!pathname || !pathname.startsWith('benz-tech/')) return null;
+      return {
+        id: img.id,
+        pathname,
+        url: buildImageProxyUrl(pathname),
+        name: img.name,
+      };
+    })
+    .filter((img): img is ImageAttachment => img !== null);
 }
 
-export function imageUrlsToJson(images?: ImageAttachment[]): string {
-  return JSON.stringify(sanitizeImageAttachments(images));
+export function sanitizeImageAttachments(images?: ImageAttachment[]): ImageAttachment[] {
+  return (images || [])
+    .filter((img) => img.pathname?.startsWith('benz-tech/'))
+    .map((img) => ({
+      id: img.id,
+      pathname: img.pathname,
+      url: buildImageProxyUrl(img.pathname),
+      name: img.name,
+    }));
+}
+
+export function imageAttachmentsToJson(images?: ImageAttachment[]): string {
+  return JSON.stringify(
+    sanitizeImageAttachments(images).map(({ id, pathname, name }) => ({ id, pathname, name }))
+  );
 }
 
 export function dbToRepairOrder(ro: DbRO & { repairLines: DbLine[] }): RepairOrder {
@@ -49,7 +80,7 @@ export function dbToRepairOrder(ro: DbRO & { repairLines: DbLine[] }): RepairOrd
     id: ro.id,
     roNumber: ro.roNumber,
     vehicle: {
-      vin: ro.vin,
+      vin: decryptPII(ro.vinEncrypted),
       year: ro.year,
       make: ro.make,
       model: ro.model,
@@ -58,8 +89,8 @@ export function dbToRepairOrder(ro: DbRO & { repairLines: DbLine[] }): RepairOrd
       mileageOut: ro.mileageOut,
     },
     customer: { name: decryptPII(ro.customerNameEncrypted) },
-    complaints: parseJson<string[]>(ro.complaints, []),
-    xentryImages: parseImageUrls(ro.xentryImageUrls),
+    complaints: decryptStringArray(ro.complaintsEncrypted),
+    xentryImages: parseImageAttachments(ro.xentryImageUrls),
     xentryOcrTexts: parseJson<string[]>(ro.xentryOcrTexts, []),
     repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
     createdAt: ro.createdAt.toISOString(),
@@ -73,9 +104,9 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     id: line.id,
     lineNumber: line.lineNumber,
     description: line.description,
-    customerConcern: line.customerConcern,
+    customerConcern: decryptPII(line.customerConcernEncrypted),
     technicianNotes: line.technicianNotes,
-    xentryImages: parseImageUrls(line.xentryImageUrls),
+    xentryImages: parseImageAttachments(line.xentryImageUrls),
     xentryOcrTexts: parseJson<string[]>(line.xentryOcrTexts, []),
     extractedData: parseJson<ExtractedData>(line.extractedData, {
       codes: [],
@@ -109,7 +140,7 @@ export interface RepairOrderInput {
 export function repairOrderToDbFields(input: RepairOrderInput) {
   return {
     roNumber: input.roNumber,
-    vin: input.vehicle.vin,
+    vinEncrypted: encryptPII(input.vehicle.vin),
     year: input.vehicle.year,
     make: input.vehicle.make,
     model: input.vehicle.model,
@@ -117,8 +148,8 @@ export function repairOrderToDbFields(input: RepairOrderInput) {
     mileageIn: input.vehicle.mileageIn,
     mileageOut: input.vehicle.mileageOut,
     customerNameEncrypted: encryptPII(input.customer.name),
-    complaints: JSON.stringify(input.complaints),
-    xentryImageUrls: imageUrlsToJson(input.xentryImages),
+    complaintsEncrypted: encryptStringArray(input.complaints),
+    xentryImageUrls: imageAttachmentsToJson(input.xentryImages),
     xentryOcrTexts: JSON.stringify(input.xentryOcrTexts || []),
   };
 }
@@ -127,9 +158,9 @@ export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
     description: line.description,
-    customerConcern: line.customerConcern,
+    customerConcernEncrypted: encryptPII(line.customerConcern),
     technicianNotes: line.technicianNotes,
-    xentryImageUrls: imageUrlsToJson(line.xentryImages),
+    xentryImageUrls: imageAttachmentsToJson(line.xentryImages),
     xentryOcrTexts: JSON.stringify(line.xentryOcrTexts || []),
     extractedData: JSON.stringify(line.extractedData || {}),
     warrantyStory: line.warrantyStory ?? null,

@@ -8,6 +8,7 @@ export interface ExtractedData {
 
 export interface ImageAttachment {
   id: string;
+  pathname: string;
   url: string;
   name: string;
 }
@@ -57,7 +58,7 @@ export interface RepairOrder {
   technicianName?: string;
 }
 
-export type AppView = 'home' | 'ro' | 'line' | 'settings';
+export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit';
 
 export interface StructuredROExtraction {
   vehicle: VehicleInfo;
@@ -82,6 +83,35 @@ export interface TechnicianSession {
   consentAt: string | null;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  technicianId: string | null;
+  technicianName: string | null;
+  metadata: Record<string, unknown>;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
 export const CONSENT_VERSION = '2026-06-07-v1';
 export const WARRANTY_STORY_MAX_CHARS = 2500;
 export const WARRANTY_STORY_WARN_CHARS = 2200;
+
+export const AUDIT_ACTIONS = [
+  'auth.login',
+  'auth.logout',
+  'auth.password_change',
+  'consent.accept',
+  'ro.create',
+  'ro.update',
+  'ro.delete',
+  'story.generate',
+  'story.edit',
+  'user.create',
+  'user.deactivate',
+  'user.reactivate',
+  'user.password_reset',
+  'image.upload',
+] as const;

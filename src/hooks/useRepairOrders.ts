@@ -190,11 +190,11 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
         pendingROImages.map((img) => img.file),
         'roimg'
       );
-      const imageUrls = attachments.map((a) => a.url);
+      const imagePathnames = attachments.map((a) => a.pathname);
 
       try {
         setOcrProgress(40);
-        const extracted = await api.extractRO(imageUrls);
+        const extracted = await api.extractRO(imagePathnames);
         setOcrProgress(90);
         await createROFromExtracted(extracted);
       } catch {

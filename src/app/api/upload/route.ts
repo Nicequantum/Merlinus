@@ -46,17 +46,17 @@ export async function POST(request: Request) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const url = await uploadImageToBlob(buffer, file.name, file.type);
+      const uploaded = await uploadImageToBlob(buffer, file.name, file.type);
 
       await writeAuditLog({
         action: 'image.upload',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
-        metadata: { filename: file.name, size: file.size },
+        metadata: { filename: file.name, size: file.size, pathname: uploaded.pathname },
         ipAddress: getRequestIp(request),
       });
 
-      return { url, name: file.name };
+      return { pathname: uploaded.pathname, url: uploaded.url, name: file.name };
     },
     { rateLimitKey: 'upload', rateLimit: RATE_LIMITS.upload }
   );
