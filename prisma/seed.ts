@@ -14,9 +14,9 @@ function requireEnv(name: string, minLength = 1): string {
 }
 
 async function main() {
-  const managerEmail = process.env.ADMIN_SEED_EMAIL?.trim() || 'admin@dealership.com';
+  const managerEmail = (process.env.ADMIN_SEED_EMAIL?.trim() || 'admin@dealership.com').toLowerCase();
   const managerPassword = requireEnv('ADMIN_SEED_PASSWORD', 8);
-  const techEmail = process.env.TECH_SEED_EMAIL?.trim() || 'tech@dealership.com';
+  const techEmail = (process.env.TECH_SEED_EMAIL?.trim() || 'tech@dealership.com').toLowerCase();
   const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || 'changeme123';
 
   const dealership = await prisma.dealership.upsert({

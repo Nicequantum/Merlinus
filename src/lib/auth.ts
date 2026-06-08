@@ -160,8 +160,9 @@ export async function revokeTechnicianSessions(technicianId: string): Promise<vo
 }
 
 export async function loginTechnician(email: string, password: string): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { email: email.toLowerCase().trim() },
+  const normalizedEmail = email.toLowerCase().trim();
+  const tech = await prisma.technician.findFirst({
+    where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
     include: { dealership: true },
   });
   if (!tech || !tech.isActive) return null;
