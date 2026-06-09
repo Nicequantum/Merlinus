@@ -109,6 +109,29 @@ export const api = {
     return apiUpload<{ pathname: string; url: string; name: string }>('/api/upload', formData);
   },
 
+  getAdvisorIntelligenceSummary: () =>
+    apiFetch<{
+      advisorIntelligence: {
+        advisors: number;
+        observations: number;
+        profiles: number;
+        linkedRepairOrders: number;
+        recentAdvisors: Array<{
+          id: string;
+          displayName: string;
+          roCount: number;
+          lastSeenAt: string;
+          observationCount: number;
+          profileUpdatedAt: string | null;
+        }>;
+        recentCaptures: Array<{
+          id: string;
+          createdAt: string;
+          metadata: Record<string, unknown>;
+        }>;
+      };
+    }>('/api/advisors/summary'),
+
   extractRO: (imagePathnames: string[]) =>
     apiFetch<StructuredROExtraction>('/api/repair-orders/extract', {
       method: 'POST',

@@ -138,6 +138,26 @@ export async function checkGrokApi(): Promise<DependencyCheck> {
   }
 }
 
+export async function checkAdvisorIntelligence(): Promise<DependencyCheck> {
+  try {
+    const { latencyMs } = await timed(async () => {
+      await prisma.serviceAdvisor.count();
+      await prisma.advisorWritingProfile.count();
+      return true;
+    });
+    return { status: 'ok', latencyMs, detail: 'Advisor Intelligence schema ready' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'schema check failed';
+    if (/does not exist|relation .* not found/i.test(message)) {
+      return {
+        status: 'error',
+        detail: 'Advisor Intelligence migration not applied — run: npx prisma migrate deploy',
+      };
+    }
+    return { status: 'error', detail: message };
+  }
+}
+
 export async function checkKvStore(): Promise<DependencyCheck> {
   if (!isKvConfigured()) {
     return {
@@ -167,16 +187,17 @@ export async function checkKvStore(): Promise<DependencyCheck> {
 }
 
 export async function runAllHealthChecks(): Promise<Record<string, DependencyCheck>> {
-  const [database, encryption, session, blob, grok, kv] = await Promise.all([
+  const [database, encryption, session, blob, grok, kv, advisorIntelligence] = await Promise.all([
     checkDatabase(),
     checkEncryption(),
     checkSessionSecret(),
     checkBlobStorage(),
     checkGrokApi(),
     checkKvStore(),
+    checkAdvisorIntelligence(),
   ]);
 
-  return { database, encryption, session, blob, grok, kv };
+  return { database, encryption, session, blob, grok, kv, advisorIntelligence };
 }
 
 export function aggregateHealthStatus(
