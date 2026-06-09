@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { preprocessImageForOCR, runOCR } from '@/services/ocr';
@@ -16,15 +16,22 @@ import {
   sanitizeComplaints,
   sanitizeVehicle,
 } from '@/utils/roExtractor';
+import { normalizeScanFiles } from '@/utils/scanFileHelpers';
 import { uploadFileAsAttachment, uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
-  onOcrStart: () => void;
+  onOcrStart: (message?: string) => void;
   onOcrFinish: () => void;
   setOcrProgress: (p: number) => void;
+  setScanStatusMessage: (message: string) => void;
 }
 
-export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: UseRepairOrdersOptions) {
+export function useRepairOrders({
+  onOcrStart,
+  onOcrFinish,
+  setOcrProgress,
+  setScanStatusMessage,
+}: UseRepairOrdersOptions) {
   const [view, setView] = useState<AppView>('home');
   const [currentRO, setCurrentRO] = useState<RepairOrder | null>(null);
   const [currentLineId, setCurrentLineId] = useState<string | null>(null);
@@ -33,6 +40,7 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const scanCancelledRef = useRef(false);
 
   const refreshList = useCallback(async () => {
     const { repairOrders } = await api.listRepairOrders();
@@ -161,65 +169,130 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     []
   );
 
-  const addROPhoto = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.setAttribute('capture', 'environment');
-    input.multiple = true;
-    input.onchange = (e) => {
-      const files = Array.from((e.target as HTMLInputElement).files || []);
-      if (files.length === 0) return;
-      const newImgs: PendingImage[] = files.map((file, i) => ({
-        id: 'roimg-' + Date.now() + '-' + i,
-        previewUrl: URL.createObjectURL(file),
-        name: file.name || `page-${i + 1}.jpg`,
-        file,
-      }));
-      setPendingROImages((prev) => [...prev, ...newImgs]);
-    };
-    input.click();
+  const clearPendingPreviews = useCallback((images: PendingImage[]) => {
+    images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
   }, []);
 
-  const processPendingROImages = useCallback(async () => {
-    if (pendingROImages.length === 0) return;
-    onOcrStart();
-    try {
-      setOcrProgress(10);
-      const attachments = await uploadFilesAsAttachments(
-        pendingROImages.map((img) => img.file),
-        'roimg'
-      );
-      const imagePathnames = attachments.map((a) => a.pathname);
+  const processScanImages = useCallback(
+    async (images: PendingImage[]) => {
+      if (images.length === 0) return;
+      scanCancelledRef.current = false;
+      onOcrStart('Uploading documents…');
+      setPendingROImages(images);
 
       try {
-        setOcrProgress(40);
-        const extracted = await api.extractRO(imagePathnames);
-        setOcrProgress(90);
-        await createROFromExtracted(extracted);
-      } catch {
-        let combinedText = '';
-        for (let i = 0; i < pendingROImages.length; i++) {
-          const img = pendingROImages[i];
-          const preprocessed = await preprocessImageForOCR(img.file);
-          const text = await runOCR(preprocessed, (p) =>
-            setOcrProgress(Math.round((i / pendingROImages.length) * 80 + (p / pendingROImages.length) * 80 * 0.2))
-          );
-          combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
-        }
-        setOcrProgress(95);
-        await createROFromText(combinedText);
-      }
+        setOcrProgress(8);
+        setScanStatusMessage(`Uploading ${images.length} page${images.length === 1 ? '' : 's'}…`);
+        const attachments = await uploadFilesAsAttachments(
+          images.map((img) => img.file),
+          'roimg'
+        );
+        if (scanCancelledRef.current) return;
 
-      pendingROImages.forEach((img) => URL.revokeObjectURL(img.previewUrl));
-      setPendingROImages([]);
-    } catch (error) {
-      console.error('Multi-image RO extraction error', error);
-      toast.error('Processing images failed. Try fewer images or contact your administrator.');
-    } finally {
-      onOcrFinish();
-    }
-  }, [pendingROImages, createROFromExtracted, createROFromText, onOcrStart, onOcrFinish, setOcrProgress]);
+        const imagePathnames = attachments.map((a) => a.pathname);
+
+        try {
+          setOcrProgress(42);
+          setScanStatusMessage('Extracting RO data with AI vision…');
+          const extracted = await api.extractRO(imagePathnames);
+          if (scanCancelledRef.current) return;
+          setOcrProgress(88);
+          setScanStatusMessage('Creating repair order…');
+          await createROFromExtracted(extracted);
+        } catch (extractError) {
+          console.warn('Server RO extraction failed, falling back to on-device OCR', extractError);
+          setScanStatusMessage('AI unavailable — reading pages on device…');
+          let combinedText = '';
+          for (let i = 0; i < images.length; i++) {
+            if (scanCancelledRef.current) return;
+            const img = images[i];
+            setScanStatusMessage(`Reading page ${i + 1} of ${images.length}…`);
+            const preprocessed = await preprocessImageForOCR(img.file);
+            const text = await runOCR(preprocessed, (p) =>
+              setOcrProgress(Math.round(20 + (i / images.length) * 60 + (p / images.length) * 60 * 0.25))
+            );
+            combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
+          }
+          if (scanCancelledRef.current) return;
+          setOcrProgress(92);
+          setScanStatusMessage('Creating repair order…');
+          await createROFromText(combinedText);
+        }
+
+        if (scanCancelledRef.current) return;
+        setOcrProgress(100);
+        setScanStatusMessage('Scan complete');
+        clearPendingPreviews(images);
+        setPendingROImages([]);
+      } catch (error) {
+        if (scanCancelledRef.current) return;
+        console.error('RO scan error', error);
+        toast.error(error instanceof Error ? error.message : 'Scan failed. Try fewer pages or sharper photos.');
+        clearPendingPreviews(images);
+        setPendingROImages([]);
+      } finally {
+        if (!scanCancelledRef.current) {
+          onOcrFinish();
+        }
+      }
+    },
+    [
+      clearPendingPreviews,
+      createROFromExtracted,
+      createROFromText,
+      onOcrStart,
+      onOcrFinish,
+      setOcrProgress,
+      setScanStatusMessage,
+    ]
+  );
+
+  const scanRO = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,application/pdf';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const rawFiles = Array.from((e.target as HTMLInputElement).files || []);
+      if (rawFiles.length === 0) return;
+
+      onOcrStart('Preparing files…');
+      setOcrProgress(2);
+      setScanStatusMessage('Converting PDFs and preparing pages…');
+
+      try {
+        const normalizedFiles = await normalizeScanFiles(rawFiles);
+        if (normalizedFiles.length === 0) {
+          toast.error('No supported images or PDFs were selected.');
+          onOcrFinish();
+          return;
+        }
+
+        const images: PendingImage[] = normalizedFiles.map((file, i) => ({
+          id: 'roimg-' + Date.now() + '-' + i,
+          previewUrl: URL.createObjectURL(file),
+          name: file.name || `page-${i + 1}.jpg`,
+          file,
+        }));
+
+        toast.success(`Scanning ${images.length} page${images.length === 1 ? '' : 's'}…`);
+        await processScanImages(images);
+      } catch (error) {
+        console.error('Scan file preparation failed', error);
+        toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
+        onOcrFinish();
+      }
+    };
+    input.click();
+  }, [onOcrFinish, onOcrStart, pendingROImages.length, processScanImages, setOcrProgress, setScanStatusMessage]);
+
+  const cancelScan = useCallback(() => {
+    scanCancelledRef.current = true;
+    clearPendingPreviews(pendingROImages);
+    setPendingROImages([]);
+    onOcrFinish();
+    toast.message('Scan cancelled');
+  }, [clearPendingPreviews, onOcrFinish, pendingROImages]);
 
   const createManualRO = useCallback(async () => {
     try {
@@ -562,8 +635,8 @@ export function useRepairOrders({ onOcrStart, onOcrFinish, setOcrProgress }: Use
     getLatestRO,
     deleteRO,
     openRO,
-    addROPhoto,
-    processPendingROImages,
+    scanRO,
+    cancelScan,
     createManualRO,
     updateLine,
     updateVehicle,

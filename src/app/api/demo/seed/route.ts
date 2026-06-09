@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const demoEnabled = process.env.DEMO_MODE !== 'false';
+      const demoEnabled = process.env.DEMO_MODE === 'true';
       if (!demoEnabled) {
         return apiError('Demo data seeding is disabled in this environment.', 403);
       }

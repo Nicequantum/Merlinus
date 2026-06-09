@@ -3,16 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
-  Camera,
   ClipboardList,
-  Database,
-  Plus,
   ScrollText,
   Settings,
   ShieldCheck,
   Sparkles,
   Users,
 } from 'lucide-react';
+import { ScanROSection } from '@/components/ScanROSection';
+import type { PendingImage } from '@/types';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { DashboardSummary, RepairOrder, TechnicianSession } from '@/types';
@@ -26,12 +25,13 @@ interface ManagerDashboardProps {
   onOpenRO: (ro: RepairOrder) => void;
   onOpenSettings: () => void;
   onOpenAuditLogs: () => void;
-  onSeedDemo: () => Promise<void>;
-  seedingDemo: boolean;
-  onAddROPhoto: () => void;
+  pendingROImages: PendingImage[];
+  onScanRO: () => void;
+  onCancelScan: () => void;
   onCreateManualRO: () => void;
   isProcessingOCR: boolean;
   ocrProgress: number;
+  scanStatusMessage: string;
   children: React.ReactNode;
 }
 
@@ -66,12 +66,13 @@ export function ManagerDashboard({
   onOpenRO,
   onOpenSettings,
   onOpenAuditLogs,
-  onSeedDemo,
-  seedingDemo,
-  onAddROPhoto,
+  pendingROImages,
+  onScanRO,
+  onCancelScan,
   onCreateManualRO,
   isProcessingOCR,
   ocrProgress,
+  scanStatusMessage,
   children,
 }: ManagerDashboardProps) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -181,27 +182,17 @@ export function ManagerDashboard({
         </>
       ) : null}
 
-      <div className="flex gap-2 mb-2">
-        <button
-          onClick={onAddROPhoto}
-          disabled={isProcessingOCR}
-          className="primary-btn flex-1 h-11 flex items-center justify-center gap-2 text-xs font-semibold disabled:opacity-60"
-        >
-          <Camera size={16} />
-          {isProcessingOCR ? `${ocrProgress}%` : 'SCAN RO'}
-        </button>
-        <button onClick={onCreateManualRO} className="secondary-btn flex-1 h-11 flex items-center justify-center gap-2 text-xs font-semibold">
-          <Plus size={16} /> MANUAL RO
-        </button>
-      </div>
-      <button
-        onClick={onSeedDemo}
-        disabled={seedingDemo || isProcessingOCR}
-        className="secondary-btn w-full h-10 mb-4 flex items-center justify-center gap-2 text-xs font-semibold disabled:opacity-60"
-      >
-        <Database size={14} />
-        {seedingDemo ? 'LOADING DEMO DATA...' : 'LOAD DEMO DATA'}
-      </button>
+      <ScanROSection
+        pendingROImages={pendingROImages}
+        isProcessingOCR={isProcessingOCR}
+        ocrProgress={ocrProgress}
+        scanStatusMessage={scanStatusMessage}
+        onScanRO={onScanRO}
+        onCancelScan={onCancelScan}
+        onCreateManualRO={onCreateManualRO}
+        scanButtonLabel="SCAN RO"
+        compact
+      />
 
       <div className="mb-3">
         <input

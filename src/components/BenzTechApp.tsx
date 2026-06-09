@@ -1,7 +1,5 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { toast } from 'sonner';
 import { AppHeader } from '@/components/AppHeader';
 import { ConsentModal } from '@/components/ConsentModal';
 import { HomeView } from '@/components/HomeView';
@@ -12,10 +10,10 @@ import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { ROView } from '@/components/ROView';
 import { AuditLogView } from '@/components/AuditLogView';
 import { SettingsView } from '@/components/SettingsView';
-import { api } from '@/lib/api';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
+import { useState } from 'react';
 
 interface BenzTechAppProps {
   demoMode?: boolean;
@@ -28,22 +26,9 @@ export function BenzTechApp({ demoMode = false }: BenzTechAppProps) {
     onOcrStart: ocr.startOcr,
     onOcrFinish: ocr.finishOcr,
     setOcrProgress: ocr.setOcrProgress,
+    setScanStatusMessage: ocr.setScanStatusMessage,
   });
   const [consentLoading, setConsentLoading] = useState(false);
-  const [seedingDemo, setSeedingDemo] = useState(false);
-
-  const handleSeedDemo = useCallback(async () => {
-    setSeedingDemo(true);
-    try {
-      const result = await api.seedDemoData();
-      await ro.refreshList();
-      toast.success(result.message);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load demo data');
-    } finally {
-      setSeedingDemo(false);
-    }
-  }, [ro]);
 
   if (sessionLoading) {
     return <LoadingScreen label="Starting Benz Tech" sublabel="Verifying your session..." />;
@@ -80,7 +65,7 @@ export function BenzTechApp({ demoMode = false }: BenzTechAppProps) {
     ro.filteredROs.length === 0 ? (
       <div className="text-center py-8 text-[#8e8e93]">
         <p className="text-sm">No repair orders match your search.</p>
-        <p className="text-xs mt-1">Scan a repair order or load demo data to get started.</p>
+        <p className="text-xs mt-1">Scan a repair order to get started.</p>
       </div>
     ) : (
       <div className="space-y-2">
@@ -141,12 +126,13 @@ export function BenzTechApp({ demoMode = false }: BenzTechAppProps) {
           onOpenRO={ro.openRO}
           onOpenSettings={goToSettings}
           onOpenAuditLogs={() => ro.setView('audit')}
-          onSeedDemo={handleSeedDemo}
-          seedingDemo={seedingDemo}
-          onAddROPhoto={ro.addROPhoto}
+          pendingROImages={ro.pendingROImages}
+          onScanRO={ro.scanRO}
+          onCancelScan={ro.cancelScan}
           onCreateManualRO={ro.createManualRO}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
+          scanStatusMessage={ocr.scanStatusMessage}
         >
           {roListSection}
         </ManagerDashboard>
@@ -162,16 +148,13 @@ export function BenzTechApp({ demoMode = false }: BenzTechAppProps) {
           pendingROImages={ro.pendingROImages}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
-          onAddROPhoto={ro.addROPhoto}
+          scanStatusMessage={ocr.scanStatusMessage}
+          onScanRO={ro.scanRO}
+          onCancelScan={ro.cancelScan}
           onCreateManualRO={ro.createManualRO}
-          onClearPending={() => ro.setPendingROImages([])}
-          onRemovePending={(index) => ro.setPendingROImages((prev) => prev.filter((_, i) => i !== index))}
-          onProcessPending={ro.processPendingROImages}
           onOpenRO={ro.openRO}
           onDeleteRO={ro.deleteRO}
           onOpenSettings={goToSettings}
-          onSeedDemo={handleSeedDemo}
-          seedingDemo={seedingDemo}
         />
       )}
 
