@@ -13,6 +13,8 @@ import {
   extractCustomerName,
   extractRoNumberFromText,
   extractVehicleDetails,
+  mergeROExtractions,
+  parseStructuredROText,
   sanitizeComplaints,
   sanitizeVehicle,
 } from '@/utils/roExtractor';
@@ -127,10 +129,11 @@ export function useRepairOrders({
   }, []);
 
   const createROFromText = useCallback(async (text: string) => {
-    const roNumber = extractRoNumberFromText(text);
-    const vehicle = sanitizeVehicle(extractVehicleDetails(text));
-    const complaints = sanitizeComplaints(extractComplaints(text));
-    const custName = extractCustomerName(text);
+    const parsed = parseStructuredROText(text);
+    const roNumber = parsed.roNumber || extractRoNumberFromText(text);
+    const vehicle = sanitizeVehicle(parsed.vehicle);
+    const complaints = sanitizeComplaints(parsed.complaints);
+    const custName = parsed.customerName || extractCustomerName(text);
     try {
       const { repairOrder } = await api.createRepairOrder({
         fromExtraction: true,
@@ -191,10 +194,35 @@ export function useRepairOrders({
 
         const imagePathnames = attachments.map((a) => a.pathname);
 
+        const runClientOcr = async () => {
+          let combinedText = '';
+          for (let i = 0; i < images.length; i++) {
+            if (scanCancelledRef.current) return '';
+            const img = images[i];
+            setScanStatusMessage(`Reading page ${i + 1} of ${images.length}…`);
+            const preprocessed = await preprocessImageForOCR(img.file);
+            const text = await runOCR(preprocessed, (p) =>
+              setOcrProgress(Math.round(28 + (i / images.length) * 50 + (p / images.length) * 50 * 0.35))
+            );
+            combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
+          }
+          return combinedText;
+        };
+
         try {
           setOcrProgress(42);
-          setScanStatusMessage('Extracting RO data with AI vision…');
-          const extracted = await api.extractRO(imagePathnames);
+          setScanStatusMessage('Reading pages and extracting with AI vision…');
+          const [grokExtracted, ocrText] = await Promise.all([
+            api.extractRO(imagePathnames),
+            runClientOcr(),
+          ]);
+          if (scanCancelledRef.current) return;
+
+          const ocrExtracted = ocrText ? parseStructuredROText(ocrText) : null;
+          const extracted = ocrExtracted
+            ? mergeROExtractions(grokExtracted, ocrExtracted, ocrText)
+            : grokExtracted;
+
           if (scanCancelledRef.current) return;
           setOcrProgress(88);
           setScanStatusMessage('Creating repair order…');
@@ -202,18 +230,8 @@ export function useRepairOrders({
         } catch (extractError) {
           console.warn('Server RO extraction failed, falling back to on-device OCR', extractError);
           setScanStatusMessage('AI unavailable — reading pages on device…');
-          let combinedText = '';
-          for (let i = 0; i < images.length; i++) {
-            if (scanCancelledRef.current) return;
-            const img = images[i];
-            setScanStatusMessage(`Reading page ${i + 1} of ${images.length}…`);
-            const preprocessed = await preprocessImageForOCR(img.file);
-            const text = await runOCR(preprocessed, (p) =>
-              setOcrProgress(Math.round(20 + (i / images.length) * 60 + (p / images.length) * 60 * 0.25))
-            );
-            combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
-          }
-          if (scanCancelledRef.current) return;
+          const combinedText = await runClientOcr();
+          if (scanCancelledRef.current || !combinedText) return;
           setOcrProgress(92);
           setScanStatusMessage('Creating repair order…');
           await createROFromText(combinedText);

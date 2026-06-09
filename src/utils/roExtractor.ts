@@ -11,10 +11,47 @@ const COMPLAINT_SECTION_MARKERS = [
 const JUNK_COMPLAINT_PREFIX =
   /^(vin|mile|km|ro\s*#|date|tech|name|model|customer|service|advisor|authorized|total|tax|parts|shop|dealer|labor|signature|opcode|line|hours|type|passed|cdef|risi)$/i;
 
+/** Continuation / inspection detail lines — not standalone complaints. */
+const INSPECTION_DETAIL_LINE =
+  /^(?:RISI\b|CDEF\b|PASSED\b|\d{3,}\s*(?:PASSED|CDEF|RISI)\b)/i;
+
 const LETTER_LABEL_PATTERN = /^([A-Z])\s+(.+)$/;
+const LETTER_LABEL_OUTPUT_PATTERN = /^([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i;
 
 function normalizeComplaintText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeComplaintContent(text: string): string {
+  return normalizeComplaintText(text.replace(/^RISI\s+/i, ''));
+}
+
+function isInspectionDetailLine(text: string): boolean {
+  const trimmed = normalizeComplaintText(text);
+  return INSPECTION_DETAIL_LINE.test(trimmed);
+}
+
+function filterComplaintList(complaints: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of complaints) {
+    const c = normalizeComplaintContent(raw);
+    if (!isValidComplaintText(c)) continue;
+    if (isInspectionDetailLine(c)) continue;
+    const key = c.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(c);
+    }
+  }
+  return out.slice(0, 15);
+}
+
+/** Strip inspection detail continuations (RISI, CDEF, PASSED) merged onto one OCR line. */
+function trimComplaintContinuation(text: string): string {
+  const normalized = normalizeComplaintText(text);
+  const [head] = normalized.split(/\s+(?=RISI\b|\d{3,}\s+CDEF\b|\d+\s+PASSED\b)/i);
+  return normalizeComplaintText(head || normalized);
 }
 
 function isValidComplaintText(text: string): boolean {
@@ -50,7 +87,7 @@ function getComplaintSection(text: string): string {
 }
 
 function addLetterComplaint(byLetter: Map<string, string>, letter: string, text: string) {
-  const normalized = normalizeComplaintText(text);
+  const normalized = trimComplaintContinuation(text);
   if (!isComplaintLetter(letter, normalized)) return;
   const existing = byLetter.get(letter);
   if (!existing || normalized.length > existing.length) {
@@ -186,13 +223,49 @@ export function extractComplaints(text: string): string[] {
   return unique.slice(0, 10);
 }
 
+function pickNonEmpty(primary: string, fallback: string): string {
+  const p = (primary || '').trim();
+  if (p) return p;
+  return (fallback || '').trim();
+}
+
+function mergeVehicleFields(primary: VehicleInfo, supplement: VehicleInfo): VehicleInfo {
+  return {
+    vin: pickNonEmpty(primary.vin, supplement.vin),
+    year: pickNonEmpty(primary.year, supplement.year),
+    make: pickNonEmpty(primary.make, supplement.make),
+    model: pickNonEmpty(primary.model, supplement.model),
+    engine: pickNonEmpty(primary.engine || '', supplement.engine || '') || undefined,
+    mileageIn: pickNonEmpty(primary.mileageIn, supplement.mileageIn),
+    mileageOut: pickNonEmpty(primary.mileageOut, supplement.mileageOut),
+  };
+}
+
+/** Merge Grok vision output with on-device OCR (raw OCR text wins for letter-labeled complaints). */
+export function mergeROExtractions(
+  primary: StructuredROExtraction,
+  supplement: StructuredROExtraction,
+  supplementRawText = ''
+): StructuredROExtraction {
+  const grokComplaints = mergeComplaintLists(primary.complaints, supplement.complaints);
+  const complaints = recoverComplaintsFromText(supplementRawText, grokComplaints);
+
+  return {
+    roNumber: pickNonEmpty(primary.roNumber, supplement.roNumber),
+    customerName: pickNonEmpty(primary.customerName, supplement.customerName),
+    vehicle: mergeVehicleFields(primary.vehicle, supplement.vehicle),
+    complaints: sanitizeComplaints(complaints),
+  };
+}
+
 function mergeComplaintLists(...lists: string[][]): string[] {
   const seen = new Set<string>();
   const merged: string[] = [];
   for (const list of lists) {
     for (const raw of list) {
-      const c = normalizeComplaintText(raw);
+      const c = normalizeComplaintContent(raw);
       if (!isValidComplaintText(c)) continue;
+      if (isInspectionDetailLine(c)) continue;
       const key = c.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
@@ -201,6 +274,93 @@ function mergeComplaintLists(...lists: string[][]): string[] {
     }
   }
   return merged.slice(0, 15);
+}
+
+/** Parse Grok-style "A. text" / "B: text" lines from the complaints section. */
+function extractStructuredLetterComplaints(text: string): Map<string, string> {
+  const byLetter = new Map<string, string>();
+  let inSection = false;
+
+  for (const line of text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    const lower = line.toLowerCase();
+    if (lower.startsWith('customer complaints:')) {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) continue;
+    if (/^ro number:|^year:|^make:|^model:|^vin:|^mileage/i.test(lower)) break;
+    if (/none listed/i.test(lower)) break;
+
+    const m = line.match(LETTER_LABEL_OUTPUT_PATTERN);
+    if (!m) continue;
+    const content = normalizeComplaintContent(m[2]);
+    if (!isValidComplaintText(content) || isInspectionDetailLine(content)) continue;
+    addLetterComplaint(byLetter, m[1], content);
+  }
+
+  return byLetter;
+}
+
+/**
+ * Recover Line A when Grok skips it or mislabels continuation detail as B.
+ * Letter-labeled OCR/raw text is authoritative over Grok structured output.
+ */
+export function recoverComplaintsFromText(text: string, grokComplaints: string[] = []): string[] {
+  const letterFromRaw = extractLetterLabeledComplaints(text);
+  const structuredLetters = extractStructuredLetterComplaints(text);
+  const byLetter = new Map<string, string>();
+
+  for (const [letter, value] of structuredLetters) {
+    addLetterComplaint(byLetter, letter, value);
+  }
+
+  // Letter-labeled raw/OCR lines override Grok structured (fixes skipped Line A).
+  for (let i = 0; i < letterFromRaw.length; i++) {
+    const letter = String.fromCharCode(65 + i);
+    addLetterComplaint(byLetter, letter, letterFromRaw[i]);
+  }
+
+  // Grok skipped A but labeled continuation detail as B (e.g. "B. RISI RHODE ISLAND...").
+  if (!byLetter.has('A')) {
+    const risiLineMatch = text.match(/(?:^|\n)\s*B[\.\)\:\s\-–—]+\s*(RISI\s+[^\n]+)/i);
+    const risiSources = [
+      byLetter.get('B'),
+      ...grokComplaints,
+      risiLineMatch?.[1],
+    ].filter(Boolean) as string[];
+    for (const raw of risiSources) {
+      if (!/^RISI\s+/i.test(raw)) continue;
+      const recoveredA = normalizeComplaintContent(raw);
+      if (isValidComplaintText(recoveredA)) {
+        byLetter.set('A', recoveredA);
+        const bValue = byLetter.get('B');
+        if (
+          bValue &&
+          (bValue === raw ||
+            bValue === recoveredA ||
+            normalizeComplaintContent(bValue) === recoveredA)
+        ) {
+          byLetter.delete('B');
+        }
+        break;
+      }
+    }
+  }
+
+  if (byLetter.size > 0) {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const [, value] of [...byLetter.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const key = value.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        ordered.push(value);
+      }
+    }
+    return ordered;
+  }
+
+  return filterComplaintList(mergeComplaintLists(letterFromRaw, grokComplaints, extractComplaints(text)));
 }
 
 export function extractVehicleDetails(text: string): VehicleInfo {
@@ -354,7 +514,7 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
       let m = line.match(/^([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i);
       if (!m) m = line.match(/^(\d{1,2})[\.\)\:\s\-–—–—]+\s*(.+)$/i);
       if (m && m[2]) {
-        const c = normalizeComplaintText(m[2]);
+        const c = trimComplaintContinuation(m[2]);
         if (isValidComplaintText(c)) structuredComplaints.push(c);
       } else if (isValidComplaintText(line)) {
         structuredComplaints.push(normalizeComplaintText(line));
@@ -391,9 +551,10 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
     if (m) customerName = m[1].trim();
   }
 
-  const letterLabeled = extractLetterLabeledComplaints(text);
-  const triggerBased = extractComplaints(text);
-  const complaints = mergeComplaintLists(letterLabeled, structuredComplaints, triggerBased);
+  const complaints = recoverComplaintsFromText(
+    text,
+    mergeComplaintLists(structuredComplaints, extractComplaints(text))
+  );
 
   if (vehicle.vin && vehicle.vin.length !== 17) {
     vehicle.vin = vehicle.vin.replace(/[^A-HJ-NPR-Z0-9]/gi, '').slice(0, 17).toUpperCase();

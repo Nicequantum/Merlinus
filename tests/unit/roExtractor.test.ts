@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   extractComplaints,
   extractLetterLabeledComplaints,
+  mergeROExtractions,
   parseStructuredROText,
 } from '../../src/utils/roExtractor';
 
@@ -20,6 +21,9 @@ RISI RHODE ISLAND STATE INSPECTION
 130132 PASSED`;
 
 const MERGED_HEADER_LINE = `LINE OPCODE TECH TYPE HOURS A RHODE ISLAND STATE INSPECTION`;
+
+const COLLAPSED_OCR_LINE =
+  'LINE OPCODE TECH TYPE HOURS A RHODE ISLAND STATE INSPECTION RISI RHODE ISLAND STATE INSPECTION 619 CDEF 130132 PASSED';
 
 const GROK_OUTPUT_MISSING_A = `RO Number: 482910
 Customer Name: JOHN SMITH
@@ -82,5 +86,24 @@ C NOISE FROM REAR`;
       'CHECK ENGINE LIGHT ON',
       'NOISE FROM REAR',
     ]);
+  });
+
+  test('trims RISI/CDEF/PASSED continuations from collapsed OCR line', () => {
+    const complaints = extractLetterLabeledComplaints(COLLAPSED_OCR_LINE);
+    assert.equal(complaints.length, 1);
+    assert.equal(complaints[0], 'RHODE ISLAND STATE INSPECTION');
+  });
+
+  test('grok-only mislabeled RISI on B recovers Line A inspection text', () => {
+    const parsed = parseStructuredROText(GROK_OUTPUT_MISSING_A);
+    assert.deepEqual(parsed.complaints, ['RHODE ISLAND STATE INSPECTION']);
+  });
+
+  test('mergeROExtractions recovers Line A from OCR when Grok skips it', () => {
+    const grokParsed = parseStructuredROText(GROK_OUTPUT_MISSING_A);
+    const ocrParsed = parseStructuredROText(COLLAPSED_OCR_LINE);
+    const merged = mergeROExtractions(grokParsed, ocrParsed, COLLAPSED_OCR_LINE);
+    assert.equal(merged.complaints[0], 'RHODE ISLAND STATE INSPECTION');
+    assert.ok(merged.complaints.length >= 1);
   });
 });
