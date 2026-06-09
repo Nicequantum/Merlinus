@@ -1,10 +1,99 @@
 import type { StructuredROExtraction, VehicleInfo } from '../types';
 
+const HEADER_ROW_PATTERN = /LINE\s+OPCODE\s+TECH\s+TYPE\s+HOURS/i;
+const COMPLAINT_SECTION_MARKERS = [
+  HEADER_ROW_PATTERN,
+  /Customer\s+Complaints?/i,
+  /CUST(?:OMER)?\s+(?:STATES?|COMPLAINT|CONCERN)/i,
+  /COMPLAINT\s+LINE/i,
+];
+
+const JUNK_COMPLAINT_PREFIX =
+  /^(vin|mile|km|ro\s*#|date|tech|name|model|customer|service|advisor|authorized|total|tax|parts|shop|dealer|labor|signature|opcode|line|hours|type|passed|cdef|risi)$/i;
+
+const LETTER_LABEL_PATTERN = /^([A-Z])\s+(.+)$/;
+
+function normalizeComplaintText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function isValidComplaintText(text: string): boolean {
+  const trimmed = normalizeComplaintText(text);
+  if (trimmed.length < 4) return false;
+  if (!/[A-Za-z]/.test(trimmed)) return false;
+  if (/^\d{3,}/.test(trimmed)) return false;
+  if (/^complaints?:?$/i.test(trimmed)) return false;
+  if (/^customer\s+complaints?:?$/i.test(trimmed)) return false;
+  if (JUNK_COMPLAINT_PREFIX.test(trimmed.split(/\s+/)[0] || '')) return false;
+  if (JUNK_COMPLAINT_PREFIX.test(trimmed)) return false;
+  return true;
+}
+
+/** Split merged OCR before the next complaint label (" B CHECK...", " C NOISE..."). */
+const COMPLAINT_LABEL_SPLIT = /\s+(?=[A-Z]\s+[A-Z][A-Za-z])/;
+
+function isComplaintLetter(letter: string, text: string): boolean {
+  if (!/^[A-Z]$/.test(letter)) return false;
+  return isValidComplaintText(text);
+}
+
+function getComplaintSection(text: string): string {
+  let bestIndex = -1;
+  for (const marker of COMPLAINT_SECTION_MARKERS) {
+    const match = text.match(marker);
+    if (match && match.index !== undefined && (bestIndex < 0 || match.index < bestIndex)) {
+      bestIndex = match.index;
+    }
+  }
+  if (bestIndex >= 0) return text.slice(bestIndex);
+  return text;
+}
+
+function addLetterComplaint(byLetter: Map<string, string>, letter: string, text: string) {
+  const normalized = normalizeComplaintText(text);
+  if (!isComplaintLetter(letter, normalized)) return;
+  const existing = byLetter.get(letter);
+  if (!existing || normalized.length > existing.length) {
+    byLetter.set(letter, normalized);
+  }
+}
+
+/** Primary extractor for real-world RO complaint lines: "A RHODE ISLAND STATE INSPECTION" */
+export function extractLetterLabeledComplaints(text: string): string[] {
+  if (!text || text.trim().length < 4) return [];
+
+  const section = getComplaintSection(text.replace(/\r\n/g, '\n'));
+  const byLetter = new Map<string, string>();
+
+  const lines = section.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (/^LINE\s+OPCODE\s+TECH\s+TYPE\s+HOURS\s*$/i.test(line)) continue;
+
+    let chunk = line;
+    if (HEADER_ROW_PATTERN.test(line)) {
+      chunk = line.replace(HEADER_ROW_PATTERN, ' ').trim();
+      if (!chunk) continue;
+    }
+
+    const segments = chunk.split(COMPLAINT_LABEL_SPLIT).filter(Boolean);
+    for (const segment of segments) {
+      const match = segment.trim().match(LETTER_LABEL_PATTERN);
+      if (match) addLetterComplaint(byLetter, match[1], match[2]);
+    }
+  }
+
+  return [...byLetter.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => value);
+}
+
 export function extractComplaints(text: string): string[] {
+  const letterLabeled = extractLetterLabeledComplaints(text);
+  if (letterLabeled.length > 0) return letterLabeled.slice(0, 15);
+
   if (!text || text.trim().length < 6) return [];
   const comps: string[] = [];
-  let cleaned = text.replace(/=== PAGE \d+ ===/g, '\n\n').replace(/\s+/g, ' ');
-  const lines = cleaned.split(/[\n\r]+/).map((l) => l.trim()).filter(Boolean);
+  const lines = text.replace(/=== PAGE \d+ ===/g, '\n\n').split(/[\n\r]+/).map((l) => l.trim()).filter(Boolean);
 
   const TRIGGERS = [
     'customer states',
@@ -16,9 +105,6 @@ export function extractComplaints(text: string): string[] {
     'tech notes',
     'technician found',
     'technician observed',
-    'technician seen',
-    'tech found',
-    'tech observed',
     'concern',
     'complaint',
     'issue',
@@ -35,32 +121,26 @@ export function extractComplaints(text: string): string[] {
     'c s',
   ];
 
-  const isJunk = (s: string) =>
-    /^(vin|mile|km|ro\s*#|date|tech|name|model|customer|service|advisor|authorized|total|tax|parts|shop|dealer|labor|signature)/i.test(
-      s
-    );
-
   let collecting = false;
   let currentBlock = '';
 
   const flushBlock = () => {
     if (currentBlock.length < 8) return;
-    const labeledMatches = currentBlock.match(/([A-D])[\.\)\:\s\-–—–—]+\s*([A-Za-z][^\.]{6,220})/gi) || [];
+    const labeledMatches = currentBlock.match(/([A-Z])[\.\)\:\s\-–—–—]+\s*([A-Za-z][^\.]{4,220})/gi) || [];
     if (labeledMatches.length > 0) {
       labeledMatches.forEach((m) => {
-        let c = m.replace(/^[A-D][\.\)\:\s\-–—–—]+/i, '').trim();
-        c = c.replace(/[\s\-–—–—]+$/, '');
-        if (c.length > 6 && !isJunk(c) && !comps.includes(c)) comps.push(c);
+        const parsed = m.match(/([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)/i);
+        if (!parsed) return;
+        const c = normalizeComplaintText(parsed[2]);
+        if (isValidComplaintText(c) && !comps.includes(c)) comps.push(c);
       });
     } else {
       const parts = currentBlock
         .split(/[\.\!\?]\s+|\n|;/)
         .map((p) => p.trim())
-        .filter((p) => p.length > 6);
+        .filter((p) => p.length > 4);
       parts.forEach((p) => {
-        if (!isJunk(p) && /[a-zA-Z]/.test(p) && p.length > 6 && !comps.includes(p)) {
-          comps.push(p);
-        }
+        if (isValidComplaintText(p) && !comps.includes(p)) comps.push(p);
       });
     }
     currentBlock = '';
@@ -78,7 +158,7 @@ export function extractComplaints(text: string): string[] {
     if (collecting) {
       if (
         /vin|ro\s*#|mileage|odometer|parts|labor|total|authorized|signature|print name|phone/i.test(lower) &&
-        !lower.match(/complaint|concern|issue|problem/)
+        !lower.match(/complaint|concern|issue|problem|inspection/)
       ) {
         flushBlock();
         collecting = false;
@@ -86,41 +166,41 @@ export function extractComplaints(text: string): string[] {
       }
       currentBlock += line + ' ';
     }
-    const strayLabel = line.match(/^([A-D])[\.\)\:\s\-–—–—]+\s*(.+)$/i);
-    if (strayLabel && strayLabel[2] && strayLabel[2].length > 6 && !isJunk(strayLabel[2])) {
-      const c = strayLabel[2].trim();
+    const strayLabel = line.match(LETTER_LABEL_PATTERN);
+    if (strayLabel && isComplaintLetter(strayLabel[1], strayLabel[2])) {
+      const c = normalizeComplaintText(strayLabel[2]);
       if (!comps.includes(c)) comps.push(c);
     }
   }
   flushBlock();
 
-  if (comps.length < 2) {
-    const globalPatterns = [
-      /([A-D])[\.\)\:\s\-–—–—]+\s*([A-Za-z][^\n]{7,220})/gi,
-      /(?:customer\s*states?|customer\s*complaint|technician\s*notes?|tech\s*notes?|technician\s*found|concern|complaint|issue|problem|needs|requires|found|observed)\s*[:\-]?\s*([A-Za-z][^\n]{7,220})/gi,
-      /([A-D])\s*[\.\)]\s*([A-Za-z][^\n]{7,220})/gi,
-    ];
-    globalPatterns.forEach((p) => {
-      let m;
-      while ((m = p.exec(cleaned)) !== null) {
-        const cand = (m[2] || m[1] || '').trim().replace(/[\s\-–—–—]+$/, '');
-        if (cand.length > 6 && !isJunk(cand) && !comps.includes(cand) && /[a-z]/.test(cand)) {
-          comps.push(cand);
-        }
-      }
-    });
-  }
-
   const seen = new Set<string>();
   const unique: string[] = [];
   for (const c of comps) {
-    const key = c.toLowerCase().replace(/\s+/g, ' ').slice(0, 40);
-    if (!seen.has(key) && c.length > 5 && c.length < 280) {
+    const key = c.toLowerCase().slice(0, 40);
+    if (!seen.has(key) && c.length > 3 && c.length < 280) {
       seen.add(key);
-      unique.push(c.replace(/\s+/g, ' ').trim());
+      unique.push(c);
     }
   }
   return unique.slice(0, 10);
+}
+
+function mergeComplaintLists(...lists: string[][]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const raw of list) {
+      const c = normalizeComplaintText(raw);
+      if (!isValidComplaintText(c)) continue;
+      const key = c.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(c);
+      }
+    }
+  }
+  return merged.slice(0, 15);
 }
 
 export function extractVehicleDetails(text: string): VehicleInfo {
@@ -159,7 +239,8 @@ export function extractVehicleDetails(text: string): VehicleInfo {
   let make = 'Mercedes-Benz';
   if (/Maybach/i.test(headerText)) make = 'Maybach';
   else if (/Mercedes[- ]?Benz/i.test(headerText) || /\bMercedes\b/i.test(headerText)) make = 'Mercedes-Benz';
-  else if (/\bMB\b/i.test(headerText) || /\bMERCEDES\b/i.test(headerText)) make = 'Mercedes-Benz';
+  else if (/Mercedes[- ]?Benz/i.test(headerText) || /\bMB\b/i.test(headerText) || /\bMERCEDES\b/i.test(headerText))
+    make = 'Mercedes-Benz';
   else if (
     vin.startsWith('W1') ||
     vin.startsWith('WDD') ||
@@ -228,7 +309,7 @@ export function extractCustomerName(text: string): string {
 
 export function parseStructuredROText(text: string): StructuredROExtraction {
   const vehicle: VehicleInfo = { vin: '', year: '', make: '', model: '', mileageIn: '', mileageOut: '' };
-  let complaints: string[] = [];
+  let structuredComplaints: string[] = [];
   let customerName = '';
   let roNumber = '';
 
@@ -258,17 +339,25 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
 
     if (inComplaints) {
       if (/none listed/i.test(line)) {
-        complaints = [];
+        structuredComplaints = [];
         inComplaints = false;
         continue;
       }
+      if (/^customer complaints?:?$/i.test(lower)) {
+        continue;
+      }
+      if (/^ro number:|^year:|^make:|^model:|^vin:|^mileage/i.test(lower)) {
+        inComplaints = false;
+        continue;
+      }
+
       let m = line.match(/^([A-Z])[\.\)\:\s\-–—–—]+\s*(.+)$/i);
       if (!m) m = line.match(/^(\d{1,2})[\.\)\:\s\-–—–—]+\s*(.+)$/i);
       if (m && m[2]) {
-        const c = m[2].trim();
-        if (c.length > 4) complaints.push(c);
-      } else if (line.length > 6 && !/^[A-Z]:/i.test(line)) {
-        complaints.push(line);
+        const c = normalizeComplaintText(m[2]);
+        if (isValidComplaintText(c)) structuredComplaints.push(c);
+      } else if (isValidComplaintText(line)) {
+        structuredComplaints.push(normalizeComplaintText(line));
       }
     }
   }
@@ -302,16 +391,14 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
     if (m) customerName = m[1].trim();
   }
 
-  const aggressive = extractComplaints(text);
-  if (aggressive.length > complaints.length) {
-    complaints = aggressive;
-  }
+  const letterLabeled = extractLetterLabeledComplaints(text);
+  const triggerBased = extractComplaints(text);
+  const complaints = mergeComplaintLists(letterLabeled, structuredComplaints, triggerBased);
 
   if (vehicle.vin && vehicle.vin.length !== 17) {
     vehicle.vin = vehicle.vin.replace(/[^A-HJ-NPR-Z0-9]/gi, '').slice(0, 17).toUpperCase();
   }
   vehicle.mileageIn = (vehicle.mileageIn || '').replace(/[^0-9]/g, '');
-  complaints = complaints.filter((c) => c && c.trim().length > 5 && /[a-zA-Z]/.test(c));
 
   return { vehicle, complaints, customerName, roNumber };
 }
@@ -325,7 +412,7 @@ export function extractRoNumberFromText(text: string): string {
 }
 
 export function sanitizeComplaints(complaints: string[]): string[] {
-  return complaints.filter((c) => c && c.trim().length > 5 && /[a-zA-Z]/.test(c));
+  return complaints.filter((c) => isValidComplaintText(c));
 }
 
 export function sanitizeVehicle(vehicle: VehicleInfo): VehicleInfo {

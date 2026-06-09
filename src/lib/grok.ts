@@ -70,7 +70,7 @@ export async function extractROFromImages(imageDataUrls: string[]) {
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    { temperature: 0.05, max_tokens: 700 }
+    { temperature: 0.05, max_tokens: 1000 }
   );
   return parseStructuredROText(extractedText);
 }
