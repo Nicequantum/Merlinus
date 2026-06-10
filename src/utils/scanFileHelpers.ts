@@ -1,15 +1,30 @@
-import * as pdfjs from 'pdfjs-dist';
+'use client';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 const MAX_PDF_PAGES = 12;
 const PDF_RENDER_SCALE = 2;
+
+type PdfJsModule = typeof import('pdfjs-dist');
+
+let pdfjsLib: PdfJsModule | null = null;
+
+async function loadPdfJs(): Promise<PdfJsModule> {
+  if (typeof window === 'undefined') {
+    throw new Error('PDF processing is only available in the browser.');
+  }
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
+  }
+  return pdfjsLib;
+}
 
 export function isPdfFile(file: File): boolean {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 
-async function pdfPageToFile(pdf: pdfjs.PDFDocumentProxy, pageNum: number, sourceName: string): Promise<File> {
+async function pdfPageToFile(pdf: PDFDocumentProxy, pageNum: number, sourceName: string): Promise<File> {
   const page = await pdf.getPage(pageNum);
   const viewport = page.getViewport({ scale: PDF_RENDER_SCALE });
   const canvas = document.createElement('canvas');
@@ -33,6 +48,7 @@ async function pdfPageToFile(pdf: pdfjs.PDFDocumentProxy, pageNum: number, sourc
 }
 
 export async function expandPdfToImageFiles(file: File): Promise<File[]> {
+  const pdfjs = await loadPdfJs();
   const data = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data }).promise;
   const pageCount = Math.min(pdf.numPages, MAX_PDF_PAGES);

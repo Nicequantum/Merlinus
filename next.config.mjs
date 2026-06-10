@@ -1,6 +1,20 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ['pdfjs-dist', '@napi-rs/canvas'],
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      // pdfjs-dist warns in Node unless the legacy build is used (Vercel build logs).
+      'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist/legacy/build/pdf.mjs'),
+    };
+    return config;
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
