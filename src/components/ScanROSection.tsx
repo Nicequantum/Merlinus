@@ -139,8 +139,9 @@ export function ScanROSection({
 
       {!isProcessingOCR && !hasPending && (
         <p className="text-center text-[10px] text-[#8e8e93] -mt-1 mb-1">
-          Tap {scanButtonLabel} to capture each RO page (usually 3–5). Add from Gallery for PDFs or batch photos. Tap
-          Process RO when all pages are captured.
+          Tap {scanButtonLabel} to capture each RO page (usually 3–5). Use flash or even lighting and avoid hand shadows
+          on faded or colored paper. Add from Gallery for PDFs or batch photos. Tap Process RO when all pages are
+          captured.
         </p>
       )}
     </div>

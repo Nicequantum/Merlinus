@@ -472,6 +472,43 @@ F. SUNROOF WIND NOISE`);
     assert.equal(merged.complaints[5], 'SUNROOF WIND NOISE');
   });
 
+  test('extracts Line A jammed directly on DESCRIPTION / INSTRUCTIONS header', () => {
+    const text = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS # A Drop-off loaner car or van supplied
+# B
+CHECK ENGINE LIGHT ON`;
+    const labeled = extractLetterLabeledComplaintsWithLabels(text);
+    assert.equal(labeled[0].letter, 'A');
+    assert.equal(labeled[0].text, 'Drop-off loaner car or van supplied');
+    assert.equal(labeled[1].text, 'CHECK ENGINE LIGHT ON');
+  });
+
+  test('extracts Line A when complaint text is flush on header without hashtag', () => {
+    const text = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS Drop-off loaner car or van supplied
+# B
+CHECK ENGINE LIGHT ON`;
+    const labeled = extractLetterLabeledComplaintsWithLabels(text);
+    assert.equal(labeled[0].letter, 'A');
+    assert.equal(labeled[0].text, 'Drop-off loaner car or van supplied');
+    assert.equal(labeled[1].text, 'CHECK ENGINE LIGHT ON');
+  });
+
+  test('does not copy duplicate Line B text onto Line A when A is recovered from header', () => {
+    const ocrText = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS Drop-off loaner car or van supplied
+# B
+CUSTOMER STATES CHECK ENGINE LIGHT ON
+# B
+CUSTOMER STATES CHECK ENGINE LIGHT ON`;
+
+    const grokExtracted = parseStructuredROText(`Customer Complaints:
+A. Drop-off loaner car or van supplied
+B. CHECK ENGINE LIGHT ON`);
+
+    const merged = mergeROExtractions(grokExtracted, parseStructuredROText(ocrText), ocrText);
+    assert.equal(merged.complaints[0], 'Drop-off loaner car or van supplied');
+    assert.equal(merged.complaints[1], 'CHECK ENGINE LIGHT ON');
+    assert.notEqual(merged.complaints[0], merged.complaints[1]);
+  });
+
   test('mergeROExtractions prefers non-empty service advisor name', () => {
     const grokParsed = {
       ...parseStructuredROText(GROK_OUTPUT_MISSING_A),

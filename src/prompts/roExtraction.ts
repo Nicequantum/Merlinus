@@ -14,7 +14,12 @@ The complaint block starts immediately AFTER the header row that reads:
 (or close variants: LINE OPCODE TECH TYPE HOURS, LINE OP CODE TECH TYPE DESCRIPTION)
 
 CRITICAL FORMAT — vertical column of hashtag labels (NO commas on the RO):
-Immediately below that header, the dealership prints complaint labels in a column:
+Immediately below that header, the dealership prints complaint labels in a column.
+
+LINE A JAMMED ON HEADER (common):
+The first complaint (# A) is often printed directly against the header row with little or no vertical gap — sometimes on the SAME line as "LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS".
+Example: LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS # A Drop-off loaner car or van supplied
+Or the text may appear right after the header words without a visible # A. ALWAYS look for Line A text flush against that header — never skip it.
 
     # A
     # B

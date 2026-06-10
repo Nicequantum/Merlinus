@@ -77,6 +77,57 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+/** Faded / yellow paper / shadow-heavy scans — stronger contrast, lower binarization threshold. */
+async function preprocessFaded(file: File): Promise<Blob> {
+  const img = await loadImage(file);
+  try {
+    let w = img.width;
+    let h = img.height;
+    if (Math.max(w, h) > MAX_DIM_FAST) {
+      const scale = MAX_DIM_FAST / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return file;
+
+    ctx.drawImage(img, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const gray = Math.round(Math.max(r, g, b) * 0.72 + Math.min(r, g, b) * 0.28);
+      data[i] = data[i + 1] = data[i + 2] = gray;
+    }
+
+    let minV = 255;
+    let maxV = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      minV = Math.min(minV, data[i]);
+      maxV = Math.max(maxV, data[i]);
+    }
+    const range = Math.max(1, maxV - minV);
+    for (let i = 0; i < data.length; i += 4) {
+      let v = Math.round(((data[i] - minV) / range) * 255);
+      v = Math.min(255, Math.max(0, Math.round((v - 128) * 2.4 + 128)));
+      const binary = v > 125 ? 255 : 0;
+      data[i] = data[i + 1] = data[i + 2] = binary;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return await canvasToBlob(canvas);
+  } finally {
+    URL.revokeObjectURL(img.src);
+  }
+}
+
 /** Fast preprocess for shop-floor mobile devices — no multi-angle deskew. */
 async function preprocessFast(file: File): Promise<Blob> {
   const img = await loadImage(file);
@@ -268,19 +319,21 @@ export function mergeOcrTextPasses(...passes: string[]): string {
   return [...primaryLines, ...extras].join('\n');
 }
 
-/** Accuracy-first OCR: B&W full + fast + sparse column + original image passes. */
+/** Accuracy-first OCR: B&W full + fast + faded + sparse column + original image passes. */
 export async function runMultiPassOCR(
   file: File,
   onProgress?: (p: number) => void
 ): Promise<string> {
   const full = await preprocessImageForOCR(file, 'full');
   const fast = await preprocessImageForOCR(file, 'fast');
+  const faded = await preprocessFaded(file);
 
-  const pass1 = await runOCR(full, onProgress ? (p) => onProgress(Math.round(p * 0.25)) : undefined, '6');
-  const pass2 = await runOCR(fast, onProgress ? (p) => onProgress(25 + Math.round(p * 0.2)) : undefined, '6');
-  const pass3 = await runOCR(full, onProgress ? (p) => onProgress(45 + Math.round(p * 0.2)) : undefined, '4');
-  const pass4 = await runOCR(file, onProgress ? (p) => onProgress(65 + Math.round(p * 0.15)) : undefined, '6');
-  const pass5 = await runOCR(full, onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined, '11');
+  const pass1 = await runOCR(full, onProgress ? (p) => onProgress(Math.round(p * 0.2)) : undefined, '6');
+  const pass2 = await runOCR(fast, onProgress ? (p) => onProgress(20 + Math.round(p * 0.15)) : undefined, '6');
+  const pass3 = await runOCR(faded, onProgress ? (p) => onProgress(35 + Math.round(p * 0.15)) : undefined, '6');
+  const pass4 = await runOCR(full, onProgress ? (p) => onProgress(50 + Math.round(p * 0.15)) : undefined, '4');
+  const pass5 = await runOCR(file, onProgress ? (p) => onProgress(65 + Math.round(p * 0.15)) : undefined, '6');
+  const pass6 = await runOCR(full, onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined, '11');
 
-  return mergeOcrTextPasses(pass1, pass2, pass3, pass4, pass5);
+  return mergeOcrTextPasses(pass1, pass2, pass3, pass4, pass5, pass6);
 }

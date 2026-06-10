@@ -64,11 +64,28 @@ function mergeLabelOrder(...sources: string[][]): string[] {
   return order;
 }
 
-/** Document-order # letter labels at line start (# A, #A, # A.). */
+function collectHashtagLabelsFromSegment(segment: string, order: string[]) {
+  for (const match of segment.matchAll(new RegExp(`#\\s*(${COMPLAINT_SLOT_PATTERN})\\b`, 'gi'))) {
+    const letter = match[1].toUpperCase();
+    if (isComplaintSlotLetter(letter) && !order.includes(letter)) {
+      order.push(letter);
+    }
+  }
+}
+
+/** Document-order # letter labels at line start (# A, #A, # A.) and jammed on header rows. */
 export function collectComplaintSlotLabelsInOrder(text: string): string[] {
   const order: string[] = [];
   for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
     const trimmed = line.trim();
+    if (HEADER_ROW_PATTERN.test(trimmed)) {
+      const remainder = trimmed.replace(HEADER_ROW_STRIP_PATTERN, ' ').trim();
+      collectHashtagLabelsFromSegment(remainder, order);
+      if (!order.includes('A') && extractJammedLineAFromHeaderTail(remainder)) {
+        order.unshift('A');
+      }
+    }
+
     const labelOnly = trimmed.match(HASHTAG_LABEL_ONLY_LINE);
     const inline = trimmed.match(HASHTAG_LABEL_WITH_TEXT_LINE);
     const tight = trimmed.match(/^#([A-Z])\b\s*(.*)$/i);
@@ -112,7 +129,10 @@ export function isObviousOcrGarbage(text: string): boolean {
   const compact = trimmed.replace(/\s/g, '');
 
   if (/^[_=+\-/*\\#]/.test(trimmed) && trimmed.length < 24) return true;
-  if (/^[A-Z0-9_\-]{10,}$/i.test(compact) && /[\d_\-]/.test(compact)) return true;
+  const hasReadableWord = trimmed
+    .split(/\s+/)
+    .some((word) => word.length >= 3 && /[aeiou]/i.test(word));
+  if (/^[A-Z0-9_\-]{10,}$/i.test(compact) && /[\d_\-]/.test(compact) && !hasReadableWord) return true;
   if (/\b[A-HJ-NPR-Z0-9]{11,17}\b/i.test(trimmed) && !/\s/.test(trimmed)) return true;
   if (/^=EA[,;-]/i.test(trimmed)) return true;
   if (/^_[A-Z0-9]/i.test(trimmed)) return true;
@@ -205,7 +225,10 @@ export function isPlausibleComplaintText(text: string): boolean {
   if (/[=,].*[=,]/.test(trimmed) || (/[=,]/.test(trimmed) && !/\s{2,}/.test(trimmed) && trimmed.length < 20)) {
     return false;
   }
-  if (/^[A-Z0-9_\-]{10,}$/i.test(compact) && /[\d_\-]/.test(compact)) return false;
+  const hasReadableWord = trimmed
+    .split(/\s+/)
+    .some((word) => word.length >= 3 && /[aeiou]/i.test(word));
+  if (/^[A-Z0-9_\-]{10,}$/i.test(compact) && /[\d_\-]/.test(compact) && !hasReadableWord) return false;
   if (/\b[A-HJ-NPR-Z0-9]{11,17}\b/i.test(trimmed) && !/\s/.test(trimmed)) return false;
   if (/\d{5,}/.test(trimmed) && trimmed.split(/\s+/).length < 3) return false;
 
@@ -225,6 +248,175 @@ function isHashtagLabelOnlyLine(line: string): string | null {
   return match ? match[1].toUpperCase() : null;
 }
 
+/** Parse complaint text jammed directly against the LINE OP CODE header (often missing # A). */
+function extractJammedLineAFromHeaderTail(remainder: string): string {
+  const trimmed = remainder.trim();
+  if (!trimmed) return '';
+
+  const hashInline = trimmed.match(/^#\s*A\b\s+(.+)$/i);
+  if (hashInline) {
+    const textOnly = hashInline[1]
+      .split(new RegExp(`\\s+#\\s*${COMPLAINT_SLOT_PATTERN}\\b`, 'i'))[0]
+      .trim();
+    return acceptLabeledComplaintText(textOnly) || '';
+  }
+
+  const beforeNextLabel = trimmed.split(
+    new RegExp(`\\s+#\\s*(?!A\\b)(${COMPLAINT_SLOT_PATTERN})\\b`, 'i')
+  )[0];
+  const segment = (beforeNextLabel || trimmed).trim();
+
+  const letterInline = segment.match(/^A(?:[\\.\\)\\:\\s\\-–—]+|\s+)(.+)$/i);
+  if (letterInline) {
+    return acceptLabeledComplaintText(trimComplaintContinuation(letterInline[1])) || '';
+  }
+
+  if (!new RegExp(`^#\\s*${COMPLAINT_SLOT_PATTERN}\\b`, 'i').test(segment)) {
+    const raw = acceptLabeledComplaintText(segment.replace(/^#\s*A\b\s*/i, ''));
+    if (raw && (isPlausibleComplaintText(raw) || isShortServiceLine(raw))) return raw;
+  }
+
+  return '';
+}
+
+function recoverLineAFromHeaderText(text: string): string {
+  for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
+    if (!HEADER_ROW_PATTERN.test(line)) continue;
+    const jammed = extractJammedLineAFromHeaderTail(line.replace(HEADER_ROW_STRIP_PATTERN, ' ').trim());
+    if (jammed) return jammed;
+  }
+  return '';
+}
+
+function recoverMissingLineA(paired: LabeledComplaint[], rawText: string): LabeledComplaint[] {
+  const byLetter = new Map<string, string>();
+  for (const { letter, text: value } of paired) {
+    if (!isComplaintSlotLetter(letter)) continue;
+    const existing = byLetter.get(letter) || '';
+    if (!existing || (value && value.length > existing.length)) {
+      byLetter.set(letter, value);
+    }
+  }
+
+  const currentA = normalizeComplaintForDisplay(byLetter.get('A') || '');
+  let needsA =
+    !currentA ||
+    (!isPlausibleComplaintText(currentA) && !isShortServiceLine(currentA));
+
+  if (currentA) {
+    for (const [letter, value] of byLetter) {
+      if (letter === 'A' || !value) continue;
+      if (normalizeComplaintForDisplay(value).toLowerCase() === currentA.toLowerCase()) {
+        needsA = true;
+        byLetter.set('A', '');
+        break;
+      }
+    }
+  }
+
+  if (needsA) {
+    const fromHeader = recoverLineAFromHeaderText(rawText);
+    if (fromHeader) byLetter.set('A', fromHeader);
+  }
+
+  const section = getComplaintSection(rawText.replace(/\r\n/g, '\n'));
+  const timeline = buildComplaintTimeline(preprocessComplaintSectionLines(section));
+  const firstLabelIdx = timeline.findIndex((entry) => entry.kind === 'label');
+  if (firstLabelIdx > 0 && needsA && !byLetter.get('A')) {
+    const firstLetter = (timeline[firstLabelIdx] as Extract<ComplaintTimelineEntry, { kind: 'label' }>)
+      .letter;
+    if (firstLetter !== 'A') {
+      const orphan = timeline
+        .slice(0, firstLabelIdx)
+        .filter((entry) => entry.kind === 'text')
+        .map((entry) => (entry as Extract<ComplaintTimelineEntry, { kind: 'text' }>).text)
+        .join(' ');
+      const recovered = pickPairedComplaintText(orphan) || acceptLabeledComplaintText(orphan);
+      if (recovered) byLetter.set('A', recovered);
+    }
+  }
+
+  if (byLetter.size === 0) return paired;
+
+  const order = mergeLabelOrder(
+    collectComplaintSlotLabelsInOrder(rawText),
+    paired.map((item) => item.letter),
+    [...byLetter.keys()]
+  );
+
+  if (byLetter.get('A') && order.includes('A') && order[0] !== 'A') {
+    return ['A', ...order.filter((letter) => letter !== 'A')].map((letter) => ({
+      letter,
+      text: byLetter.get(letter) || '',
+    }));
+  }
+
+  return order.map((letter) => ({
+    letter,
+    text: byLetter.get(letter) || '',
+  }));
+}
+
+/** Do not assign identical advisor text to multiple letter slots (e.g. duplicate # B copied onto A). */
+function resolveDuplicateComplaintTexts(
+  labels: string[],
+  complaints: string[],
+  grokMap: Map<string, string>,
+  ocrText: string
+): string[] {
+  const resolved = complaints.map((raw) => normalizeComplaintForDisplay(raw));
+  const ocrLabelOrder = collectComplaintSlotLabelsInOrder(ocrText);
+
+  for (let i = 0; i < labels.length; i++) {
+    for (let j = i + 1; j < labels.length; j++) {
+      const left = resolved[i];
+      const right = resolved[j];
+      if (!left || !right || left.toLowerCase() !== right.toLowerCase()) continue;
+
+      const letterI = labels[i].toUpperCase();
+      const letterJ = labels[j].toUpperCase();
+      const countI = ocrLabelOrder.filter((letter) => letter === letterI).length;
+      const countJ = ocrLabelOrder.filter((letter) => letter === letterJ).length;
+
+      if (letterI === 'A' && letterJ !== 'A') {
+        const grokA = normalizeComplaintForDisplay(grokMap.get('A') || '');
+        const headerA = recoverLineAFromHeaderText(ocrText);
+        if (grokA && grokA.toLowerCase() !== left.toLowerCase()) {
+          resolved[i] = grokA;
+        } else if (headerA && headerA.toLowerCase() !== left.toLowerCase()) {
+          resolved[i] = headerA;
+        } else {
+          resolved[i] = '';
+        }
+        continue;
+      }
+
+      if (letterJ === 'A' && letterI !== 'A') {
+        const grokA = normalizeComplaintForDisplay(grokMap.get('A') || '');
+        const headerA = recoverLineAFromHeaderText(ocrText);
+        if (grokA && grokA.toLowerCase() !== right.toLowerCase()) {
+          resolved[j] = grokA;
+        } else if (headerA && headerA.toLowerCase() !== right.toLowerCase()) {
+          resolved[j] = headerA;
+        } else {
+          resolved[j] = '';
+        }
+        continue;
+      }
+
+      if (countJ > countI) {
+        resolved[i] = '';
+      } else if (countI > countJ) {
+        resolved[j] = '';
+      } else {
+        resolved[j] = '';
+      }
+    }
+  }
+
+  return resolved;
+}
+
 function preprocessComplaintSectionLines(section: string): string[] {
   const lines = section
     .replace(PAGE_MARKER_PATTERN, '\n')
@@ -239,8 +431,24 @@ function preprocessComplaintSectionLines(section: string): string[] {
       continue;
     }
     if (HEADER_ROW_PATTERN.test(line)) {
-      line = line.replace(HEADER_ROW_STRIP_PATTERN, ' ').trim();
+      const remainder = line.replace(HEADER_ROW_STRIP_PATTERN, ' ').trim();
+      if (!remainder) continue;
+      const jammedA = extractJammedLineAFromHeaderTail(remainder);
+      if (jammedA) {
+        out.push('# A', jammedA);
+      }
+      line = remainder
+        .replace(/^#\s*A\b\s*/i, '')
+        .replace(/^A(?:[\\.\\)\\:\\s\\-–—]+|\s+)/i, '')
+        .replace(
+          jammedA ? new RegExp(`^${jammedA.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i') : /^$/,
+          ''
+        )
+        .trim();
       if (!line) continue;
+      if (!new RegExp(`#\\s*${COMPLAINT_SLOT_PATTERN}\\b`, 'i').test(line)) {
+        continue;
+      }
     }
     if ((line.match(new RegExp(`#\\s*${COMPLAINT_SLOT_PATTERN}\\b`, 'gi')) || []).length > 1) {
       out.push(...line.split(HASHTAG_BOUNDARY_SPLIT).map((part) => part.trim()).filter(Boolean));
@@ -332,6 +540,23 @@ function pairComplaintTimeline(timeline: ComplaintTimelineEntry[]): LabeledCompl
   while (index < timeline.length) {
     if (timeline[index].kind === 'text') {
       const orphan = (timeline[index] as Extract<ComplaintTimelineEntry, { kind: 'text' }>).text;
+      if (results.length === 0) {
+        let scan = index + 1;
+        while (scan < timeline.length && timeline[scan].kind === 'text') scan++;
+        if (scan < timeline.length && timeline[scan].kind === 'label') {
+          const firstLetter = (
+            timeline[scan] as Extract<ComplaintTimelineEntry, { kind: 'label' }>
+          ).letter;
+          if (firstLetter !== 'A') {
+            const recovered = pickPairedComplaintText(orphan) || acceptLabeledComplaintText(orphan);
+            if (recovered) {
+              results.push({ letter: 'A', text: recovered });
+              index++;
+              continue;
+            }
+          }
+        }
+      }
       if (isPlausiblePageContinuation(orphan)) {
         appendContinuationText(results, orphan);
       }
@@ -449,6 +674,10 @@ export function extractOrderedHashtagComplaints(text: string): LabeledComplaint[
     paired = pairComplaintTimeline(buildComplaintTimeline(lines));
   }
 
+  paired = recoverMissingLineA(paired, normalized);
+  const { complaints, labels } = labeledComplaintsToArrays(paired);
+  const deduped = resolveDuplicateComplaintTexts(labels, complaints, new Map(), normalized);
+  paired = labels.map((letter, idx) => ({ letter, text: deduped[idx] || '' }));
   return ensureComplaintSlotLetters(paired, normalized);
 }
 
@@ -787,7 +1016,8 @@ function mergeComplaintsWithGrokFallback(
       complaints.push(picked);
     }
 
-    return { complaints, labels };
+    const dedupedComplaints = resolveDuplicateComplaintTexts(labels, complaints, grokMap, ocrText);
+    return { complaints: dedupedComplaints, labels };
   }
 
   return recoverComplaintsWithLabelsFromText(ocrText, grokPrimary.complaints);
