@@ -19,11 +19,11 @@ const JUNK_COMPLAINT_PREFIX =
 const INSPECTION_DETAIL_LINE =
   /^(?:RISI\b|CDEF\b|PASSED\b|\d{3,}\s*(?:PASSED|CDEF|RISI)\b)/i;
 
-/** Complaint line slots on dealership ROs — only A through F. */
-const COMPLAINT_SLOT_PATTERN = '[A-F]';
-const COMPLAINT_SLOT_RE = /^[A-F]$/;
+/** Complaint line slots — any single capital letter A through Z. */
+const COMPLAINT_SLOT_PATTERN = '[A-Z]';
+const COMPLAINT_SLOT_RE = /^[A-Z]$/;
 
-const LETTER_LABEL_PATTERN = /^([A-F])\s+(.+)$/i;
+const LETTER_LABEL_PATTERN = /^([A-Z])\s+(.+)$/i;
 /** "# A" label only (optional trailing comma is OCR noise, not RO format). */
 const HASHTAG_LABEL_ONLY_LINE = new RegExp(`^#\\s*(${COMPLAINT_SLOT_PATTERN})\\b\\s*,?\\s*$`, 'i');
 /** "# A complaint text" on one line. */
@@ -51,14 +51,28 @@ function collectExplicitHashtagLabels(text: string): Set<string> {
   return new Set(collectComplaintSlotLabelsInOrder(text));
 }
 
-/** Document-order # A … # F labels at line start only (ignores false # R etc.). */
+/** Merge multiple label-order sources into one document-order list. */
+function mergeLabelOrder(...sources: string[][]): string[] {
+  const order: string[] = [];
+  for (const source of sources) {
+    for (const raw of source) {
+      const letter = raw.toUpperCase();
+      if (!isComplaintSlotLetter(letter)) continue;
+      if (!order.includes(letter)) order.push(letter);
+    }
+  }
+  return order;
+}
+
+/** Document-order # letter labels at line start (# A, #A, # A.). */
 export function collectComplaintSlotLabelsInOrder(text: string): string[] {
   const order: string[] = [];
   for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
     const trimmed = line.trim();
     const labelOnly = trimmed.match(HASHTAG_LABEL_ONLY_LINE);
     const inline = trimmed.match(HASHTAG_LABEL_WITH_TEXT_LINE);
-    const letter = (labelOnly?.[1] || inline?.[1])?.toUpperCase();
+    const tight = trimmed.match(/^#([A-Z])\b\s*(.*)$/i);
+    const letter = (labelOnly?.[1] || inline?.[1] || tight?.[1])?.toUpperCase();
     if (letter && isComplaintSlotLetter(letter) && !order.includes(letter)) {
       order.push(letter);
     }
@@ -67,7 +81,11 @@ export function collectComplaintSlotLabelsInOrder(text: string): string[] {
 }
 
 function ensureComplaintSlotLetters(paired: LabeledComplaint[], text: string): LabeledComplaint[] {
-  const slotLabels = collectComplaintSlotLabelsInOrder(text);
+  const slotLabels = mergeLabelOrder(
+    collectComplaintSlotLabelsInOrder(text),
+    paired.map((item) => item.letter)
+  );
+
   if (slotLabels.length === 0) {
     return paired.filter((item) => isComplaintSlotLetter(item.letter));
   }
@@ -236,31 +254,30 @@ function preprocessComplaintSectionLines(section: string): string[] {
 
 function buildComplaintTimeline(lines: string[]): ComplaintTimelineEntry[] {
   const timeline: ComplaintTimelineEntry[] = [];
-  let skipUntilSlotLabel = false;
 
   for (const line of lines) {
-    if (/^#\s*([G-Z])\b/i.test(line)) {
-      skipUntilSlotLabel = true;
+    const tight = line.trim().match(/^#([A-Z])\b\s*(.*)$/i);
+    if (tight && isComplaintSlotLetter(tight[1].toUpperCase())) {
+      timeline.push({ kind: 'label', letter: tight[1].toUpperCase() });
+      const text = trimComplaintContinuation((tight[2] || '').trim());
+      if (text) timeline.push({ kind: 'text', text });
       continue;
     }
 
     const labelOnly = isHashtagLabelOnlyLine(line);
     if (labelOnly) {
-      skipUntilSlotLabel = false;
       timeline.push({ kind: 'label', letter: labelOnly });
       continue;
     }
 
     const inline = line.match(HASHTAG_LABEL_WITH_TEXT_LINE);
     if (inline) {
-      skipUntilSlotLabel = false;
       timeline.push({ kind: 'label', letter: inline[1].toUpperCase() });
       const text = trimComplaintContinuation(inline[2].trim());
       if (text) timeline.push({ kind: 'text', text });
       continue;
     }
 
-    if (skipUntilSlotLabel) continue;
     if (isInspectionDetailLine(line)) continue;
     if (FORM_JUNK_LINE.test(line)) continue;
     const content = normalizeComplaintContent(line);
@@ -745,22 +762,32 @@ function mergeComplaintsWithGrokFallback(
 ): RecoveredComplaints {
   const grokMap = buildGrokComplaintMap(grokPrimary);
   const ordered = extractOrderedHashtagComplaints(ocrText);
-  const hashtagLabelCount = ordered.filter((entry) => entry.letter).length;
+  const grokLabels =
+    grokPrimary.complaintLabels?.length && grokPrimary.complaintLabels.length > 0
+      ? grokPrimary.complaintLabels.map((l) => l.toUpperCase())
+      : [...grokMap.keys()];
+  const ocrSlotLabels = collectComplaintSlotLabelsInOrder(ocrText);
+  const pairedLabels = ordered.map((entry) => entry.letter);
+  const primaryOrder =
+    grokLabels.length >= ocrSlotLabels.length && grokLabels.length > 0
+      ? grokLabels
+      : mergeLabelOrder(ocrSlotLabels, pairedLabels);
+  const allLetters = mergeLabelOrder(primaryOrder, ocrSlotLabels, pairedLabels, grokLabels);
 
-  if (hashtagLabelCount >= 1) {
+  if (allLetters.length >= 1) {
+    const byOcr = new Map(ordered.map((entry) => [entry.letter, entry.text]));
     const complaints: string[] = [];
     const labels: string[] = [];
 
-    for (const { letter, text: ocrInline } of ordered) {
+    for (const letter of allLetters) {
       const grokText = grokMap.get(letter) || '';
-      const picked = pickBestComplaintCandidate(ocrInline || '', grokText);
+      const ocrInline = byOcr.get(letter) || '';
+      const picked = pickBestComplaintCandidate(ocrInline, grokText);
       labels.push(letter);
       complaints.push(picked);
     }
 
-    if (labels.length > 0) {
-      return { complaints, labels };
-    }
+    return { complaints, labels };
   }
 
   return recoverComplaintsWithLabelsFromText(ocrText, grokPrimary.complaints);

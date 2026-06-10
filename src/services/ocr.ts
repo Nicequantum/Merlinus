@@ -223,7 +223,7 @@ export async function runOCR(
   }
 }
 
-const COMPLAINT_LINE_RE = /^#\s*[A-F]\b/i;
+const COMPLAINT_LINE_RE = /^#\s*[A-Z]\b/i;
 
 function isComplaintRelevantOcrLine(line: string): boolean {
   const trimmed = line.trim();

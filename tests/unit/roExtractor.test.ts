@@ -411,23 +411,65 @@ C. CHECK ENGINE LIGHT ON`);
     assert.ok(['QC', 'QUALITY CONTROL'].includes(merged.complaints[1]));
   });
 
-  test('does not treat # R or letter R as a complaint slot (A-F only)', () => {
+  test('extracts letters beyond F (G, H) when present on RO', () => {
     const text = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS
 # A
-RHODE ISLAND STATE INSPECTION
-# R
-RANDOM HEADER FIELD
+STATE INSPECTION
 # B
 CHECK ENGINE LIGHT ON
-R SOME OTHER FIELD`;
+# G
+SUNROOF WIND NOISE
+# H
+VIBRATION AT SPEED`;
 
     const labeled = extractLetterLabeledComplaintsWithLabels(text);
     assert.deepEqual(
       labeled.map((item) => item.letter),
-      ['A', 'B']
+      ['A', 'B', 'G', 'H']
     );
-    assert.equal(labeled[0].text, 'RHODE ISLAND STATE INSPECTION');
-    assert.equal(labeled[1].text, 'CHECK ENGINE LIGHT ON');
+    assert.equal(labeled[2].text, 'SUNROOF WIND NOISE');
+  });
+
+  test('finds all stacked slot labels even when only one hashtag OCR line is obvious', () => {
+    const text = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS
+# A
+# B
+# C
+# D
+# E
+# F
+RHODE ISLAND STATE INSPECTION
+CHECK ENGINE LIGHT ON
+NOISE FROM REAR SUSPENSION
+BRAKE PULSATION AT STOP
+QUALITY CONTROL
+SUNROOF WIND NOISE`;
+
+    const recovered = recoverComplaintsWithLabelsFromText(text);
+    assert.deepEqual(recovered.labels, ['A', 'B', 'C', 'D', 'E', 'F']);
+    assert.equal(recovered.complaints[0], 'RHODE ISLAND STATE INSPECTION');
+    assert.equal(recovered.complaints[1], 'CHECK ENGINE LIGHT ON');
+    assert.equal(recovered.complaints[5], 'SUNROOF WIND NOISE');
+  });
+
+  test('mergeROExtractions unions Grok labels when OCR only pairs one line', () => {
+    const ocrText = `LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS
+# B
+CHECK ENGINE LIGHT ON`;
+
+    const grokExtracted = parseStructuredROText(`Customer Complaints:
+A. RHODE ISLAND STATE INSPECTION
+B. CHECK ENGINE LIGHT ON
+C. NOISE FROM REAR
+D. BRAKE PULSATION
+E. QUALITY CONTROL
+F. SUNROOF WIND NOISE`);
+
+    const merged = mergeROExtractions(grokExtracted, parseStructuredROText(ocrText), ocrText);
+    assert.deepEqual(merged.complaintLabels, ['A', 'B', 'C', 'D', 'E', 'F']);
+    assert.equal(merged.complaints[0], 'RHODE ISLAND STATE INSPECTION');
+    assert.equal(merged.complaints[1], 'CHECK ENGINE LIGHT ON');
+    assert.equal(merged.complaints[5], 'SUNROOF WIND NOISE');
   });
 
   test('mergeROExtractions prefers non-empty service advisor name', () => {

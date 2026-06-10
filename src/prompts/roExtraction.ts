@@ -8,7 +8,7 @@ VEHICLE FIELDS (top header):
 - VIN: exactly 17 characters
 - Mileage IN: from MILEAGE IN/OUT or odometer (numbers only)
 
-CUSTOMER COMPLAINTS (HIGHEST PRIORITY — EXTRACT EVERY # A THROUGH # F):
+CUSTOMER COMPLAINTS (HIGHEST PRIORITY — EXTRACT EVERY # LETTER LINE):
 The complaint block starts immediately AFTER the header row that reads:
   LINE OP CODE TECH TYPE DESCRIPTION / INSTRUCTIONS
 (or close variants: LINE OPCODE TECH TYPE HOURS, LINE OP CODE TECH TYPE DESCRIPTION)
@@ -19,11 +19,12 @@ Immediately below that header, the dealership prints complaint labels in a colum
     # A
     # B
     # C
-    # D
-    # E
-    # F
+    ...
+    # G
+    # H
+    (continues alphabetically as needed)
 
-Each label is: hashtag + space + single capital letter (A through F). NO commas between labels.
+Each label is: hashtag + space + single capital letter (A, B, C … Z as printed). NO commas between labels.
 
 The complaint TEXT is beside these labels (to the right) OR on the same line:
     # A RHODE ISLAND STATE INSPECTION
@@ -32,14 +33,14 @@ The complaint TEXT is beside these labels (to the right) OR on the same line:
 MULTI-PAGE RULES:
 - Search ALL pages/images. Complaints often continue on page 2+.
 - Page 2 may begin with leftover/continuation text from the previous complaint — that text belongs to the PRIOR letter (e.g. end of C), NOT a new line.
-- Still extract every # letter printed on later pages (D, E, F, etc.).
+- Still extract every # letter printed on later pages (D, E, F, G, H, etc.).
 
 INCLUDE ALL LINES — DO NOT SKIP:
-- Extract EVERY printed label # A, # B, # C, # D, # E, # F even if the text is short, "Quality Control", a placeholder, or hard to read.
+- Extract EVERY printed # letter line (A, B, C, D, E, F, G, H, I, J …) even if the text is short, "Quality Control", a placeholder, or hard to read.
 - Line A is ALWAYS the first # A in the column — NEVER skip Line A.
 - Include QC / shop lines verbatim. The technician will delete unneeded lines.
 - Do NOT invent letters from words inside complaint text (e.g. "RHODE ISLAND" does NOT create lines E, I, L, N).
-- Lines WITHOUT a leading # letter (e.g. "RISI ...", "619 CDEF", "130132 PASSED") are inspection detail — attach to the prior letter mentally; output only lettered lines A–F.
+- Lines WITHOUT a leading # letter (e.g. "RISI ...", "619 CDEF", "130132 PASSED") are inspection detail — attach to the prior letter mentally; output only lettered complaint lines.
 - Also capture text after "Customer states...", "C/S", "Concern" when paired with a # letter.
 
 Output ONLY this exact format:
@@ -56,8 +57,6 @@ Customer Complaints:
 A. [exact text for # A]
 B. [exact text for # B]
 C. [exact text for # C]
-D. [exact text for # D]
-E. [exact text for # E]
-F. [exact text for # F]
+...continue for every letter actually printed (# D, # E, # F, # G, # H, etc.)
 
-Output only letters actually printed on the RO (skip letters not present). Use "A." prefix in output even if the RO shows "# A" without a period. Be extremely precise on VIN (fix O/0 I/1), mileage, and RO number.`;
+Output every letter actually printed on the RO in alphabetical order (skip letters not present). Use "A." prefix in output even if the RO shows "# A" without a period. Be extremely precise on VIN (fix O/0 I/1), mileage, and RO number.`;
