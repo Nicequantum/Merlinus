@@ -6,8 +6,9 @@ import { toast } from 'sonner';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
 import { SaveTemplateModal } from '@/components/SaveTemplateModal';
+import { StoryQualityPanel } from '@/components/StoryQualityPanel';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
-import type { RepairLine, RepairOrder } from '@/types';
+import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
 import { getSuggestions } from '@/utils/mercedesKb';
 import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
@@ -18,12 +19,16 @@ interface LineViewProps {
   isProcessingOCR: boolean;
   ocrProgress: number;
   isGenerating: boolean;
+  isReviewing: boolean;
+  storyQuality: StoryQualityResult | null;
+  storyReview: StoryReviewResult | null;
   lastGeneratedStoryText: string | null;
   onBack: () => void;
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   onAddXentryPhotos: () => void;
   onApplySmartDefaults: () => void;
   onGenerateStory: () => void;
+  onReviewStory: () => void;
   onAcknowledgeStoryBaseline: (text: string) => void;
 }
 
@@ -43,12 +48,16 @@ export function LineView({
   isProcessingOCR,
   ocrProgress,
   isGenerating,
+  isReviewing,
+  storyQuality,
+  storyReview,
   lastGeneratedStoryText,
   onBack,
   onUpdateLine,
   onAddXentryPhotos,
   onApplySmartDefaults,
   onGenerateStory,
+  onReviewStory,
   onAcknowledgeStoryBaseline,
 }: LineViewProps) {
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
@@ -69,6 +78,11 @@ export function LineView({
     if (!lastGeneratedStoryText || !line.warrantyStory?.trim()) return false;
     return line.warrantyStory.trim() !== lastGeneratedStoryText.trim();
   }, [lastGeneratedStoryText, line.warrantyStory]);
+
+  const qualityStale = useMemo(() => {
+    if (!storyQuality?.scoredAgainstStory || !line.warrantyStory?.trim()) return false;
+    return line.warrantyStory.trim() !== storyQuality.scoredAgainstStory.trim();
+  }, [storyQuality, line.warrantyStory]);
 
   const defaultTemplateTitle = useMemo(() => {
     const base = line.description?.trim() || 'Warranty Story';
@@ -269,7 +283,7 @@ export function LineView({
           </div>
 
           <p className="text-[10px] text-[#8e8e93] text-center leading-snug">
-            Generate with Grok, edit the story, then save it to grow your dealership knowledge base.
+            Generate MI 2.0–ready stories, review with AI, edit, then save to grow your knowledge base.
           </p>
         </div>
 
@@ -291,7 +305,27 @@ export function LineView({
               className="w-full bg-[#1c1c1e] border border-[#38383a] rounded p-3 text-[14.5px] leading-relaxed mb-3 min-h-[200px] resize-y"
               placeholder="Edit warranty story before DMS submission..."
             />
-            <div className="flex gap-2 flex-wrap">
+            {storyQuality && (
+              <StoryQualityPanel quality={storyQuality} review={storyReview} storyStale={qualityStale} />
+            )}
+
+            <div className="flex gap-2 flex-wrap mt-3">
+              <button
+                type="button"
+                onClick={onReviewStory}
+                disabled={isGenerating || isReviewing}
+                className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#0a84ff]/30 text-[#0a84ff] disabled:opacity-60"
+              >
+                {isReviewing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> REVIEWING…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} /> REVIEW WITH AI
+                  </>
+                )}
+              </button>
               {canSaveAsTemplate && (
                 <button
                   type="button"

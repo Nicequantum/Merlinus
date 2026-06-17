@@ -129,6 +129,10 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(128),
 });
 
+export const reviewStorySchema = z.object({
+  warrantyStory: safeText(5000),
+});
+
 export const saveTemplateFromStorySchema = z.object({
   title: safeText(120),
   category: z.enum(['customer', 'warranty']),

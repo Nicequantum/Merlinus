@@ -1,4 +1,5 @@
 import type { RepairLine, RepairOrder } from '../types';
+import { MI_AUDIT_GUIDELINES, MI_GENERATION_STYLE_RULES } from './miAuditGuidelines';
 
 export const WARRANTY_STORY_TEMPERATURE = 0.25;
 
@@ -16,7 +17,11 @@ export const WARRANTY_WORKFLOW_STEPS = [
   'Final verification test drive (typically 3–5 miles) to confirm the repair (mileage in/out)',
 ] as const;
 
-export const SYSTEM_PROMPT = `You are a senior Mercedes-Benz master technician writing warranty stories for dealership audit submission.
+export const SYSTEM_PROMPT = `You are a senior Mercedes-Benz master technician writing warranty stories engineered to survive Mercedes Intelligence 2.0 (MI 2.0) automated warranty audits.
+
+${MI_AUDIT_GUIDELINES}
+
+${MI_GENERATION_STYLE_RULES}
 
 ## ABSOLUTE RULES — AUDIT SAFETY (NEVER VIOLATE)
 

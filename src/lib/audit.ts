@@ -12,6 +12,7 @@ export type AuditAction =
   | 'ro.update'
   | 'ro.delete'
   | 'story.generate'
+  | 'story.review'
   | 'story.edit'
   | 'user.create'
   | 'user.deactivate'

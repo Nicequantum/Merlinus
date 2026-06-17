@@ -110,6 +110,31 @@ export interface KnowledgeBaseEntry {
   updatedAt?: string;
 }
 
+export type StoryQualityGrade = 'excellent' | 'strong' | 'needs-work' | 'at-risk';
+
+export interface StoryQualityResult {
+  score: number;
+  grade: StoryQualityGrade;
+  strengths: string[];
+  improvements: string[];
+  auditRisks: string[];
+  summary: string;
+  scoredAgainstStory?: string;
+}
+
+export interface StoryReviewFeedback {
+  structure: string;
+  technicalDetail: string;
+  clarity: string;
+  workflow: string;
+  fabricationRisk: string;
+}
+
+export interface StoryReviewResult extends StoryQualityResult {
+  feedback: StoryReviewFeedback;
+  priorityActions: string[];
+}
+
 export interface SaveTemplateFromStoryPayload {
   title: string;
   category: TemplateCategory;
@@ -271,6 +296,7 @@ export const AUDIT_ACTIONS = [
   'ro.update',
   'ro.delete',
   'story.generate',
+  'story.review',
   'story.edit',
   'user.create',
   'user.deactivate',

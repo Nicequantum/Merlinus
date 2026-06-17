@@ -7,6 +7,8 @@ import type {
   KnowledgeBaseEntry,
   RepairOrder,
   SaveTemplateFromStoryPayload,
+  StoryQualityResult,
+  StoryReviewResult,
   StoryTemplate,
   StructuredROExtraction,
   TechnicianSession,
@@ -166,10 +168,16 @@ export const api = {
     }),
 
   generateStory: (roId: string, lineId: string) =>
-    apiFetch<{ warrantyStory: string }>(`/api/repair-orders/${roId}/lines/${lineId}/generate-story`, {
-      method: 'POST',
-      timeoutMs: 120_000,
-    }),
+    apiFetch<{ warrantyStory: string; quality: StoryQualityResult | null }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/generate-story`,
+      { method: 'POST', timeoutMs: 180_000 }
+    ),
+
+  reviewStory: (roId: string, lineId: string, warrantyStory: string) =>
+    apiFetch<{ review: StoryReviewResult }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/review-story`,
+      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 120_000 }
+    ),
 
   listTemplates: (category?: TemplateCategory) => {
     const query = category ? `?category=${category}` : '';

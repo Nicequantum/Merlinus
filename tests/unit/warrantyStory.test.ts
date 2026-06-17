@@ -42,6 +42,7 @@ const baseLine: RepairLine = {
 
 describe('warranty story prompts', () => {
   test('SYSTEM_PROMPT requires 3 Cs and full workflow sequence', () => {
+    assert.match(SYSTEM_PROMPT, /Mercedes Intelligence 2\.0/i);
     assert.match(SYSTEM_PROMPT, /3 C's structure/i);
     assert.match(SYSTEM_PROMPT, /Required workflow sequence/i);
     assert.match(SYSTEM_PROMPT, /Initial test drive/i);

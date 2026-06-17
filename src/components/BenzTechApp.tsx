@@ -166,12 +166,16 @@ export function BenzTechApp() {
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
           isGenerating={ro.isGeneratingForLine}
+          isReviewing={ro.isReviewingForLine}
+          storyQuality={ro.storyQualityForLine}
+          storyReview={ro.storyReviewForLine}
           lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
           onBack={() => ro.setView('ro')}
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
           onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
           onGenerateStory={() => ro.generateStory(ro.currentLine!.id)}
+          onReviewStory={() => ro.reviewStory(ro.currentLine!.id)}
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
         />
       )}

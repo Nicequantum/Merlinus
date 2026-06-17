@@ -5,7 +5,7 @@ import {
   loadAdvisorPromptContextForRepairOrder,
 } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
-import { generateWarrantyStory } from '@/lib/grok';
+import { generateWarrantyStory, scoreWarrantyStory } from '@/lib/grok';
 import {
   formatKnowledgeBaseForPrompt,
   GLOBAL_DEALERSHIP_ID,
@@ -106,6 +106,13 @@ export async function POST(
         data: { warrantyStory },
       });
 
+      let quality = null;
+      try {
+        quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
+      } catch {
+        // Story saved — quality score is best-effort
+      }
+
       await writeAuditLog({
         action: 'story.generate',
         dealershipId: session.dealershipId,
@@ -119,11 +126,13 @@ export async function POST(
           knowledgeBaseEntriesUsed: relevantKb.map((entry) => entry.title),
           serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
           serviceAdvisorName: advisorCtx?.displayName ?? null,
+          qualityScore: quality?.score ?? null,
+          qualityGrade: quality?.grade ?? null,
         },
         ipAddress: getRequestIp(request),
       });
 
-      return { warrantyStory };
+      return { warrantyStory, quality };
     },
     { rateLimitKey: 'story.generate', rateLimit: RATE_LIMITS.generate }
   );

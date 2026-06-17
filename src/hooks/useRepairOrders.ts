@@ -4,7 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { preprocessImageForOCR, runMultiPassOCR, runOCR } from '@/services/ocr';
-import type { AppView, ExtractedData, ImageAttachment, PendingImage, RepairLine, RepairOrder } from '@/types';
+import type {
+  AppView,
+  ExtractedData,
+  ImageAttachment,
+  PendingImage,
+  RepairLine,
+  RepairOrder,
+  StoryQualityResult,
+  StoryReviewResult,
+} from '@/types';
 import { emptyExtractedData, mergeExtracted, parseDiagnosticText } from '@/utils/diagnosticParser';
 import { getSuggestions } from '@/utils/mercedesKb';
 import { debounce } from '@/lib/debounce';
@@ -56,6 +65,10 @@ export function useRepairOrders({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingLineId, setGeneratingLineId] = useState<string | null>(null);
   const [lastGeneratedStoryByLine, setLastGeneratedStoryByLine] = useState<Record<string, string>>({});
+  const [storyQualityByLine, setStoryQualityByLine] = useState<Record<string, StoryQualityResult>>({});
+  const [storyReviewByLine, setStoryReviewByLine] = useState<Record<string, StoryReviewResult>>({});
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewingLineId, setReviewingLineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
@@ -65,6 +78,8 @@ export function useRepairOrders({
   const openingROInFlightRef = useRef<string | null>(null);
   const generateStorySeqRef = useRef(0);
   const storyGenerationInFlightRef = useRef(false);
+  const reviewStorySeqRef = useRef(0);
+  const storyReviewInFlightRef = useRef(false);
 
   useEffect(() => {
     roRef.current = currentRO;
@@ -188,10 +203,16 @@ export function useRepairOrders({
           setCurrentRO(null);
           setCurrentLineId(null);
           setLastGeneratedStoryByLine({});
+          setStoryQualityByLine({});
+          setStoryReviewByLine({});
           generateStorySeqRef.current += 1;
+          reviewStorySeqRef.current += 1;
           storyGenerationInFlightRef.current = false;
+          storyReviewInFlightRef.current = false;
           setIsGenerating(false);
           setGeneratingLineId(null);
+          setIsReviewing(false);
+          setReviewingLineId(null);
           setView('home');
         }
         toast.success('Repair order deleted');
@@ -215,10 +236,16 @@ export function useRepairOrders({
         setCurrentRO(normalized);
         setCurrentLineId(null);
         setLastGeneratedStoryByLine({});
+        setStoryQualityByLine({});
+        setStoryReviewByLine({});
         generateStorySeqRef.current += 1;
+        reviewStorySeqRef.current += 1;
         storyGenerationInFlightRef.current = false;
+        storyReviewInFlightRef.current = false;
         setIsGenerating(false);
         setGeneratingLineId(null);
+        setIsReviewing(false);
+        setReviewingLineId(null);
         setAllROs((prev) => {
           const idx = prev.findIndex((r) => r.id === normalized.id);
           if (idx >= 0) {
@@ -851,7 +878,7 @@ export function useRepairOrders({
       setGeneratingLineId(lineId);
       setIsGenerating(true);
       try {
-        const { warrantyStory } = await api.generateStory(roId, lineId);
+        const { warrantyStory, quality } = await api.generateStory(roId, lineId);
         if (seq !== generateStorySeqRef.current) return;
 
         const activeRO = roRef.current;
@@ -861,6 +888,14 @@ export function useRepairOrders({
         }
 
         setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
+        setStoryReviewByLine((prev) => {
+          const next = { ...prev };
+          delete next[lineId];
+          return next;
+        });
+        if (quality) {
+          setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
+        }
         applyROUpdate(
           (ro) => {
             if (ro.id !== roId) return ro;
@@ -871,7 +906,11 @@ export function useRepairOrders({
           },
           { immediate: true }
         );
-        toast.success('Warranty story generated — edit as needed, then save as a template');
+        toast.success(
+          quality
+            ? `Warranty story generated — MI 2.0 score: ${quality.score}/100`
+            : 'Warranty story generated — edit as needed, then save as a template'
+        );
       } catch (error: unknown) {
         if (seq === generateStorySeqRef.current) {
           toast.error(error instanceof Error ? error.message : 'Story generation failed');
@@ -891,6 +930,52 @@ export function useRepairOrders({
     setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: text }));
   }, []);
 
+  const reviewStory = useCallback(
+    async (lineId: string) => {
+      if (storyReviewInFlightRef.current) return;
+      flushPendingSave();
+      const latestRO = roRef.current;
+      if (!latestRO) return;
+      const roId = latestRO.id;
+      const line = latestRO.repairLines.find((l) => l.id === lineId);
+      const storyText = line?.warrantyStory?.trim();
+      if (!storyText) {
+        toast.error('Write or generate a warranty story before reviewing');
+        return;
+      }
+
+      const seq = ++reviewStorySeqRef.current;
+      storyReviewInFlightRef.current = true;
+      setReviewingLineId(lineId);
+      setIsReviewing(true);
+      try {
+        const { review } = await api.reviewStory(roId, lineId, storyText);
+        if (seq !== reviewStorySeqRef.current) return;
+
+        const activeRO = roRef.current;
+        if (!activeRO || activeRO.id !== roId) {
+          toast.success('Review complete — reopen the repair line to view feedback');
+          return;
+        }
+
+        setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
+        setStoryQualityByLine((prev) => ({ ...prev, [lineId]: review }));
+        toast.success(`MI 2.0 review complete — ${review.score}/100 (${review.grade})`);
+      } catch (error: unknown) {
+        if (seq === reviewStorySeqRef.current) {
+          toast.error(error instanceof Error ? error.message : 'Story review failed');
+        }
+      } finally {
+        if (seq === reviewStorySeqRef.current) {
+          storyReviewInFlightRef.current = false;
+          setIsReviewing(false);
+          setReviewingLineId(null);
+        }
+      }
+    },
+    [flushPendingSave]
+  );
+
   const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
   const lastGeneratedStoryForLine =
     currentLineId && lastGeneratedStoryByLine[currentLineId]
@@ -898,6 +983,11 @@ export function useRepairOrders({
       : null;
 
   const isGeneratingForLine = isGenerating && generatingLineId === currentLineId;
+  const isReviewingForLine = isReviewing && reviewingLineId === currentLineId;
+  const storyQualityForLine =
+    currentLineId && storyQualityByLine[currentLineId] ? storyQualityByLine[currentLineId] : null;
+  const storyReviewForLine =
+    currentLineId && storyReviewByLine[currentLineId] ? storyReviewByLine[currentLineId] : null;
 
   const filteredROs = allROs
     .filter(
@@ -936,6 +1026,9 @@ export function useRepairOrders({
     setPendingROImages,
     isGenerating,
     isGeneratingForLine,
+    isReviewingForLine,
+    storyQualityForLine,
+    storyReviewForLine,
     lastGeneratedStoryForLine,
     openingROId,
     filteredROs,
@@ -963,6 +1056,7 @@ export function useRepairOrders({
     addXentryPhotos,
     addROXentryPhotos,
     generateStory,
+    reviewStory,
     acknowledgeStoryBaseline,
   };
 }
