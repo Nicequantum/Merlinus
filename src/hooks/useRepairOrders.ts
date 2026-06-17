@@ -860,9 +860,34 @@ export function useRepairOrders({
     input.click();
   }, [currentRO, flushPendingSave, processXentryImages, saveROImmediate, onOcrStart, onOcrFinish]);
 
+  const invalidateReviewRequests = useCallback(() => {
+    reviewStorySeqRef.current += 1;
+    storyReviewInFlightRef.current = false;
+    setIsReviewing(false);
+    setReviewingLineId(null);
+  }, []);
+
+  const clearLineQualityState = useCallback((lineId: string) => {
+    setStoryQualityByLine((prev) => {
+      if (!prev[lineId]) return prev;
+      const next = { ...prev };
+      delete next[lineId];
+      return next;
+    });
+    setStoryReviewByLine((prev) => {
+      if (!prev[lineId]) return prev;
+      const next = { ...prev };
+      delete next[lineId];
+      return next;
+    });
+  }, []);
+
   const generateStory = useCallback(
     async (lineId: string) => {
       if (storyGenerationInFlightRef.current) return;
+      if (storyReviewInFlightRef.current) {
+        invalidateReviewRequests();
+      }
       flushPendingSave();
       const latestRO = roRef.current;
       if (!latestRO) return;
@@ -872,6 +897,9 @@ export function useRepairOrders({
         toast.error('Repair line not found — refresh the RO and try again');
         return;
       }
+
+      clearLineQualityState(lineId);
+      invalidateReviewRequests();
 
       const seq = ++generateStorySeqRef.current;
       storyGenerationInFlightRef.current = true;
@@ -887,15 +915,12 @@ export function useRepairOrders({
           return;
         }
 
-        setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
-        setStoryReviewByLine((prev) => {
-          const next = { ...prev };
-          delete next[lineId];
-          return next;
-        });
-        if (quality) {
-          setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
+        if (!activeRO.repairLines.some((l) => l.id === lineId)) {
+          toast.success('Story generated — reopen this line to view it');
+          return;
         }
+
+        setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
         applyROUpdate(
           (ro) => {
             if (ro.id !== roId) return ro;
@@ -906,6 +931,14 @@ export function useRepairOrders({
           },
           { immediate: true }
         );
+
+        if (quality) {
+          const baseline = (quality.scoredAgainstStory ?? warrantyStory).trim();
+          if (baseline === warrantyStory.trim()) {
+            setStoryQualityByLine((prev) => ({ ...prev, [lineId]: { ...quality, scoredAgainstStory: baseline } }));
+          }
+        }
+
         toast.success(
           quality
             ? `Warranty story generated — MI 2.0 score: ${quality.score}/100`
@@ -923,7 +956,7 @@ export function useRepairOrders({
         }
       }
     },
-    [applyROUpdate, flushPendingSave]
+    [applyROUpdate, clearLineQualityState, flushPendingSave, invalidateReviewRequests]
   );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {
@@ -933,6 +966,10 @@ export function useRepairOrders({
   const reviewStory = useCallback(
     async (lineId: string) => {
       if (storyReviewInFlightRef.current) return;
+      if (storyGenerationInFlightRef.current) {
+        toast.error('Wait for story generation to finish before reviewing');
+        return;
+      }
       flushPendingSave();
       const latestRO = roRef.current;
       if (!latestRO) return;
@@ -943,6 +980,8 @@ export function useRepairOrders({
         toast.error('Write or generate a warranty story before reviewing');
         return;
       }
+
+      clearLineQualityState(lineId);
 
       const seq = ++reviewStorySeqRef.current;
       storyReviewInFlightRef.current = true;
@@ -956,6 +995,17 @@ export function useRepairOrders({
         if (!activeRO || activeRO.id !== roId) {
           toast.success('Review complete — reopen the repair line to view feedback');
           return;
+        }
+
+        const activeLine = activeRO.repairLines.find((l) => l.id === lineId);
+        const currentStory = activeLine?.warrantyStory?.trim() ?? '';
+        if (!currentStory || currentStory !== storyText) {
+          // Story changed while review was in flight — discard stale feedback
+          return;
+        }
+
+        if (review.scoredAgainstStory?.trim() !== storyText) {
+          review.scoredAgainstStory = storyText;
         }
 
         setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
@@ -973,7 +1023,7 @@ export function useRepairOrders({
         }
       }
     },
-    [flushPendingSave]
+    [clearLineQualityState, flushPendingSave]
   );
 
   const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
@@ -984,10 +1034,29 @@ export function useRepairOrders({
 
   const isGeneratingForLine = isGenerating && generatingLineId === currentLineId;
   const isReviewingForLine = isReviewing && reviewingLineId === currentLineId;
-  const storyQualityForLine =
-    currentLineId && storyQualityByLine[currentLineId] ? storyQualityByLine[currentLineId] : null;
-  const storyReviewForLine =
-    currentLineId && storyReviewByLine[currentLineId] ? storyReviewByLine[currentLineId] : null;
+  const storyQualityForLine = (() => {
+    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return null;
+    const quality = storyQualityByLine[currentLineId];
+    if (!quality) return null;
+    const storyText = currentLine?.warrantyStory?.trim() ?? '';
+    if (!storyText) return null;
+    if (quality.scoredAgainstStory?.trim() !== storyText) return null;
+    return quality;
+  })();
+
+  const storyReviewForLine = (() => {
+    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return null;
+    if (!storyQualityForLine) return null;
+    return storyReviewByLine[currentLineId] ?? null;
+  })();
+
+  const storyQualityStaleForLine = (() => {
+    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return false;
+    const quality = storyQualityByLine[currentLineId];
+    const storyText = currentLine?.warrantyStory?.trim() ?? '';
+    if (!quality || !storyText) return false;
+    return quality.scoredAgainstStory?.trim() !== storyText;
+  })();
 
   const filteredROs = allROs
     .filter(
@@ -1029,6 +1098,7 @@ export function useRepairOrders({
     isReviewingForLine,
     storyQualityForLine,
     storyReviewForLine,
+    storyQualityStaleForLine,
     lastGeneratedStoryForLine,
     openingROId,
     filteredROs,

@@ -1,13 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Shield, Sparkles, Target } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Shield, Sparkles, Target } from 'lucide-react';
 import type { StoryQualityResult, StoryReviewResult } from '@/types';
 
 interface StoryQualityPanelProps {
   quality: StoryQualityResult;
   review?: StoryReviewResult | null;
-  storyStale?: boolean;
+  panelKey: string;
+}
+
+interface StoryQualityLoadingProps {
+  mode: 'generating' | 'reviewing';
+}
+
+interface StoryQualityStaleProps {
+  onReview?: () => void;
 }
 
 const GRADE_LABELS: Record<StoryQualityResult['grade'], string> = {
@@ -31,9 +39,54 @@ function scoreRingColor(score: number): string {
   return 'border-[#ff3b30]/50 bg-[#ff3b30]/10';
 }
 
-export function StoryQualityPanel({ quality, review, storyStale }: StoryQualityPanelProps) {
+export function StoryQualityLoadingPanel({ mode }: StoryQualityLoadingProps) {
+  const label =
+    mode === 'generating'
+      ? 'Generating story and scoring against MI 2.0…'
+      : 'Reviewing story against MI 2.0 audit criteria…';
+
+  return (
+    <div className="ios-card p-4 mt-3 border border-[#38383a] flex items-center gap-3">
+      <Loader2 size={20} className="animate-spin text-[#0a84ff] shrink-0" />
+      <div>
+        <div className="text-xs uppercase tracking-widest text-[#8e8e93]">MI 2.0 Quality</div>
+        <p className="text-sm text-[#d1d1d6] mt-0.5">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+export function StoryQualityStaleBanner({ onReview }: StoryQualityStaleProps) {
+  return (
+    <div className="ios-card p-4 mt-3 border border-[#ff9f0a]/30 bg-[#ff9f0a]/5 flex items-start gap-3">
+      <AlertTriangle size={18} className="text-[#ff9f0a] shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <div className="text-xs uppercase tracking-widest text-[#ff9f0a]">Score Outdated</div>
+        <p className="text-sm text-[#d1d1d6] mt-1 leading-snug">
+          This story was edited after the last score. Run Review with AI to get an accurate MI 2.0 assessment.
+        </p>
+        {onReview && (
+          <button
+            type="button"
+            onClick={onReview}
+            className="mt-2 text-xs text-[#0a84ff] font-medium"
+          >
+            Review with AI →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPanelProps) {
   const [expanded, setExpanded] = useState(true);
   const [showReviewDetail, setShowReviewDetail] = useState(!!review);
+
+  useEffect(() => {
+    setExpanded(true);
+    setShowReviewDetail(!!review);
+  }, [panelKey, review]);
 
   return (
     <div className="ios-card p-4 mt-3 border border-[#38383a]">
@@ -57,11 +110,6 @@ export function StoryQualityPanel({ quality, review, storyStale }: StoryQualityP
             </span>
           </div>
           <p className="text-sm text-[#d1d1d6] mt-1 leading-snug">{quality.summary}</p>
-          {storyStale && (
-            <p className="text-[10px] text-[#ff9f0a] mt-1 flex items-center gap-1">
-              <AlertTriangle size={12} /> Story edited since last score — run Review with AI to refresh
-            </p>
-          )}
         </div>
         {expanded ? <ChevronUp size={18} className="text-[#8e8e93] shrink-0" /> : <ChevronDown size={18} className="text-[#8e8e93] shrink-0" />}
       </button>

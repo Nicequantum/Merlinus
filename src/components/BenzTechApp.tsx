@@ -169,6 +169,7 @@ export function BenzTechApp() {
           isReviewing={ro.isReviewingForLine}
           storyQuality={ro.storyQualityForLine}
           storyReview={ro.storyReviewForLine}
+          storyQualityStale={ro.storyQualityStaleForLine}
           lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
           onBack={() => ro.setView('ro')}
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
