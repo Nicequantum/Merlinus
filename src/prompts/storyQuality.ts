@@ -4,12 +4,19 @@ import { WARRANTY_WORKFLOW_STEPS } from './warrantyStory';
 
 export type StoryQualityGrade = 'excellent' | 'strong' | 'needs-work' | 'at-risk';
 
+export interface TechnicianDetailPrompt {
+  missing: string;
+  prompt: string;
+  field: 'technicianNotes' | 'customerConcern' | 'diagnostic' | 'workflow';
+}
+
 export interface StoryQualityResult {
   score: number;
   grade: StoryQualityGrade;
   strengths: string[];
   improvements: string[];
   auditRisks: string[];
+  technicianDetails: TechnicianDetailPrompt[];
   summary: string;
 }
 
@@ -32,7 +39,14 @@ const SCORE_JSON_SCHEMA = `{
   "summary": "<one sentence overall assessment>",
   "strengths": ["<specific strength>", ...],
   "improvements": ["<specific improvement>", ...],
-  "auditRisks": ["<MI 2.0 rejection risk>", ...]
+  "auditRisks": ["<MI 2.0 rejection risk>", ...],
+  "technicianDetails": [
+    {
+      "missing": "<what specific technical detail is absent>",
+      "prompt": "<exact instruction telling the tech what to add and where>",
+      "field": "<technicianNotes|customerConcern|diagnostic|workflow>"
+    }
+  ]
 }`;
 
 const REVIEW_JSON_SCHEMA = `{
@@ -42,8 +56,15 @@ const REVIEW_JSON_SCHEMA = `{
   "strengths": ["..."],
   "improvements": ["..."],
   "auditRisks": ["..."],
+  "technicianDetails": [
+    {
+      "missing": "<what is missing>",
+      "prompt": "<what to add>",
+      "field": "<technicianNotes|customerConcern|diagnostic|workflow>"
+    }
+  ],
   "feedback": {
-    "structure": "<3 C's and section clarity>",
+    "structure": "<natural paragraph flow and 3 C's clarity>",
     "technicalDetail": "<codes, measurements, evidence linkage>",
     "clarity": "<readability and technician voice>",
     "workflow": "<10-step workflow completeness>",
@@ -59,13 +80,15 @@ ${MI_AUDIT_GUIDELINES}
 ## YOUR TASK
 Score the provided warranty story against MI 2.0 audit criteria. Compare the story ONLY against the repair line context provided — do not assume undocumented data exists.
 
+For technicianDetails: identify 2-5 specific technical details that are MISSING from the story but needed for audit survival. Each entry must tell the technician exactly what to add (e.g. "Add the source voltage reading from your battery test" or "Document the initial Quick Test fault codes from XENTRY"). Use field to indicate where they should add it.
+
 Grade mapping:
 - excellent: score 90-100
 - strong: score 75-89
 - needs-work: score 60-74
 - at-risk: score below 60
 
-Be strict but fair. Penalize fabrication, missing workflow steps, weak cause-evidence chains, and missing 3 C's. Reward evidence-linked diagnostics and honest placeholders.
+Be strict but fair. Penalize visible section headers, fabrication, missing workflow steps, weak cause-evidence chains. Reward evidence-linked diagnostics and honest placeholders.
 
 Respond with ONLY valid JSON matching this schema (no markdown, no commentary):
 ${SCORE_JSON_SCHEMA}`;
@@ -76,6 +99,8 @@ ${MI_AUDIT_GUIDELINES}
 
 ## YOUR TASK
 Review the warranty story against MI 2.0 criteria and the repair line context. Provide a quality score AND specific, actionable coaching feedback.
+
+technicianDetails must list 3-6 specific missing technical details with clear prompts on what to add. Be precise — name the exact data type (voltage reading, DTC codes, guided test result, mileage, part number, etc.).
 
 Focus feedback on:
 - How to strengthen the story against AI auditing
@@ -123,7 +148,7 @@ WARRANTY STORY TO SCORE:
 ${warrantyStory}
 ---
 
-Score this story for MI 2.0 audit survival. List 2-4 strengths, 2-4 improvements, and any audit risks (empty array if none).`;
+Score this story for MI 2.0 audit survival. List specific missing technical details in technicianDetails.`;
 }
 
 export function buildStoryReviewUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {
@@ -134,7 +159,7 @@ WARRANTY STORY TO REVIEW:
 ${warrantyStory}
 ---
 
-Provide MI 2.0 audit coaching. priorityActions must be 3-5 specific edits the technician can make now using only available data.`;
+Provide MI 2.0 audit coaching with specific technicianDetails prompts. priorityActions must be 3-5 specific edits the technician can make now using only available data.`;
 }
 
 export function gradeFromScore(score: number): StoryQualityGrade {
@@ -163,6 +188,25 @@ function asGrade(value: unknown, score: number): StoryQualityGrade {
   return gradeFromScore(score);
 }
 
+const VALID_FIELDS = new Set(['technicianNotes', 'customerConcern', 'diagnostic', 'workflow']);
+
+function parseTechnicianDetails(value: unknown): TechnicianDetailPrompt[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const missing = String(row.missing ?? '').trim();
+      const prompt = String(row.prompt ?? '').trim();
+      const fieldRaw = String(row.field ?? 'technicianNotes');
+      const field = VALID_FIELDS.has(fieldRaw) ? (fieldRaw as TechnicianDetailPrompt['field']) : 'technicianNotes';
+      if (!missing && !prompt) return null;
+      return { missing: missing || 'Missing detail', prompt: prompt || missing, field };
+    })
+    .filter((x): x is TechnicianDetailPrompt => x !== null)
+    .slice(0, 6);
+}
+
 export function extractJsonPayload(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -185,6 +229,7 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
       strengths: [],
       improvements: ['Unable to parse quality score — try reviewing again.'],
       auditRisks: ['Score analysis unavailable'],
+      technicianDetails: [],
       summary: 'Quality analysis could not be completed.',
     };
   }
@@ -196,6 +241,7 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
     strengths: asStringArray(parsed.strengths),
     improvements: asStringArray(parsed.improvements),
     auditRisks: asStringArray(parsed.auditRisks),
+    technicianDetails: parseTechnicianDetails(parsed.technicianDetails),
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : 'Quality assessment complete.',
   };
 }

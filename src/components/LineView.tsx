@@ -12,7 +12,7 @@ import {
   StoryQualityStaleBanner,
 } from '@/components/StoryQualityPanel';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
-import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
+import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
 import { getSuggestions } from '@/utils/mercedesKb';
 import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
@@ -90,11 +90,14 @@ export function LineView({
     return base.length > 80 ? `${base.slice(0, 77)}…` : base;
   }, [line.description]);
 
-  const handleInsertTemplate = (content: string, title: string) => {
+  const handleInsertTemplate = (content: string, _title: string, category: TemplateCategory) => {
+    if (category === 'customer') {
+      onUpdateLine({ warrantyStory: content });
+      return;
+    }
     const existing = line.warrantyStory?.trim();
-    const next = existing ? `${existing}\n\n---\n${title}\n\n${content}` : content;
+    const next = existing ? `${existing}\n\n${content}` : content;
     onUpdateLine({ warrantyStory: next });
-    toast.success(`Inserted "${title}" into story`);
   };
 
   const handleCopy = async () => {

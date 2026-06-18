@@ -112,12 +112,19 @@ export interface KnowledgeBaseEntry {
 
 export type StoryQualityGrade = 'excellent' | 'strong' | 'needs-work' | 'at-risk';
 
+export interface TechnicianDetailPrompt {
+  missing: string;
+  prompt: string;
+  field: 'technicianNotes' | 'customerConcern' | 'diagnostic' | 'workflow';
+}
+
 export interface StoryQualityResult {
   score: number;
   grade: StoryQualityGrade;
   strengths: string[];
   improvements: string[];
   auditRisks: string[];
+  technicianDetails: TechnicianDetailPrompt[];
   summary: string;
   scoredAgainstStory?: string;
 }

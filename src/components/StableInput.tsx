@@ -29,6 +29,7 @@ export function StableInput({
   }, [fieldKey]);
 
   useEffect(() => {
+    if (isFocusedRef.current) return;
     if (value === lastEmittedRef.current) return;
     lastEmittedRef.current = value;
     setDraft(value);
@@ -56,7 +57,10 @@ export function StableInput({
         }}
         onBlur={(e) => {
           isFocusedRef.current = false;
-          if (draft !== value) onChange(draft);
+          if (draft !== lastEmittedRef.current) {
+            lastEmittedRef.current = draft;
+            onChange(draft);
+          }
           props.onBlur?.(e);
         }}
         onChange={(e) => commit(e.target.value)}

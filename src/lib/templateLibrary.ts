@@ -6,7 +6,7 @@ import {
   toTemplateContent,
   type StoryTemplateSeed,
 } from '@/lib/storyTemplateSeed';
-import type { RepairLine, RepairOrder, TemplateCategory } from '@/types';
+import type { RepairLine, RepairOrder, StoryTemplate, TemplateCategory } from '@/types';
 
 export const GLOBAL_DEALERSHIP_ID = '__global__';
 
@@ -279,6 +279,11 @@ export async function recordTemplateUsage(templateId: string, dealershipId: stri
 
 export function getSeedPreview(): StoryTemplateSeed[] {
   return STORY_TEMPLATE_SEEDS;
+}
+
+/** Customer Pay templates insert exact saved text — never through AI. */
+export function getTemplateInsertText(template: StoryTemplate): string {
+  return template.content;
 }
 
 export { listLoadedKnowledgeBaseOriginals };

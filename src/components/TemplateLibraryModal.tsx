@@ -5,12 +5,13 @@ import { BookOpen, Clock3, FileText, Loader2, Search, ShieldCheck, X } from 'luc
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getRecentTemplateRefs, recordRecentTemplate, type RecentTemplateRef } from '@/lib/recentTemplates';
+import { getTemplateInsertText } from '@/lib/templateLibrary';
 import type { StoryTemplate, TemplateCategory } from '@/types';
 
 interface TemplateLibraryModalProps {
   open: boolean;
   onClose: () => void;
-  onInsert: (content: string, title: string) => void;
+  onInsert: (content: string, title: string, category: TemplateCategory) => void;
 }
 
 type TabId = TemplateCategory;
@@ -131,13 +132,19 @@ export function TemplateLibraryModal({ open, onClose, onInsert }: TemplateLibrar
       } catch {
         // Non-blocking — local recent list still works
       }
+      const exactText = getTemplateInsertText(template);
       recordRecentTemplate({
         id: template.id,
         title: template.title,
         category: template.category,
       });
       setRecentRefs(getRecentTemplateRefs());
-      onInsert(template.content, template.title);
+      onInsert(exactText, template.title, template.category);
+      if (template.category === 'customer') {
+        toast.success(`Inserted "${template.title}" — exact saved text, no AI rewrite`);
+      } else {
+        toast.success(`Inserted "${template.title}" into story`);
+      }
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to insert template');

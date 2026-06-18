@@ -10,6 +10,7 @@ describe('story quality state', () => {
       strengths: [],
       improvements: [],
       auditRisks: [],
+      technicianDetails: [],
       summary: 'Good',
       scoredAgainstStory: 'Customer Complaint: noise\nCause: bearing',
     };

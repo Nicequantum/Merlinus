@@ -41,19 +41,16 @@ const baseLine: RepairLine = {
 };
 
 describe('warranty story prompts', () => {
-  test('SYSTEM_PROMPT requires 3 Cs and full workflow sequence', () => {
+  test('SYSTEM_PROMPT requires natural paragraphs and full workflow sequence', () => {
     assert.match(SYSTEM_PROMPT, /Mercedes Intelligence 2\.0/i);
-    assert.match(SYSTEM_PROMPT, /3 C's structure/i);
+    assert.match(SYSTEM_PROMPT, /Natural 3 C's flow|natural paragraph/i);
+    assert.match(SYSTEM_PROMPT, /NO visible section headers/i);
     assert.match(SYSTEM_PROMPT, /Required workflow sequence/i);
-    assert.match(SYSTEM_PROMPT, /Initial test drive/i);
-    assert.match(SYSTEM_PROMPT, /Source voltage check/i);
-    assert.match(SYSTEM_PROMPT, /battery charger/i);
-    assert.match(SYSTEM_PROMPT, /initial Quick Test/i);
-    assert.match(SYSTEM_PROMPT, /Guided testing/i);
-    assert.match(SYSTEM_PROMPT, /final Quick Test/i);
-    assert.match(SYSTEM_PROMPT, /Final verification test drive/i);
-    assert.match(SYSTEM_PROMPT, /Natural language variation/i);
+    assert.match(SYSTEM_PROMPT, /test drive/i);
+    assert.match(SYSTEM_PROMPT, /Quick Test/i);
+    assert.match(SYSTEM_PROMPT, /10 workflow steps/i);
     assert.match(SYSTEM_PROMPT, /\[NOT DOCUMENTED\]/);
+    assert.doesNotMatch(SYSTEM_PROMPT, /Use clear 3 C's section headers/i);
   });
 
   test('WARRANTY_WORKFLOW_STEPS lists all 10 billing/audit steps in order', () => {
@@ -65,27 +62,24 @@ describe('warranty story prompts', () => {
   test('STORY_TEMPLATES reference diagnostic workflow elements', () => {
     assert.ok(STORY_TEMPLATES.length >= 5);
     for (const template of STORY_TEMPLATES) {
-      assert.match(
-        template,
-        /workflow|10.step|test drive|Quick Test|voltage|XENTRY|guided test/i
-      );
+      assert.match(template, /workflow|drive|Quick Test|voltage|XENTRY|guided test|verification|complaint/i);
     }
   });
 
-  test('buildWarrantyStoryUserMessage injects workflow checklist and 3 Cs requirements', () => {
+  test('buildWarrantyStoryUserMessage injects workflow checklist and natural format requirements', () => {
     const message = buildWarrantyStoryUserMessage(baseRo, baseLine, '', 0);
     assert.match(message, /REQUIRED WORKFLOW/);
     assert.match(message, /Initial test drive to confirm\/reproduce/i);
     assert.match(message, /Disconnect battery charger and XENTRY/i);
-    assert.match(message, /3 C's/i);
-    assert.match(message, /Map steps 1–6 into Cause/i);
+    assert.match(message, /natural paragraph form/i);
+    assert.match(message, /NO visible headings/i);
     assert.match(message, /28450 → 28458/);
     assert.match(message, /P0300/);
-    assert.match(message, /Chronological technician narrative/);
+    assert.match(message, /Chronological narrative/);
   });
 
   test('buildWarrantyStoryUserMessage selects template by index', () => {
     const explicit = buildWarrantyStoryUserMessage(baseRo, baseLine, '', 2);
-    assert.match(explicit, /Evidence-first diagnostic record/);
+    assert.match(explicit, /Concise audit record/);
   });
 });

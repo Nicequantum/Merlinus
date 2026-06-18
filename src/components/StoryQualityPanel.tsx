@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Shield, Sparkles, Target } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Loader2,
+  Shield,
+  Sparkles,
+  Target,
+  Wrench,
+} from 'lucide-react';
 import type { StoryQualityResult, StoryReviewResult } from '@/types';
 
 interface StoryQualityPanelProps {
@@ -23,6 +34,13 @@ const GRADE_LABELS: Record<StoryQualityResult['grade'], string> = {
   strong: 'Strong — Minor Polish',
   'needs-work': 'Needs Work',
   'at-risk': 'At Risk',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  technicianNotes: 'Technician Notes',
+  customerConcern: 'Customer Concern',
+  diagnostic: 'Diagnostic Evidence',
+  workflow: 'Workflow Steps',
 };
 
 function scoreColor(score: number): string {
@@ -116,6 +134,33 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 
       {expanded && (
         <div className="mt-4 space-y-4 border-t border-[#38383a] pt-4">
+          {quality.technicianDetails.length > 0 && (
+            <div className="bg-[#0a84ff]/5 border border-[#0a84ff]/25 rounded-xl p-3">
+              <div className="text-[10px] uppercase tracking-widest text-[#0a84ff] mb-2 flex items-center gap-1.5">
+                <Wrench size={12} /> Add Technician Details
+              </div>
+              <p className="text-[10px] text-[#8e8e93] mb-3 leading-snug">
+                MI 2.0 flagged these specific gaps. Add the missing details to your notes or story before submission.
+              </p>
+              <ul className="space-y-3">
+                {quality.technicianDetails.map((detail, index) => (
+                  <li key={`${detail.missing}-${index}`} className="text-xs leading-relaxed">
+                    <div className="flex items-start gap-2">
+                      <ClipboardList size={14} className="text-[#0a84ff] shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-semibold text-[#ff9f0a]">{detail.missing}</div>
+                        <div className="text-[#d1d1d6] mt-0.5">{detail.prompt}</div>
+                        <div className="text-[9px] text-[#8e8e93] mt-1 uppercase tracking-wide">
+                          Add to: {FIELD_LABELS[detail.field] || detail.field}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {quality.strengths.length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-widest text-[#30d158] mb-2 flex items-center gap-1.5">
