@@ -6,7 +6,8 @@ import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
 import { imagePathnamesSchema, parseBody } from '@/lib/validation';
 
-export const maxDuration = 60;
+/** Must match RO_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
+export const maxDuration = 130;
 
 export async function POST(request: Request) {
   return withAuth(

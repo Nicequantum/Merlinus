@@ -17,6 +17,7 @@ import {
 } from '@/prompts/warrantyStory';
 import type { ExtractedData, RepairLine, RepairOrder } from '@/types';
 import { normalizeExtractedData, parseDiagnosticExtractionJson } from '@/utils/diagnosticParser';
+import { DIAGNOSTIC_EXTRACT_GROK_MS, RO_EXTRACT_GROK_MS } from '@/lib/timeouts';
 import { parseStructuredROText } from '@/utils/roExtractor';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
@@ -133,7 +134,7 @@ export async function extractDiagnosticsFromImage(imageDataUrl: string): Promise
         ],
       },
     ],
-    { temperature: 0.05, max_tokens: 900, timeoutMs: 90_000 }
+    { temperature: 0.05, max_tokens: 900, timeoutMs: DIAGNOSTIC_EXTRACT_GROK_MS }
   );
 
   const parsed = parseDiagnosticExtractionJson(raw);
@@ -152,7 +153,7 @@ export async function extractROFromImages(imageDataUrls: string[]) {
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    { temperature: 0.05, max_tokens: 1800, timeoutMs: 120_000 }
+    { temperature: 0.05, max_tokens: 1800, timeoutMs: RO_EXTRACT_GROK_MS }
   );
   return parseStructuredROText(extractedText);
 }

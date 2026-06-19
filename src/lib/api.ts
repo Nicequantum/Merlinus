@@ -15,6 +15,7 @@ import type {
   TemplateCategory,
   ExtractedData,
 } from '@/types';
+import { DIAGNOSTIC_EXTRACT_CLIENT_MS, RO_EXTRACT_CLIENT_MS } from '@/lib/timeouts';
 
 export interface TechnicianUser {
   id: string;
@@ -165,14 +166,14 @@ export const api = {
     apiFetch<StructuredROExtraction>('/api/repair-orders/extract', {
       method: 'POST',
       body: JSON.stringify({ imagePathnames }),
-      timeoutMs: 95_000,
+      timeoutMs: RO_EXTRACT_CLIENT_MS,
     }),
 
   extractDiagnostics: (imagePathname: string) =>
     apiFetch<ExtractedData>('/api/diagnostics/extract', {
       method: 'POST',
       body: JSON.stringify({ imagePathnames: [imagePathname] }),
-      timeoutMs: 95_000,
+      timeoutMs: DIAGNOSTIC_EXTRACT_CLIENT_MS,
     }),
 
   generateStory: (roId: string, lineId: string) =>
