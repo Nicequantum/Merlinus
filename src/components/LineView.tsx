@@ -105,19 +105,23 @@ export function LineView({
   };
 
   const handleCopy = async () => {
-    if (!line.warrantyStory) return;
+    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
+    const storyText = storyEl?.value ?? line.warrantyStory ?? '';
+    if (!storyText.trim()) return;
     try {
-      await copyFormattedStory(ro, line);
-      toast.success('Copied with RO header formatting');
+      await copyFormattedStory(ro, line, storyText);
+      toast.success('Story copied — ready to paste into CDK');
     } catch {
       toast.error('Clipboard copy failed');
     }
   };
 
   const handlePdf = () => {
-    if (!line.warrantyStory) return;
+    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
+    const storyText = storyEl?.value ?? line.warrantyStory ?? '';
+    if (!storyText.trim()) return;
     try {
-      exportWarrantyStoryPdf(ro, line);
+      exportWarrantyStoryPdf(ro, line, storyText);
       toast.success('PDF downloaded');
     } catch {
       toast.error('PDF export failed');
@@ -285,6 +289,7 @@ export function LineView({
               <div className="text-[10px] text-[#ff3b30] mb-2">Exceeds recommended DMS character limit — edit before submission.</div>
             )}
             <StableTextarea
+              id={`warranty-story-${line.id}`}
               fieldKey={`${line.id}-story`}
               value={line.warrantyStory}
               onChange={(v) => onUpdateLine({ warrantyStory: v })}
@@ -337,10 +342,18 @@ export function LineView({
               >
                 <BookOpen size={16} /> TEMPLATES
               </button>
-              <button onClick={handleCopy} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+              >
                 <Copy size={16} /> COPY
               </button>
-              <button onClick={handlePdf} className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={handlePdf}
+                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+              >
                 <Download size={16} /> PDF
               </button>
               <button
