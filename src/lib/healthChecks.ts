@@ -1,4 +1,5 @@
 import { list } from '@vercel/blob';
+import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey';
 import { encryptPII, decryptPII } from './encryption';
 import { prisma } from './db';
 import { isKvConfigured } from './rate-limit';
@@ -84,10 +85,25 @@ export async function checkBlobStorage(): Promise<DependencyCheck> {
 }
 
 export async function checkGrokApi(): Promise<DependencyCheck> {
-  const key = process.env.GROK_API_KEY;
-  if (!key) {
-    return { status: 'warn', detail: 'GROK_API_KEY not configured — AI features disabled' };
+  const exposedPublicKeys = getExposedPublicGrokEnvKeys();
+  if (exposedPublicKeys.length > 0) {
+    return {
+      status: 'error',
+      detail: `Remove frontend xAI env vars (${exposedPublicKeys.join(', ')}) and use server-only GROK_API_KEY`,
+    };
   }
+
+  let key: string;
+  try {
+    key = getGrokApiKey();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'GROK_API_KEY not configured';
+    if (message.includes('not configured')) {
+      return { status: 'warn', detail: 'GROK_API_KEY not configured — AI features disabled' };
+    }
+    return { status: 'error', detail: message };
+  }
+
   try {
     const { latencyMs } = await timed(async () => {
       const controller = new AbortController();

@@ -1,3 +1,6 @@
+import 'server-only';
+
+import { getGrokApiKey } from '@/lib/grokApiKey';
 import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
 import {
@@ -22,12 +25,6 @@ import { parseStructuredROText } from '@/utils/roExtractor';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
-function getApiKey(): string {
-  const key = process.env.GROK_API_KEY;
-  if (!key) throw new Error('GROK_API_KEY is not configured on the server');
-  return key;
-}
-
 async function grokChat(
   messages: Array<{
     role: string;
@@ -43,7 +40,7 @@ async function grokChat(
     const response = await fetch(GROK_API_URL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${getApiKey()}`,
+        Authorization: `Bearer ${getGrokApiKey()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
