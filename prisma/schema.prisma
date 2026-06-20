@@ -20,7 +20,6 @@ model Dealership {
 
 model Technician {
   id             String        @id @default(cuid())
-  d7Number       String        @unique
   email          String        @unique
   name           String
   passwordHash   String
@@ -61,7 +60,7 @@ model RepairOrder {
   mileageOut                 String       @default("")
   customerNameEncrypted      String       @default("")
   complaintsEncrypted        String       @default("[]")
-  xentryOcrTexts             String       @default("[]")
+  xentryOcrTextsEncrypted    String       @default("")
   xentryImageUrls            String       @default("[]")
   createdAt                  DateTime     @default(now())
   updatedAt                  DateTime     @updatedAt
@@ -151,11 +150,11 @@ model RepairLine {
   lineNumber                Int
   description               String
   customerConcernEncrypted  String      @default("")
-  technicianNotes           String      @default("")
+  technicianNotesEncrypted  String      @default("")
   xentryImageUrls           String      @default("[]")
-  xentryOcrTexts            String      @default("[]")
+  xentryOcrTextsEncrypted   String      @default("")
   extractedData             String      @default("{}")
-  warrantyStory             String?
+  warrantyStoryEncrypted    String?
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
 

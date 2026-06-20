@@ -28,7 +28,7 @@ export function ConsentModal({ onAccept, loading }: ConsentModalProps) {
             information solely to assist authorized Mercedes-Benz technicians in creating warranty documentation.
           </p>
           <p>
-            <strong className="text-white">Customer PII</strong> (e.g., customer name) is encrypted at rest on the server.
+            <strong className="text-white">Customer PII and repair content</strong> (customer name, VIN, complaints, OCR text, technician notes, and warranty stories) is encrypted at rest on the server.
             It is never stored in your browser&apos;s local storage. AI processing occurs server-side; API credentials are
             not exposed to client devices.
           </p>

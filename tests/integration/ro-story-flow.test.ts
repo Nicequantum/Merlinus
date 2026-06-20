@@ -3,7 +3,8 @@ import { after, before, describe, mock, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { writeAuditLog } from '../../src/lib/audit';
 import { loginTechnician } from '../../src/lib/auth';
-import { dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import { encryptPII } from '../../src/lib/encryption';
+import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { createRepairOrderSchema, parseBody } from '../../src/lib/validation';
 
 const prisma = new PrismaClient();
@@ -35,9 +36,9 @@ describe('RO → story generation integration', () => {
       return originalFetch(input, init);
     }) as typeof fetch;
 
-    const techD7 = process.env.TECH_SEED_D7?.trim() || 'D7TECH001';
+    const techEmail = process.env.TECH_SEED_EMAIL?.trim() || 'tech@dealership.com';
     const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || 'changeme123';
-    const session = await loginTechnician(techD7, techPassword);
+    const session = await loginTechnician(techEmail, techPassword);
     assert.ok(session, 'Seed technician must exist — run npm run db:seed first');
     technicianId = session.technicianId;
     dealershipId = session.dealershipId;
@@ -125,7 +126,6 @@ describe('RO → story generation integration', () => {
           xentryImages: [],
           extractedData: {
             codes: ['P0300'],
-            faultCodes: [{ code: 'P0300', description: 'Random/multiple cylinder misfire detected' }],
             guidedTests: [],
             measurements: [],
             components: [],
@@ -150,6 +150,11 @@ describe('RO → story generation integration', () => {
     roId = created.id;
     lineId = created.repairLines[0].id;
 
+    const savedLineRow = created.repairLines[0];
+    assert.notEqual(savedLineRow.technicianNotesEncrypted, input.repairLines[0].technicianNotes);
+    assert.ok(savedLineRow.technicianNotesEncrypted.length > 0);
+    assert.equal(dbToRepairLine(savedLineRow).technicianNotes, input.repairLines[0].technicianNotes);
+
     const mapped = dbToRepairOrder(created);
     const line = mapped.repairLines[0];
 
@@ -161,7 +166,7 @@ describe('RO → story generation integration', () => {
 
     await prisma.repairLine.update({
       where: { id: lineId },
-      data: { warrantyStory },
+      data: { warrantyStoryEncrypted: encryptPII(warrantyStory) },
     });
 
     await writeAuditLog({
@@ -174,7 +179,8 @@ describe('RO → story generation integration', () => {
     });
 
     const savedLine = await prisma.repairLine.findUnique({ where: { id: lineId } });
-    assert.equal(savedLine?.warrantyStory, warrantyStory);
+    assert.notEqual(savedLine?.warrantyStoryEncrypted, warrantyStory);
+    assert.equal(dbToRepairLine(savedLine!).warrantyStory, warrantyStory);
 
     const audit = await prisma.auditLog.findFirst({
       where: {

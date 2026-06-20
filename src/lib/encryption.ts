@@ -38,11 +38,54 @@ export function decryptPII(ciphertext: string): string {
 }
 
 export function encryptStringArray(items: string[]): string {
+  if (!items.length) return '';
   return encryptPII(JSON.stringify(items));
 }
 
+function isLegacyJsonArray(raw: string): boolean {
+  const trimmed = raw.trim();
+  return trimmed.startsWith('[');
+}
+
 export function decryptStringArray(ciphertext: string): string[] {
-  return decryptComplaintsPayload(ciphertext).complaints;
+  if (!ciphertext) return [];
+  if (isLegacyJsonArray(ciphertext)) {
+    try {
+      const parsed = JSON.parse(ciphertext);
+      if (Array.isArray(parsed)) return parsed.map(String);
+    } catch {
+      return [];
+    }
+  }
+  const raw = decryptPII(ciphertext);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String);
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+/** Decrypt a sensitive text field, falling back to legacy plaintext values. */
+export function decryptSensitiveText(ciphertext: string): string {
+  if (!ciphertext) return '';
+  const decrypted = decryptPII(ciphertext);
+  if (decrypted) return decrypted;
+  return ciphertext;
+}
+
+export function decryptOptionalSensitiveText(ciphertext: string | null): string | undefined {
+  if (!ciphertext) return undefined;
+  const value = decryptSensitiveText(ciphertext);
+  return value || undefined;
+}
+
+export function encryptOptionalSensitiveText(plaintext: string | undefined | null): string | null {
+  if (!plaintext) return null;
+  const encrypted = encryptPII(plaintext);
+  return encrypted || null;
 }
 
 export interface ComplaintsPayload {

@@ -13,7 +13,8 @@ export async function GET(request: Request) {
         prisma.repairOrder.count({ where: { dealershipId } }),
         prisma.repairLine.count({
           where: {
-            warrantyStory: { not: null },
+            warrantyStoryEncrypted: { not: null },
+            NOT: { warrantyStoryEncrypted: '' },
             repairOrder: { dealershipId },
           },
         }),
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
           where: { dealershipId },
           include: {
             technician: { select: { name: true } },
-            repairLines: { select: { warrantyStory: true } },
+            repairLines: { select: { warrantyStoryEncrypted: true } },
           },
           orderBy: { updatedAt: 'desc' },
           take: 5,
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
           model: ro.model,
           technicianName: ro.technician.name,
           lineCount: ro.repairLines.length,
-          hasStories: ro.repairLines.some((l) => Boolean(l.warrantyStory)),
+          hasStories: ro.repairLines.some((l) => Boolean(l.warrantyStoryEncrypted)),
           updatedAt: ro.updatedAt.toISOString(),
         })),
         audit: auditSummary,
