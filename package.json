@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:reencrypt": "npx tsx scripts/reencrypt-legacy-data.ts",
     "db:studio": "prisma studio",
     "test": "tsx --test tests/**/*.test.ts",
     "test:integration": "tsx --test tests/integration/**/*.test.ts",

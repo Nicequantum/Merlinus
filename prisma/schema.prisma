@@ -159,7 +159,7 @@ model RepairLine {
   technicianNotesEncrypted  String      @default("")
   xentryImageUrls           String      @default("[]")
   xentryOcrTextsEncrypted   String      @default("")
-  extractedData             String      @default("{}")
+  extractedDataEncrypted    String      @default("{}")
   warrantyStoryEncrypted    String?
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
@@ -171,7 +171,7 @@ model Template {
   id           String    @id @default(cuid())
   title        String
   category     String
-  content      String    @db.Text
+  contentEncrypted String @db.Text
   source       String    @default("seed")
   dealershipId String    @default("__global__")
   createdById  String?
@@ -190,9 +190,9 @@ model KnowledgeBase {
   id               String   @id @default(cuid())
   title            String
   category         String
-  generatedText    String?  @db.Text
-  fullOriginalText String   @db.Text
-  cleanTemplate    String   @db.Text
+  generatedTextEncrypted    String? @db.Text
+  fullOriginalTextEncrypted String  @db.Text
+  cleanTemplateEncrypted    String  @db.Text
   tags             String   @default("[]")
   source           String   @default("seed")
   dealershipId     String   @default("__global__")

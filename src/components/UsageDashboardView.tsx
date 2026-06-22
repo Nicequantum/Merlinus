@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Activity, ArrowLeft, BarChart3, Users } from 'lucide-react';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -17,7 +18,7 @@ function StatCard({
   label,
   value,
   icon,
-  accent = 'text-[#0a84ff]',
+  accent = 'text-benz-blue',
 }: {
   label: string;
   value: string | number;
@@ -25,12 +26,12 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <div className="stat-card p-4">
-      <div className={`flex items-center gap-2 text-xs uppercase tracking-wider text-[#8e8e93] mb-2 ${accent}`}>
+    <div className="stat-card p-4 sm:p-5">
+      <div className={`flex items-center gap-2 text-xs uppercase tracking-wider text-benz-secondary mb-2.5 ${accent}`}>
         {icon}
         {label}
       </div>
-      <div className="text-2xl font-semibold">{value}</div>
+      <div className="text-2xl sm:text-[1.75rem] font-bold tracking-tight">{value}</div>
     </div>
   );
 }
@@ -56,70 +57,66 @@ export function UsageDashboardView({ dealershipName, onBackHref = '/' }: UsageDa
   }, [loadAnalytics]);
 
   return (
-    <div className="app-container px-4 pt-2 pb-8">
-      <div className="relative pt-4 mb-5">
-        <Link href={onBackHref} className="absolute top-4 left-0 p-2 text-[#8e8e93] touch-target" aria-label="Back">
+    <div className="app-container benz-app-wide benz-page-compact">
+      <div className="relative pt-2 mb-6">
+        <Link href={onBackHref} className="absolute top-2 left-0 benz-icon-btn touch-target" aria-label="Back">
           <ArrowLeft size={22} />
         </Link>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-[#0a84ff] font-semibold text-center mb-3">
-          Usage Analytics
-        </p>
+        <p className="benz-dashboard-eyebrow">Usage Analytics</p>
         <DealershipBranding size="md" />
-        <p className="text-xs text-[#8e8e93] mt-2 text-center">{dealershipName}</p>
+        <p className="text-xs text-benz-secondary mt-3 text-center">{dealershipName}</p>
       </div>
 
       {loading ? (
-        <div className="ios-card p-6 text-sm text-[#8e8e93]">Loading usage metrics...</div>
+        <div className="benz-card p-8 text-sm text-benz-secondary text-center">Loading usage metrics…</div>
       ) : analytics ? (
         <>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <StatCard
-              label="Today's AI Calls"
-              value={analytics.totalDailyUsage}
-              icon={<Activity size={14} />}
-            />
-            <StatCard
-              label="Daily Limit"
-              value={analytics.dailyLimit}
-              icon={<BarChart3 size={14} />}
-              accent="text-[#ff9f0a]"
-            />
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <StatCard label="Today's AI Calls" value={analytics.totalDailyUsage} icon={<Activity size={14} />} />
+            <StatCard label="Daily Limit" value={analytics.dailyLimit} icon={<BarChart3 size={14} />} accent="text-benz-amber" />
           </div>
 
-          <div className="ios-card p-4 mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Users size={16} className="text-[#0a84ff]" />
+          <div className="benz-card p-5 mb-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="benz-avatar text-benz-blue">
+                <Users size={18} />
+              </div>
               <div>
-                <div className="font-semibold text-sm">Technician Usage</div>
-                <div className="text-[10px] text-[#8e8e93]">Sorted by today&apos;s AI API calls</div>
+                <div className="font-semibold text-sm tracking-tight">Technician Usage</div>
+                <div className="benz-hint mt-0.5">Sorted by today&apos;s AI API calls</div>
               </div>
             </div>
 
             {analytics.technicians.length === 0 ? (
-              <p className="text-sm text-[#8e8e93]">No usage recorded yet.</p>
+              <BenzEmptyState
+                icon={Users}
+                title="No usage recorded yet"
+                hint="AI call counts will appear here once technicians generate stories or run OCR."
+                compact
+              />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {analytics.technicians.map((tech) => {
                   const atLimit = tech.dailyCount >= analytics.dailyLimit;
                   return (
-                    <div key={tech.technicianId} className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
+                    <div key={tech.technicianId} className="benz-list-row px-4 py-3.5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">{tech.name}</div>
-                          <div className="text-[10px] text-[#8e8e93]">
+                          <div className="text-sm font-semibold truncate tracking-tight">{tech.name}</div>
+                          <div className="text-xs text-benz-secondary mt-0.5">
                             {tech.d7Number} · {tech.role}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className={`text-sm font-semibold ${atLimit ? 'text-[#ff453a]' : 'text-[#30d158]'}`}>
+                          <div className={`text-sm font-bold ${atLimit ? 'text-benz-red' : 'text-benz-green'}`}>
                             {tech.dailyCount} today
                           </div>
-                          <div className="text-[10px] text-[#8e8e93]">{tech.weeklyCount} this week</div>
+                          <div className="text-xs text-benz-muted">{tech.weeklyCount} this week</div>
                         </div>
                       </div>
-                      <div className="mt-2 h-1.5 bg-[#2c2c2e] rounded-full overflow-hidden">
+                      <div className="benz-progress-track mt-3">
                         <div
-                          className={`h-full rounded-full ${atLimit ? 'bg-[#ff453a]' : 'bg-[#0a84ff]'}`}
+                          className={`h-full rounded-full transition-all ${atLimit ? 'bg-benz-red' : 'bg-gradient-to-r from-benz-blue-dim to-benz-blue'}`}
                           style={{
                             width: `${Math.min(100, (tech.dailyCount / analytics.dailyLimit) * 100)}%`,
                           }}
@@ -132,7 +129,7 @@ export function UsageDashboardView({ dealershipName, onBackHref = '/' }: UsageDa
             )}
           </div>
 
-          <p className="text-[10px] text-[#8e8e93] leading-relaxed px-1">
+          <p className="benz-hint leading-relaxed px-1">
             Tracks AI extraction and warranty story API calls. Each technician is limited to {analytics.dailyLimit}{' '}
             requests per day.
           </p>

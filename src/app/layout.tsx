@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
   title: 'Benz Tech — Dealership Warranty Platform',
@@ -27,18 +34,24 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a0a0a',
+  themeColor: '#08080a',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className={inter.variable}>
+      <body className={inter.className}>
         {children}
         <Toaster
           position="top-center"
           toastOptions={{
-            style: { background: '#1c1c1e', color: '#f5f5f7', border: '1px solid #38383a' },
+            style: {
+              background: '#14141a',
+              color: '#f2f3f6',
+              border: '1px solid rgba(180, 186, 198, 0.18)',
+              borderRadius: '14px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            },
           }}
         />
       </body>

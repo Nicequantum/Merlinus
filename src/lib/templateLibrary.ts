@@ -1,3 +1,9 @@
+import {
+  decryptOptionalSensitiveText,
+  decryptSensitiveText,
+  encryptOptionalSensitiveText,
+  encryptSensitiveText,
+} from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { getKnowledgeBaseOriginal, listLoadedKnowledgeBaseOriginals } from '@/data/knowledgeBaseOriginals';
 import {
@@ -29,11 +35,11 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
       where: {
         dealershipId_title: { dealershipId: GLOBAL_DEALERSHIP_ID, title: seed.title },
       },
-      update: { category: seed.category, content, source: 'seed' },
+      update: { category: seed.category, contentEncrypted: encryptSensitiveText(content), source: 'seed' },
       create: {
         title: seed.title,
         category: seed.category,
-        content,
+        contentEncrypted: encryptSensitiveText(content),
         source: 'seed',
         dealershipId: GLOBAL_DEALERSHIP_ID,
       },
@@ -45,16 +51,19 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
       },
       update: {
         category: kb.category,
-        cleanTemplate: kb.cleanTemplate,
+        cleanTemplateEncrypted: encryptSensitiveText(kb.cleanTemplate),
         tags: kb.tags,
         source: 'seed',
-        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
+        ...(userOriginal ? { fullOriginalTextEncrypted: encryptSensitiveText(userOriginal) } : {}),
       },
       create: {
-        ...kb,
+        title: kb.title,
+        category: kb.category,
+        fullOriginalTextEncrypted: encryptSensitiveText(userOriginal ?? ''),
+        cleanTemplateEncrypted: encryptSensitiveText(kb.cleanTemplate),
+        tags: kb.tags,
         source: 'seed',
         dealershipId: GLOBAL_DEALERSHIP_ID,
-        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
       },
     });
   }
@@ -96,7 +105,7 @@ export function mapTemplate(row: {
   id: string;
   title: string;
   category: string;
-  content: string;
+  contentEncrypted: string;
   source: string;
   dealershipId: string;
   useCount: number;
@@ -108,7 +117,7 @@ export function mapTemplate(row: {
     id: row.id,
     title: row.title,
     category: row.category as TemplateCategory,
-    content: row.content,
+    content: decryptSensitiveText(row.contentEncrypted),
     source: row.source,
     dealershipId: row.dealershipId,
     useCount: row.useCount,
@@ -122,9 +131,9 @@ export function mapKnowledgeBase(row: {
   id: string;
   title: string;
   category: string;
-  generatedText: string | null;
-  fullOriginalText: string;
-  cleanTemplate: string;
+  generatedTextEncrypted: string | null;
+  fullOriginalTextEncrypted: string;
+  cleanTemplateEncrypted: string;
   tags: string;
   source: string;
   dealershipId: string;
@@ -142,9 +151,11 @@ export function mapKnowledgeBase(row: {
     id: row.id,
     title: row.title,
     category: row.category as TemplateCategory,
-    generatedText: row.generatedText,
-    fullOriginalText: row.fullOriginalText,
-    cleanTemplate: row.cleanTemplate,
+    generatedText: row.generatedTextEncrypted
+      ? decryptOptionalSensitiveText(row.generatedTextEncrypted) ?? null
+      : null,
+    fullOriginalText: decryptSensitiveText(row.fullOriginalTextEncrypted),
+    cleanTemplate: decryptSensitiveText(row.cleanTemplateEncrypted),
     tags,
     source: row.source,
     dealershipId: row.dealershipId,

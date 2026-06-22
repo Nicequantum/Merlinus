@@ -1,4 +1,4 @@
-import { Camera, Plus, Trash2 } from 'lucide-react';
+import { Camera, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
@@ -46,94 +46,113 @@ export function ROView({
   onOpenLine,
   onDeleteRO,
 }: ROViewProps) {
+  const vehicleSummary =
+    [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
+  const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
+
   return (
-    <div className="px-5 pt-4 pb-8">
-      <div className="flex justify-between items-center mb-3">
-        <div>
-          <div className="text-xl font-semibold">{ro.roNumber}</div>
-          <div className="text-sm text-[#8e8e93]">Repair Order • Pre-populated from scan or manual entry</div>
+    <div className="benz-page">
+      <div className="benz-ro-header flex justify-between items-start gap-4">
+        <div className="min-w-0">
+          <div className="benz-ro-title">{ro.roNumber}</div>
+          <div className="benz-ro-subtitle">Repair Order · Pre-populated from scan or manual entry</div>
           {(ro.serviceAdvisor?.displayName || ro.serviceAdvisorName) && (
-            <div className="text-[10px] text-[#0a84ff] mt-1">
-              Service Advisor: {ro.serviceAdvisor?.displayName || ro.serviceAdvisorName}
+            <div className="benz-advisor-badge">
+              Advisor: {ro.serviceAdvisor?.displayName || ro.serviceAdvisorName}
             </div>
           )}
         </div>
-        <button onClick={onDone} className="text-[#0a84ff] text-sm">
+        <button onClick={onDone} className="benz-link text-sm shrink-0 pt-1">
           Done
         </button>
       </div>
 
-      <div className="ios-card p-5 mb-6">
-        <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-3">
-          RO DETAILS (from first block of scan — RO# at top center, vehicle fields, all complaints from any page)
+      <div className="benz-vehicle-bar benz-vehicle-bar-luxury mb-6">
+        <div className="text-sm font-semibold tracking-tight text-benz-primary">
+          {vehicleSummary}
+          {mileageStr ? ` · ${mileageStr}` : ''}
+          {ro.vehicle.vin ? ` · VIN ${ro.vehicle.vin}` : ''}
+        </div>
+        {ro.vehicle.engine && (
+          <div className="text-xs text-benz-secondary mt-1">Engine: {ro.vehicle.engine}</div>
+        )}
+        {ro.customer?.name && (
+          <div className="text-xs text-benz-secondary mt-1">Customer: {ro.customer.name}</div>
+        )}
+      </div>
+
+      <div className="benz-card p-5 sm:p-6 mb-6 space-y-4">
+        <div>
+          <div className="benz-section-title mb-1">RO Details</div>
+          <p className="benz-hint">From first scan block — RO#, vehicle fields, and complaints from any page</p>
         </div>
 
-        <div className="mb-3">
-          <label className="text-[10px] text-[#8e8e93] block mb-0.5">RO NUMBER</label>
+        <div>
+          <label className="benz-label">RO Number</label>
           <StableInput
             fieldKey={`${ro.id}-roNumber`}
             value={ro.roNumber}
             onChange={onUpdateRONumber}
             placeholder="RO-123456"
-            className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm font-mono tracking-[1px]"
+            className="benz-input benz-input-mono"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] text-[#8e8e93] block mb-0.5">YEAR</label>
+            <label className="benz-label">Year</label>
             <StableInput
               fieldKey={`${ro.id}-year`}
               value={ro.vehicle.year}
               onChange={(v) => onUpdateVehicle('year', v)}
               placeholder="2023"
-              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+              className="benz-input"
             />
           </div>
           <div>
-            <label className="text-[10px] text-[#8e8e93] block mb-0.5">MAKE</label>
+            <label className="benz-label">Make</label>
             <StableInput
               fieldKey={`${ro.id}-make`}
               value={ro.vehicle.make}
               onChange={(v) => onUpdateVehicle('make', v)}
               placeholder="Mercedes-Benz"
-              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+              className="benz-input"
             />
           </div>
           <div>
-            <label className="text-[10px] text-[#8e8e93] block mb-0.5">MODEL</label>
+            <label className="benz-label">Model</label>
             <StableInput
               fieldKey={`${ro.id}-model`}
               value={ro.vehicle.model}
               onChange={(v) => onUpdateVehicle('model', v)}
               placeholder="GLE 450 4MATIC"
-              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+              className="benz-input"
             />
           </div>
           <div>
-            <label className="text-[10px] text-[#8e8e93] block mb-0.5">MILEAGE IN</label>
+            <label className="benz-label">Mileage In</label>
             <StableInput
               fieldKey={`${ro.id}-mileageIn`}
               value={ro.vehicle.mileageIn}
               onChange={(v) => onUpdateVehicle('mileageIn', v)}
               placeholder="48250"
-              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+              className="benz-input"
             />
           </div>
-          <div>
-            <label className="text-[10px] text-[#8e8e93] block mb-0.5">MILEAGE OUT</label>
+          <div className="col-span-2 sm:col-span-1">
+            <label className="benz-label">Mileage Out</label>
             <StableInput
               fieldKey={`${ro.id}-mileageOut`}
               value={ro.vehicle.mileageOut}
               onChange={(v) => onUpdateVehicle('mileageOut', v)}
               placeholder="48280"
-              className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+              className="benz-input"
             />
           </div>
         </div>
 
-        <div className="mb-3">
-          <label className="text-[10px] text-[#8e8e93] block mb-0.5">VIN</label>
+        <div>
+          <label className="benz-label">VIN</label>
           <div className="flex gap-2">
             <StableInput
               fieldKey={`${ro.id}-vin`}
@@ -141,92 +160,100 @@ export function ROView({
               onChange={(v) => onUpdateVehicle('vin', v.toUpperCase())}
               placeholder="W1Nxxxx..."
               maxLength={17}
-              className="flex-1 bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm font-mono tracking-[1px]"
+              className="benz-input benz-input-mono flex-1"
             />
             <button
               onClick={onDecodeVin}
               disabled={ro.vehicle.vin.length < 17}
-              className="secondary-btn px-3 text-[10px] font-semibold whitespace-nowrap disabled:opacity-50"
+              className="secondary-btn px-4 text-xs font-semibold whitespace-nowrap disabled:opacity-50 h-[42px]"
             >
-              DECODE VIN
+              Decode
             </button>
           </div>
-          <p className="text-[9px] text-[#666] mt-1">NHTSA vPIC — auto-fills year, make, model, engine</p>
+          <p className="benz-hint mt-1.5">NHTSA vPIC — auto-fills year, make, model, engine</p>
         </div>
 
-        <div className="mb-3">
-          <label className="text-[10px] text-[#8e8e93] block mb-0.5">ENGINE</label>
+        <div>
+          <label className="benz-label">Engine</label>
           <StableInput
             fieldKey={`${ro.id}-engine`}
             value={ro.vehicle.engine || ''}
             onChange={(v) => onUpdateVehicle('engine', v)}
             placeholder="3.0L 6-cyl (from VIN decode)"
-            className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+            className="benz-input"
           />
         </div>
 
-        <div className="mb-4">
-          <label className="text-[10px] text-[#8e8e93] block mb-0.5">CUSTOMER NAME</label>
+        <div>
+          <label className="benz-label">Customer Name</label>
           <StableInput
             fieldKey={`${ro.id}-customer`}
             value={ro.customer?.name || ''}
             onChange={onUpdateCustomer}
             placeholder="John Smith"
-            className="w-full bg-[#2c2c2e] border border-[#38383a] rounded-xl px-3 py-2 text-sm"
+            className="benz-input"
           />
         </div>
 
-        <div className="border-t border-[#38383a] pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs uppercase tracking-widest text-[#8e8e93]">CUSTOMER COMPLAINTS (A, B, C, D... from any page)</div>
-            <button onClick={onAddComplaint} className="text-[#0a84ff] text-xs flex items-center gap-1">
-              <Plus size={14} /> ADD
+        <div className="benz-divider pt-5">
+          <div className="benz-section-header">
+            <div>
+              <div className="benz-section-title">Customer Complaints</div>
+              <p className="benz-hint mt-1">Labels A, B, C… from any scan page — edit as needed</p>
+            </div>
+            <button onClick={onAddComplaint} className="benz-link text-xs flex items-center gap-1 shrink-0">
+              <Plus size={14} /> Add
             </button>
           </div>
-          <p className="text-[9px] text-[#8e8e93] mb-2">Pre-populated from scan (first block + multi-page). Edit as needed.</p>
 
           {ro.complaints && ro.complaints.length > 0 ? (
-            ro.complaints.map((c, idx) => {
-              const label = complaintLabel(ro.complaintLabels, idx);
-              const stableId = ro.complaintIds?.[idx] ?? `cmp-${ro.id}-${label}`;
-              return (
-                <div key={stableId} className="flex gap-2 mb-2 items-start">
-                  <div className="mt-2 w-6 text-[#0a84ff] font-semibold text-sm shrink-0">{label}.</div>
-                  <StableTextarea
-                    fieldKey={stableId}
-                    value={c}
-                    onChange={(v) => onEditComplaint(idx, v)}
-                    placeholder="Describe customer concern or symptom..."
-                    className="bg-[#2c2c2e] border border-[#38383a] rounded-2xl px-3 py-2 text-sm min-h-[48px] resize-y"
-                  />
-                  <button onClick={() => onRemoveComplaint(idx)} className="mt-1 p-1.5 text-[#ff9f0a]" title="Remove complaint">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              );
-            })
+            <div className="space-y-3">
+              {ro.complaints.map((c, idx) => {
+                const label = complaintLabel(ro.complaintLabels, idx);
+                const stableId = ro.complaintIds?.[idx] ?? `cmp-${ro.id}-${label}`;
+                return (
+                  <div key={stableId} className="benz-complaint-row">
+                    <div className="benz-complaint-label">{label}.</div>
+                    <StableTextarea
+                      fieldKey={stableId}
+                      value={c}
+                      onChange={(v) => onEditComplaint(idx, v)}
+                      placeholder="Describe customer concern or symptom..."
+                      className="benz-textarea flex-1 min-h-[52px]"
+                    />
+                    <button
+                      onClick={() => onRemoveComplaint(idx)}
+                      className="benz-danger-icon-btn mt-2"
+                      title="Remove complaint"
+                      aria-label="Remove complaint"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            <div className="text-sm text-[#8e8e93] mb-2">No complaints extracted. Add or rescan.</div>
+            <div className="text-sm text-benz-secondary mb-2">No complaints extracted. Add or rescan.</div>
           )}
-          <button onClick={onAddComplaint} className="text-xs text-[#0a84ff] mt-1">
+          <button onClick={onAddComplaint} className="benz-link text-xs mt-2">
             + Add another complaint
           </button>
         </div>
       </div>
 
-      <div className="ios-card p-4 mb-6">
-        <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-1">XENTRY / DIAGNOSTIC IMAGE SCANS (RO level)</div>
-        <p className="text-[10px] text-[#8e8e93] mb-2 leading-snug">
-          Upload or capture XENTRY Quick Test, fault codes, Guided Tests, wiring diagrams, continuity checks, measurements. OCR +
-          smart parsing feeds the AI.
+      <div className="benz-card p-5 sm:p-6 mb-6">
+        <div className="benz-section-title mb-1">XENTRY / Diagnostic Images</div>
+        <p className="benz-hint mb-4 leading-relaxed">
+          Upload Quick Test, fault codes, guided tests, wiring diagrams, and measurements. OCR and smart parsing feed the AI.
         </p>
         <button
           onClick={onAddROXentryPhotos}
           disabled={isProcessingOCR}
-          className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2"
+          className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium mb-3 disabled:opacity-50"
         >
           <Camera size={18} />
-          {isProcessingOCR ? `ANALYZING... ${ocrProgress}%` : 'SCAN / ADD XENTRY PHOTOS (QT, CODES, GUIDED, WIRING...)'}
+          {isProcessingOCR ? `Analyzing… ${ocrProgress}%` : 'Add XENTRY photos'}
         </button>
         {ro.xentryImages && ro.xentryImages.length > 0 && (
           <XentryImageGallery images={ro.xentryImages} onDeleteImage={onDeleteROXentryImage} />
@@ -234,40 +261,51 @@ export function ROView({
         <ExtractedDataPreview data={ro.repairLines[0]?.extractedData} />
       </div>
 
-      <div className="flex items-center justify-between mb-3 px-1">
-        <div className="text-sm font-semibold text-[#8e8e93]">REPAIR LINES (A/B/C map to lines)</div>
-        <button onClick={onAddRepairLine} className="flex items-center gap-1 text-[#0a84ff] text-sm font-medium">
-          <Plus size={16} /> ADD LINE
+      <div className="benz-section-header px-0.5">
+        <div>
+          <div className="text-sm font-semibold text-benz-silver tracking-wide">Repair Lines</div>
+          <p className="benz-hint mt-0.5">Complaints A/B/C map to lines</p>
+        </div>
+        <button onClick={onAddRepairLine} className="benz-link text-sm flex items-center gap-1 font-semibold">
+          <Plus size={16} /> Add Line
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2.5 mb-8">
         {ro.repairLines.map((line) => (
           <div
             key={line.id}
             onClick={() => onOpenLine(line.id)}
-            className="ios-card px-4 py-4 flex justify-between items-center active:bg-[#252528] cursor-pointer"
+            className="benz-line-card flex justify-between items-center gap-3"
           >
-            <div>
-              <div className="font-medium">
+            <div className="min-w-0">
+              <div className="font-semibold text-[15px] tracking-tight">
                 Line {line.lineNumber}: {line.description}
               </div>
               {line.customerConcern && (
-                <div className="text-[10px] text-[#8e8e93] mt-0.5 truncate max-w-[240px]">{line.customerConcern}</div>
+                <div className="text-xs text-benz-secondary mt-1 truncate max-w-[260px]">{line.customerConcern}</div>
               )}
-              {line.warrantyStory && <div className="text-xs text-[#30d158] mt-0.5">Story ready</div>}
+              {line.warrantyStory && (
+                <div className="inline-flex items-center gap-1 text-xs font-semibold text-benz-green mt-1.5">
+                  Story ready
+                </div>
+              )}
             </div>
-            <div className="text-[#8e8e93]">›</div>
+            <ChevronRight size={20} className="text-benz-muted shrink-0" />
           </div>
         ))}
       </div>
 
-      <div className="flex gap-2 mt-6">
-        <button onClick={onDone} className="flex-1 text-sm text-[#8e8e93] py-2 border border-[#38383a] rounded">
-          Back to List
+      <div className="flex flex-col gap-3">
+        <button onClick={onDone} className="w-full secondary-btn h-12 text-sm font-medium">
+          Back to list
         </button>
-        <button onClick={onDeleteRO} className="flex-1 text-sm text-[#ff9f0a] py-2 border border-[#38383a] rounded">
-          Delete RO
+        <button
+          onClick={onDeleteRO}
+          className="w-full benz-danger-btn h-12 flex items-center justify-center gap-2"
+        >
+          <Trash2 size={16} />
+          Delete repair order
         </button>
       </div>
     </div>

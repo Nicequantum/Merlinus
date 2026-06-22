@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
 import {
+  decryptJsonObject,
   decryptOptionalSensitiveText,
   decryptSensitiveText,
   decryptStringArray,
+  encryptJsonObject,
   encryptOptionalSensitiveText,
   encryptPII,
   encryptSensitiveText,
   encryptStringArray,
+  isLikelyEncryptedPayload,
+  migratePlaintextJsonObjectToEncrypted,
+  migratePlaintextToEncrypted,
 } from '../../src/lib/encryption';
 
 describe('sensitive field encryption', () => {
@@ -53,5 +58,34 @@ describe('sensitive field encryption', () => {
     assert.equal(decryptSensitiveText(''), '');
     assert.equal(decryptOptionalSensitiveText(null), undefined);
     assert.equal(encryptOptionalSensitiveText(undefined), null);
+  });
+
+  test('encrypts and decrypts JSON object fields', () => {
+    const payload = { codes: ['P0300'], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] };
+    const encrypted = encryptJsonObject(payload);
+    assert.notEqual(encrypted, JSON.stringify(payload));
+    assert.ok(isLikelyEncryptedPayload(encrypted));
+    assert.deepEqual(decryptJsonObject(encrypted, {}), payload);
+  });
+
+  test('reads legacy plaintext JSON object fields', () => {
+    const legacy = JSON.stringify({ codes: ['P0171'], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] });
+    assert.deepEqual(decryptJsonObject(legacy, {}), JSON.parse(legacy));
+  });
+
+  test('migrates legacy plaintext to encrypted without double-encrypting', () => {
+    const legacy = 'Legacy technician note';
+    const encrypted = migratePlaintextToEncrypted(legacy);
+    assert.notEqual(encrypted, legacy);
+    assert.equal(decryptSensitiveText(encrypted), legacy);
+    assert.equal(migratePlaintextToEncrypted(encrypted), encrypted);
+  });
+
+  test('migrates legacy extractedData JSON objects', () => {
+    const legacy = JSON.stringify({ codes: ['P0420'], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] });
+    const encrypted = migratePlaintextJsonObjectToEncrypted(legacy);
+    assert.ok(isLikelyEncryptedPayload(encrypted));
+    assert.deepEqual(decryptJsonObject(encrypted, {}), JSON.parse(legacy));
+    assert.equal(migratePlaintextJsonObjectToEncrypted(encrypted), encrypted);
   });
 });

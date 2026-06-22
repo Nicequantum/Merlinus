@@ -29,9 +29,7 @@ export function VoiceInputButton({ targetRef, onTranscript, className = '' }: Vo
       onClick={handleClick}
       title={isListening ? 'Stop voice input' : 'Voice input'}
       aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-      className={`p-2 rounded-xl border border-[#38383a] bg-[#2c2c2e] text-[#0a84ff] active:scale-95 transition-transform ${
-        isListening ? 'ring-2 ring-[#0a84ff] text-[#ff3b30]' : ''
-      } ${className}`}
+      className={`benz-voice-btn touch-target active:scale-95 ${isListening ? 'benz-voice-btn-active' : ''} ${className}`}
     >
       {isListening ? <MicOff size={18} /> : <Mic size={18} />}
     </button>

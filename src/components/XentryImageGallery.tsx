@@ -17,16 +17,16 @@ export function XentryImageGallery({ images, onDeleteImage }: XentryImageGallery
 
   return (
     <>
-      <div className="grid grid-cols-4 gap-2 mb-2">
+      <div className="benz-photo-grid mb-3">
         {images.map((img) => (
           <button
             key={img.id}
             type="button"
             onClick={() => setActiveImageId(img.id)}
-            className="overflow-hidden rounded border border-[#38383a] focus:outline-none focus:ring-2 focus:ring-[#0a84ff]"
+            className="benz-photo-thumb focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
             aria-label={`View ${img.name}`}
           >
-            <img src={img.url} className="h-16 w-full object-cover" alt={img.name} />
+            <img src={img.url} alt={img.name} />
           </button>
         ))}
       </div>

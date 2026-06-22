@@ -2,16 +2,19 @@ import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
   decryptComplaintsPayload,
+  decryptJsonObject,
   decryptOptionalSensitiveText,
   decryptPII,
   decryptSensitiveText,
   decryptStringArray,
   encryptComplaintsPayload,
+  encryptJsonObject,
   encryptOptionalSensitiveText,
   encryptPII,
   encryptSensitiveText,
   encryptStringArray,
 } from './encryption';
+import { emptyExtractedData } from '@/utils/diagnosticParser';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -142,14 +145,7 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     technicianNotes: decryptSensitiveText(line.technicianNotesEncrypted),
     xentryImages: parseImageAttachments(line.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),
-    extractedData: parseJson<ExtractedData>(line.extractedData, {
-      codes: [],
-      faultCodes: [],
-      guidedTests: [],
-      measurements: [],
-      components: [],
-      circuits: [],
-    }),
+    extractedData: decryptJsonObject<ExtractedData>(line.extractedDataEncrypted, emptyExtractedData()),
     warrantyStory: decryptOptionalSensitiveText(line.warrantyStoryEncrypted),
   };
 }
@@ -198,7 +194,7 @@ export function repairLineToDbFields(line: RepairLine) {
     technicianNotesEncrypted: encryptSensitiveText(line.technicianNotes),
     xentryImageUrls: imageAttachmentsToJson(line.xentryImages),
     xentryOcrTextsEncrypted: encryptStringArray(line.xentryOcrTexts || []),
-    extractedData: JSON.stringify(line.extractedData || {}),
+    extractedDataEncrypted: encryptJsonObject(line.extractedData || emptyExtractedData()),
     warrantyStoryEncrypted: encryptOptionalSensitiveText(line.warrantyStory),
   };
 }

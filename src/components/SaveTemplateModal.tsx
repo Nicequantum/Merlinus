@@ -98,16 +98,16 @@ export function SaveTemplateModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="ios-card w-full sm:max-w-xl max-h-[92dvh] flex flex-col rounded-t-2xl sm:rounded-2xl overflow-hidden border border-[#38383a]">
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-[#38383a]">
+    <div className="benz-modal-overlay z-[120]">
+      <div className="benz-modal-panel sm:max-w-xl flex flex-col">
+        <div className="benz-modal-header">
           <div>
-            <div className="flex items-center gap-2 text-[#30d158] mb-1">
+            <div className="flex items-center gap-2 text-benz-green mb-1">
               <BookmarkPlus size={18} />
               <span className="text-xs uppercase tracking-[0.2em] font-semibold">Save as New Template</span>
             </div>
-            <h2 className="text-lg font-semibold">Grow the Knowledge Base</h2>
-            <p className="text-xs text-[#8e8e93] mt-1">
+            <h2 className="text-lg font-semibold tracking-tight">Grow the Knowledge Base</h2>
+            <p className="text-xs text-benz-secondary mt-1">
               Your approved story trains future Grok generations for this dealership.
             </p>
           </div>
@@ -115,7 +115,7 @@ export function SaveTemplateModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="p-2 rounded-xl border border-[#38383a] text-[#8e8e93] hover:text-white disabled:opacity-50"
+            className="benz-icon-btn border border-benz-surface-3 disabled:opacity-50"
             aria-label="Close"
           >
             <X size={18} />
@@ -124,19 +124,19 @@ export function SaveTemplateModal({
 
         <div className="p-5 space-y-4 overflow-y-auto">
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-[#8e8e93] block mb-1.5">Template Title</label>
+            <label className="benz-label">Template Title</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={saving}
               placeholder="e.g. Blind Spot Assist — S-Class Software Update"
-              className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-xl px-3 py-2.5 text-sm disabled:opacity-60"
+              className="benz-input disabled:opacity-60"
             />
           </div>
 
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-[#8e8e93] block mb-1.5">Category</label>
+            <label className="benz-label">Category</label>
             <div className="flex gap-2">
               {(['warranty', 'customer'] as const).map((value) => (
                 <button
@@ -144,10 +144,8 @@ export function SaveTemplateModal({
                   type="button"
                   disabled={saving}
                   onClick={() => setCategory(value)}
-                  className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-medium border transition-colors disabled:opacity-60 ${
-                    category === value
-                      ? 'bg-[#0a84ff]/15 border-[#0a84ff]/50 text-white'
-                      : 'bg-[#1c1c1e] border-[#38383a] text-[#8e8e93]'
+                  className={`benz-tab-btn flex-1 text-sm font-medium disabled:opacity-60 ${
+                    category === value ? 'benz-tab-btn-active' : ''
                   }`}
                 >
                   {value === 'customer' ? 'Customer Pay' : 'Warranty Claims'}
@@ -157,39 +155,42 @@ export function SaveTemplateModal({
           </div>
 
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-[#8e8e93] block mb-1.5">
-              Story Preview (final edits)
-            </label>
+            <label className="benz-label">Story Preview (final edits)</label>
             <textarea
               value={preview}
               onChange={(e) => setPreview(e.target.value)}
               disabled={saving}
               rows={12}
-              className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-xl px-3 py-3 text-sm leading-relaxed resize-y disabled:opacity-60"
+              className="benz-textarea disabled:opacity-60"
             />
-            <p className="text-[10px] text-[#8e8e93] mt-1">
+            <p className="benz-hint mt-1.5">
               Grok draft is stored separately so the system learns what you changed.
             </p>
           </div>
         </div>
 
-        <div className="p-5 border-t border-[#38383a] flex gap-2">
+        <div className="p-5 border-t border-benz-surface-3 flex gap-2">
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="primary-btn flex-1 h-12 text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+            className="primary-btn flex-1 h-12 text-sm flex items-center justify-center gap-2 disabled:opacity-60 touch-target"
           >
             {saving ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                SAVING TEMPLATE…
+                Saving template…
               </>
             ) : (
-              'SAVE TO LIBRARY'
+              'Save to library'
             )}
           </button>
-          <button type="button" onClick={onClose} disabled={saving} className="secondary-btn h-12 px-4 text-sm disabled:opacity-60">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="secondary-btn h-12 px-4 text-sm disabled:opacity-60"
+          >
             Cancel
           </button>
         </div>

@@ -101,6 +101,17 @@ export interface ComplaintsPayload {
 
 /** Backward-compatible: legacy payloads are plain string arrays. */
 export function decryptComplaintsPayload(ciphertext: string): ComplaintsPayload {
+  if (!ciphertext) return { complaints: [] };
+  if (isLegacyJsonArray(ciphertext)) {
+    try {
+      const parsed = JSON.parse(ciphertext);
+      if (Array.isArray(parsed)) {
+        return { complaints: parsed.map(String) };
+      }
+    } catch {
+      return { complaints: [] };
+    }
+  }
   const raw = decryptPII(ciphertext);
   if (!raw) return { complaints: [] };
   try {
@@ -128,3 +139,115 @@ export function encryptComplaintsPayload(complaints: string[], labels?: string[]
   return encryptPII(JSON.stringify(payload));
 }
 
+/** True when a stored value already looks like an AES-GCM ciphertext (base64, not legacy JSON). */
+export function isLikelyEncryptedPayload(value: string): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return false;
+  if (!/^[A-Za-z0-9+/]+=*$/.test(trimmed)) return false;
+  try {
+    const data = Buffer.from(trimmed, 'base64');
+    return data.length >= IV_LENGTH + 16 + 1;
+  } catch {
+    return false;
+  }
+}
+
+function isLegacyJsonObject(raw: string): boolean {
+  const trimmed = raw.trim();
+  return trimmed.startsWith('{');
+}
+
+/** Encrypt a JSON-serializable object for database storage (e.g. extracted diagnostic data). */
+export function encryptJsonObject(value: unknown): string {
+  return encryptPII(JSON.stringify(value ?? {}));
+}
+
+/** Decrypt a JSON object field, falling back to legacy plaintext JSON values. */
+export function decryptJsonObject<T>(ciphertext: string, fallback: T): T {
+  if (!ciphertext) return fallback;
+  if (isLegacyJsonObject(ciphertext)) {
+    try {
+      return JSON.parse(ciphertext) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  const raw = decryptPII(ciphertext);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Re-encrypt a legacy plaintext string if it is not already encrypted. */
+export function migratePlaintextToEncrypted(plaintext: string): string {
+  if (!plaintext) return '';
+  if (isLikelyEncryptedPayload(plaintext)) return plaintext;
+  return encryptPII(plaintext);
+}
+
+/** Re-encrypt a legacy optional plaintext string if it is not already encrypted. */
+export function migratePlaintextOptionalToEncrypted(plaintext: string | null): string | null {
+  if (!plaintext) return null;
+  if (isLikelyEncryptedPayload(plaintext)) return plaintext;
+  return encryptPII(plaintext);
+}
+
+/** Re-encrypt a legacy plaintext JSON string array if it is not already encrypted. */
+export function migratePlaintextStringArrayToEncrypted(raw: string): string {
+  if (!raw) return '';
+  if (isLikelyEncryptedPayload(raw)) return raw;
+  if (isLegacyJsonArray(raw)) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return encryptStringArray(parsed.map(String));
+    } catch {
+      return '';
+    }
+  }
+  return encryptStringArray([raw]);
+}
+
+/** Re-encrypt legacy plaintext JSON object data if it is not already encrypted. */
+export function migratePlaintextJsonObjectToEncrypted(raw: string): string {
+  if (!raw) return encryptJsonObject({});
+  if (isLikelyEncryptedPayload(raw)) return raw;
+  if (isLegacyJsonObject(raw)) {
+    try {
+      return encryptJsonObject(JSON.parse(raw));
+    } catch {
+      return encryptJsonObject({});
+    }
+  }
+  return encryptJsonObject({});
+}
+
+/** Re-encrypt legacy plaintext complaint payloads if they are not already encrypted. */
+export function migratePlaintextComplaintsToEncrypted(raw: string): string {
+  if (!raw) return encryptComplaintsPayload([]);
+  if (isLikelyEncryptedPayload(raw)) return raw;
+  if (isLegacyJsonArray(raw)) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return encryptComplaintsPayload(parsed.map(String));
+    } catch {
+      return encryptComplaintsPayload([]);
+    }
+  }
+  if (isLegacyJsonObject(raw)) {
+    try {
+      const parsed = JSON.parse(raw) as { complaints?: unknown; labels?: unknown };
+      if (Array.isArray(parsed.complaints)) {
+        const complaints = parsed.complaints.map(String);
+        const labels = Array.isArray(parsed.labels) ? parsed.labels.map(String) : undefined;
+        return encryptComplaintsPayload(complaints, labels);
+      }
+    } catch {
+      return encryptComplaintsPayload([]);
+    }
+  }
+  return encryptComplaintsPayload([]);
+}

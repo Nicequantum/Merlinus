@@ -45,9 +45,9 @@ function complaintLabel(labels: string[] | undefined, index: number): string {
 }
 
 function charCountColor(len: number): string {
-  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-[#ff3b30]';
-  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-[#ff9f0a]';
-  return 'text-[#8e8e93]';
+  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-benz-red';
+  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-benz-amber';
+  return 'text-benz-muted';
 }
 
 export function LineView({
@@ -129,19 +129,20 @@ export function LineView({
   };
 
   return (
-    <div className="px-5 pt-4 pb-10">
-      <button onClick={onBack} className="flex items-center text-[#0a84ff] mb-4">
-        <ArrowLeft size={18} className="mr-1" /> Back to RO
+    <div className="benz-page pb-12">
+      <button onClick={onBack} className="benz-nav-back">
+        <ArrowLeft size={18} /> Back to RO
       </button>
 
-      <div className="ios-card p-3 mb-4 text-xs">
-        <div className="font-semibold mb-0.5">
-          {vehicleSummary} {mileageStr ? `• ${mileageStr}` : ''}{' '}
-          {ro.vehicle.vin ? `• VIN ${ro.vehicle.vin.slice(0, 10)}...` : ''}
+      <div className="benz-vehicle-bar benz-vehicle-bar-luxury mb-8">
+        <div className="text-sm font-semibold tracking-tight text-benz-primary">
+          {vehicleSummary}
+          {mileageStr ? ` · ${mileageStr}` : ''}
+          {ro.vehicle.vin ? ` · VIN ${ro.vehicle.vin.slice(0, 10)}…` : ''}
         </div>
-        {ro.vehicle.engine && <div className="text-[#8e8e93]">Engine: {ro.vehicle.engine}</div>}
+        {ro.vehicle.engine && <div className="text-xs text-benz-secondary mt-1">Engine: {ro.vehicle.engine}</div>}
         {ro.complaints && ro.complaints.length > 0 && (
-          <div className="mt-1.5 text-[10px] text-[#8e8e93]">
+          <div className="mt-2 text-xs text-benz-secondary leading-relaxed">
             Complaints:{' '}
             {ro.complaints
               .map((c, i) => `${complaintLabel(ro.complaintLabels, i)}. ${c.slice(0, 42)}${c.length > 42 ? '…' : ''}`)
@@ -150,53 +151,55 @@ export function LineView({
         )}
       </div>
 
-      <div className="mb-5">
-        <div className="text-sm text-[#8e8e93]">LINE {line.lineNumber}</div>
-        <StableInput
-          fieldKey={`${line.id}-description`}
-          value={line.description}
-          onChange={(v) => onUpdateLine({ description: v })}
-          showVoice
-          className="text-xl font-semibold bg-transparent w-full focus:outline-none border-none"
-        />
+      <div className="mb-6">
+        <label className="benz-label mb-2">Line {line.lineNumber} description</label>
+        <div className="benz-line-title-field flex gap-2 items-center">
+          <StableInput
+            fieldKey={`${line.id}-description`}
+            value={line.description}
+            onChange={(v) => onUpdateLine({ description: v })}
+            showVoice
+            placeholder="Repair line description"
+            className="benz-line-title-input flex-1"
+          />
+        </div>
       </div>
 
-      <div className="space-y-5">
-        <div>
-          <label className="text-xs uppercase tracking-widest text-[#8e8e93] block mb-1.5">CUSTOMER CONCERN (prefilled from scan)</label>
+      <div className="benz-line-flow">
+        <div className="benz-card benz-line-doc-card">
+          <label className="benz-label">Customer concern</label>
+          <p className="benz-hint mb-3">Prefilled from scan — edit to match advisor wording</p>
           <StableTextarea
             fieldKey={`${line.id}-concern`}
             value={line.customerConcern}
             onChange={(v) => onUpdateLine({ customerConcern: v })}
-            className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-2xl p-3.5 text-sm min-h-[80px]"
+            className="benz-textarea min-h-[80px]"
             placeholder="Customer stated..."
           />
-        </div>
 
-        <div>
-          <label className="text-xs uppercase tracking-widest text-[#8e8e93] block mb-1.5">TECHNICIAN NOTES + FINDINGS</label>
+          <div className="benz-line-doc-divider" />
+
+          <label className="benz-label">Technician notes & findings</label>
           <StableTextarea
             fieldKey={`${line.id}-notes`}
             value={line.technicianNotes}
             onChange={(v) => onUpdateLine({ technicianNotes: v })}
-            className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-2xl p-3.5 text-sm min-h-[100px]"
+            className="benz-textarea min-h-[100px]"
             placeholder="Document actual test results, findings, and repair steps performed..."
           />
         </div>
 
-        <div>
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-1.5">DIAGNOSTIC EVIDENCE PHOTOS</div>
+        <div className="benz-card p-5">
+          <div className="benz-section-title mb-1">Diagnostic Evidence</div>
+          <p className="benz-hint mb-4">Grok vision + on-device OCR — tap a photo to view or delete</p>
           <button
             onClick={onAddXentryPhotos}
             disabled={isProcessingOCR}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2 disabled:opacity-60"
+            className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium mb-3 disabled:opacity-50"
           >
             {isProcessingOCR ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {isProcessingOCR ? `ANALYZING PHOTOS... ${ocrProgress}%` : 'ADD XENTRY TESTS / FAULT CODES / GUIDED / WIRING / CONTINUITY'}
+            {isProcessingOCR ? `Analyzing… ${ocrProgress}%` : 'Add diagnostic photos'}
           </button>
-          <p className="text-[10px] text-[#8e8e93] -mt-1 mb-2">
-            Photos analyzed with Grok vision plus on-device OCR. Tap a photo to view or delete.
-          </p>
 
           {line.xentryImages && line.xentryImages.length > 0 && (
             <XentryImageGallery images={line.xentryImages} onDeleteImage={onDeleteXentryImage} />
@@ -204,173 +207,180 @@ export function LineView({
           <ExtractedDataPreview data={line.extractedData} />
         </div>
 
-        <div className="ios-card p-3 mb-1">
-          <div className="flex justify-between items-center mb-1">
-            <div className="text-xs uppercase tracking-widest text-[#8e8e93]">REFERENCE: COMMON ISSUES &amp; TYPICAL SPECS</div>
-            <button onClick={onApplySmartDefaults} className="text-[10px] px-2 py-0.5 bg-[#2c2c2e] rounded text-[#0a84ff]">
-              ADD TO NOTES
+        <div className="benz-line-aside">
+          <div className="flex justify-between items-center mb-2.5">
+            <div className="benz-section-title">Reference · common issues</div>
+            <button
+              onClick={onApplySmartDefaults}
+              className="secondary-btn benz-btn-accent-outline text-xs px-3 h-9 font-medium"
+            >
+              Add to notes
             </button>
           </div>
-          <div className="text-[10px] text-[#8e8e93] space-y-1">
-            <div className="font-medium text-[#aeaeb2]">{suggestions.bandNote}</div>
+          <div className="text-xs text-benz-secondary space-y-2 leading-relaxed">
+            <div className="font-medium text-benz-silver">{suggestions.bandNote}</div>
             <div>
-              <span className="text-[#666]">Common issues: </span>
-              {suggestions.issues.join(' • ')}
+              <span className="text-benz-muted">Common issues: </span>
+              {suggestions.issues.join(' · ')}
             </div>
             <div>
-              <span className="text-[#666]">Typical specs: </span>
-              {suggestions.tests.map((t) => `${t.label}: ${t.spec}`).join(' • ')}
+              <span className="text-benz-muted">Typical specs: </span>
+              {suggestions.tests.map((t) => `${t.label}: ${t.spec}`).join(' · ')}
             </div>
           </div>
-          <div className="text-[9px] mt-1 text-[#666]">
-            Reference only — not used as performed work unless you document actual results in notes or OCR.
+          <div className="benz-hint mt-3">
+            Reference only — not performed work unless documented in notes or OCR.
           </div>
         </div>
 
         {advisorName && (
-          <div className="ios-card p-3 mb-2 border border-[#0a84ff]/20">
-            <div className="flex items-center gap-2 text-[#0a84ff] text-xs font-medium">
+          <div className="benz-line-aside border-benz-accent/25 bg-benz-accent/5">
+            <div className="flex items-center gap-2 text-benz-blue text-xs font-semibold">
               <Sparkles size={14} />
-              Advisor Intelligence active
+              Advisor Intelligence Active
             </div>
-            <p className="text-[10px] text-[#8e8e93] mt-1 leading-relaxed">
+            <p className="text-xs text-benz-secondary mt-2 leading-relaxed">
               Story generation will match {advisorName}&apos;s complaint phrasing style for this RO.
             </p>
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="benz-generate-panel space-y-3">
           <button
-            type="button"
-            onClick={() => setShowTemplateLibrary(true)}
+            onClick={onGenerateStory}
             disabled={isGenerating || isReviewing}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
+            className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
           >
-            <BookOpen size={18} />
-            TEMPLATE LIBRARY
+            {isGenerating ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                Generating with Grok…
+              </>
+            ) : (
+              'Generate warranty story'
+            )}
           </button>
 
-          <div className={`grid gap-2 ${canSaveAsTemplate ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className="flex items-center justify-center gap-4">
             <button
-              onClick={onGenerateStory}
+              type="button"
+              onClick={() => setShowTemplateLibrary(true)}
               disabled={isGenerating || isReviewing}
-              className="primary-btn w-full h-14 text-base flex items-center justify-center gap-2 disabled:opacity-60"
+              className="benz-tertiary-link disabled:opacity-50"
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  GENERATING WITH GROK…
-                </>
-              ) : (
-                'GENERATE WARRANTY STORY'
-              )}
+              Browse template library
             </button>
-
             {canSaveAsTemplate && lastGeneratedStoryText && (
               <button
                 type="button"
                 onClick={() => setShowSaveTemplate(true)}
                 disabled={isGenerating || isReviewing}
-                className="secondary-btn w-full h-14 text-sm flex items-center justify-center gap-2 border-[#30d158]/40 text-[#30d158] disabled:opacity-60"
+                className="benz-tertiary-link text-benz-green disabled:opacity-50"
               >
-                <BookmarkPlus size={18} />
-                SAVE AS NEW TEMPLATE
+                Save as template
               </button>
             )}
           </div>
 
-          <p className="text-[10px] text-[#8e8e93] text-center leading-snug">
+          <p className="benz-hint text-center">
             Generate MI 2.0–ready stories, review with AI, edit, then save to grow your knowledge base.
           </p>
         </div>
 
         {line.warrantyStory && (
-          <div className="story-card p-5 mt-2">
-            <div className="flex justify-between items-center mb-3">
-              <div className="text-xs uppercase tracking-[1px] text-[#8e8e93]">WARRANTY STORY — 3 C&apos;s • AUDIT-SAFE</div>
-              <div className={`text-[10px] font-mono ${charCountColor(storyLen)}`}>
+          <div className="story-card p-5 sm:p-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className="benz-section-title tracking-[0.12em]">Warranty Story · 3 C&apos;s</div>
+              <div className={`text-xs font-mono font-medium ${charCountColor(storyLen)}`}>
                 {storyLen} / {WARRANTY_STORY_MAX_CHARS}
               </div>
             </div>
             {storyLen > WARRANTY_STORY_MAX_CHARS && (
-              <div className="text-[10px] text-[#ff3b30] mb-2">Exceeds recommended DMS character limit — edit before submission.</div>
+              <div className="text-xs text-benz-red mb-3 bg-benz-red/10 border border-benz-red/20 rounded-lg px-3 py-2">
+                Exceeds recommended DMS character limit — edit before submission.
+              </div>
             )}
             <StableTextarea
               id={`warranty-story-${line.id}`}
               fieldKey={`${line.id}-story`}
               value={line.warrantyStory}
               onChange={(v) => onUpdateLine({ warrantyStory: v })}
-              className="w-full bg-[#1c1c1e] border border-[#38383a] rounded p-3 text-[14.5px] leading-relaxed mb-3 min-h-[200px] resize-y"
+              className="benz-textarea text-[15px] leading-relaxed mb-4 min-h-[220px]"
               placeholder="Edit warranty story before DMS submission..."
             />
-            {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
-            {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
-            {!isGenerating && !isReviewing && storyQuality && (
-              <StoryQualityPanel
-                quality={storyQuality}
-                review={storyReview}
-                panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
-              />
-            )}
-            {!isGenerating && !isReviewing && !storyQuality && storyQualityStale && (
-              <StoryQualityStaleBanner onReview={onReviewStory} />
-            )}
-
-            <div className="flex gap-2 flex-wrap mt-3">
-              <button
-                type="button"
-                onClick={onReviewStory}
-                disabled={isGenerating || isReviewing || !line.warrantyStory?.trim()}
-                className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#0a84ff]/30 text-[#0a84ff] disabled:opacity-60"
-              >
-                {isReviewing ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> REVIEWING…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={16} /> REVIEW WITH AI
-                  </>
-                )}
-              </button>
-              {canSaveAsTemplate && (
-                <button
-                  type="button"
-                  onClick={() => setShowSaveTemplate(true)}
-                  className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#30d158]/30 text-[#30d158]"
-                >
-                  <BookmarkPlus size={16} /> SAVE TEMPLATE
-                </button>
+            <div className="benz-quality-inset">
+              {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
+              {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
+              {!isGenerating && !isReviewing && storyQuality && (
+                <StoryQualityPanel
+                  quality={storyQuality}
+                  review={storyReview}
+                  panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
+                />
               )}
-              <button
-                type="button"
-                onClick={() => setShowTemplateLibrary(true)}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
-              >
-                <BookOpen size={16} /> TEMPLATES
-              </button>
+              {!isGenerating && !isReviewing && !storyQuality && storyQualityStale && (
+                <StoryQualityStaleBanner onReview={onReviewStory} />
+              )}
+            </div>
+
+            <div className="mt-4 pt-4 benz-divider space-y-3">
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+                className="primary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm touch-target"
               >
-                <Copy size={16} /> COPY
+                <Copy size={18} />
+                Copy for CDK
               </button>
-              <button
-                type="button"
-                onClick={handlePdf}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
-              >
-                <Download size={16} /> PDF
-              </button>
-              <button
-                onClick={onGenerateStory}
-                disabled={isGenerating || isReviewing}
-                className="secondary-btn h-11 px-5 flex items-center gap-2 text-sm disabled:opacity-60"
-              >
-                {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                REGEN
-              </button>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={onReviewStory}
+                  disabled={isGenerating || isReviewing || !line.warrantyStory?.trim()}
+                  className="secondary-btn benz-btn-accent-outline h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                >
+                  {isReviewing ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" /> Reviewing…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} /> Review with AI
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={onGenerateStory}
+                  disabled={isGenerating || isReviewing}
+                  className="secondary-btn h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                >
+                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                  Regenerate
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-1 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateLibrary(true)}
+                  className="benz-tertiary-btn"
+                >
+                  <BookOpen size={14} /> Templates
+                </button>
+                {canSaveAsTemplate && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveTemplate(true)}
+                    className="benz-tertiary-btn text-benz-green"
+                  >
+                    <BookmarkPlus size={14} /> Save template
+                  </button>
+                )}
+                <button type="button" onClick={handlePdf} className="benz-tertiary-btn">
+                  <Download size={14} /> Export PDF
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -63,7 +63,7 @@ export function BenzTechApp() {
   const roListSection = (
     <>
       {ro.filteredROs.length > 0 && (
-        <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2 px-1">Previous Repair Orders</div>
+        <div className="benz-section-title mb-2.5 px-1">Previous Repair Orders</div>
       )}
       <RepairOrderList
         repairOrders={ro.filteredROs}
@@ -80,8 +80,10 @@ export function BenzTechApp() {
     ro.openingROId &&
     (ro.allROs.find((item) => item.id === ro.openingROId)?.roNumber || 'repair order');
 
+  const wideLayout = ro.view === 'home' && isManager;
+
   return (
-    <div className="app-container">
+    <div className={`app-container${wideLayout ? ' benz-app-wide' : ''}`}>
       <LoadingOverlay
         visible={!!ro.openingROId}
         message={openingRoNumber ? `Loading ${openingRoNumber}…` : 'Loading repair order…'}

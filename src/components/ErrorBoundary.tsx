@@ -27,13 +27,13 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="app-container px-5 py-10 text-center">
-          <div className="ios-card p-6">
-            <div className="text-lg font-semibold mb-2">Something went wrong</div>
-            <p className="text-sm text-[#8e8e93] mb-4">{this.state.message}</p>
+        <div className="app-container benz-page py-10 text-center">
+          <div className="benz-card-elevated p-7">
+            <div className="text-lg font-semibold mb-2 tracking-tight">Something went wrong</div>
+            <p className="text-sm text-benz-secondary mb-5 leading-relaxed">{this.state.message}</p>
             <button
               onClick={() => this.setState({ hasError: false, message: '' })}
-              className="primary-btn px-6 h-11 text-sm"
+              className="primary-btn px-6 h-11 text-sm touch-target"
             >
               Try again
             </button>
