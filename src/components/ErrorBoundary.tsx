@@ -20,7 +20,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('BenzTech error boundary:', error, info);
+    console.error('Merlin error boundary:', error, info);
     toast.error('An unexpected error occurred. You can try again.');
   }
 

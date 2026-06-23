@@ -30,7 +30,7 @@ export function BenzTechApp() {
   const [consentLoading, setConsentLoading] = useState(false);
 
   if (sessionLoading) {
-    return <LoadingScreen label="Starting Benz Tech" sublabel="Verifying your session..." />;
+    return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
   }
 
   if (ro.loading) {

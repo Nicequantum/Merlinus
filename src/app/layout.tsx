@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Benz Tech — Dealership Warranty Platform',
+  title: 'Merlin — Mercedes-Benz Warranty Platform',
   description: 'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
   manifest: '/manifest.json',
   icons: {
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'BenzTech',
+    title: 'Merlin',
   },
 };
 

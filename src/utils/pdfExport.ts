@@ -147,7 +147,7 @@ export function exportWarrantyStoryPdf(ro: RepairOrder, line: RepairLine, storyO
   const maxWidth = pageWidth - margin * 2;
 
   let y = margin;
-  y = renderPdfLines(doc, 'Benz Tech — Warranty Story', margin, maxWidth, y, 14, 'bold');
+  y = renderPdfLines(doc, 'Merlin — Warranty Story', margin, maxWidth, y, 14, 'bold');
   y += 8;
 
   const vehicle = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ');

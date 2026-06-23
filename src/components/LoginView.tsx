@@ -64,7 +64,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
         <div className="text-center mb-8">
           <div className="benz-logo-ring w-20 h-20 mx-auto mb-5">
-            <img src="/icon-512.png" alt="Benz Tech" className="w-full h-full rounded-[18px]" />
+            <img src="/icon-512.png" alt="Merlin" className="w-full h-full rounded-[18px]" />
           </div>
           <DealershipBranding size="lg" />
         </div>

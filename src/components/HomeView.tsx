@@ -58,7 +58,7 @@ export function HomeView({
       <div className="pt-10">
         <div className="text-center mb-8">
           <div className="benz-logo-ring w-[4.5rem] h-[4.5rem] mx-auto mb-4">
-            <img src="/icon-512.png" alt="Benz Tech - Mercedes-Benz" className="w-full h-full rounded-[18px]" />
+            <img src="/icon-512.png" alt="Merlin - Mercedes-Benz" className="w-full h-full rounded-[18px]" />
           </div>
           <DealershipBranding size="lg" className="mb-2" />
           <p className="text-benz-secondary text-sm">{technicianName || 'Technician'}</p>

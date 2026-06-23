@@ -1,6 +1,6 @@
 {
-  "name": "Benz Tech — Dealership Warranty Platform",
-  "short_name": "BenzTech",
+  "name": "Merlin — Mercedes-Benz Warranty Platform",
+  "short_name": "Merlin",
   "description": "Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.",
   "start_url": "/",
   "scope": "/",

@@ -25,7 +25,7 @@ export function ConsentModal({ onAccept, loading }: ConsentModalProps) {
 
           <div className="text-sm text-benz-silver space-y-3.5 mb-6 leading-relaxed">
             <p>
-              Benz Tech processes repair order data, vehicle identification numbers, diagnostic images, and customer
+              Merlin processes repair order data, vehicle identification numbers, diagnostic images, and customer
               information solely to assist authorized Mercedes-Benz technicians in creating warranty documentation.
             </p>
             <p>
@@ -44,7 +44,7 @@ export function ConsentModal({ onAccept, loading }: ConsentModalProps) {
           </div>
 
           <button onClick={onAccept} disabled={loading} className="primary-btn w-full h-12 text-sm font-semibold touch-target">
-            {loading ? 'Saving…' : 'I agree — continue to Benz Tech'}
+            {loading ? 'Saving…' : 'I agree — continue to Merlin'}
           </button>
         </div>
       </div>

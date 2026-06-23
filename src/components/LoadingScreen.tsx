@@ -5,7 +5,7 @@ interface LoadingScreenProps {
   sublabel?: string;
 }
 
-export function LoadingScreen({ label = 'Loading Benz Tech', sublabel }: LoadingScreenProps) {
+export function LoadingScreen({ label = 'Loading Merlin', sublabel }: LoadingScreenProps) {
   return (
     <div className="app-container flex flex-col items-center justify-center min-h-dvh px-6 text-center">
       <div className="loading-spinner mb-6" aria-hidden="true" />
