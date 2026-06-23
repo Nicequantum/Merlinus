@@ -166,6 +166,7 @@ export function BenzTechApp() {
         <LineView
           ro={ro.currentRO}
           line={ro.currentLine}
+          technicianName={session.name}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
           isGenerating={ro.isGeneratingForLine}

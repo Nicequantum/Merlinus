@@ -22,6 +22,7 @@ import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
 interface LineViewProps {
   ro: RepairOrder;
   line: RepairLine;
+  technicianName?: string;
   isProcessingOCR: boolean;
   ocrProgress: number;
   isGenerating: boolean;
@@ -53,6 +54,7 @@ function charCountColor(len: number): string {
 export function LineView({
   ro,
   line,
+  technicianName,
   isProcessingOCR,
   ocrProgress,
   isGenerating,
@@ -121,7 +123,7 @@ export function LineView({
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
     if (!storyText.trim()) return;
     try {
-      exportWarrantyStoryPdf(ro, line, storyText);
+      exportWarrantyStoryPdf(ro, line, storyText, undefined, technicianName);
       toast.success('PDF downloaded');
     } catch {
       toast.error('PDF export failed');
