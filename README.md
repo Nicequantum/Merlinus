@@ -7,29 +7,30 @@
 [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![Security](https://img.shields.io/badge/Security-Enterprise_Grade-22c55e?style=for-the-badge)](https://github.com/Nicequantum/viti-ai-clone)
 
-A secure, purpose-built platform that enables Mercedes-Benz service technicians to generate accurate, professional warranty narratives using Grok AI, while maintaining full audit integrity and compliance controls.
+A secure, enterprise-grade platform that enables Mercedes-Benz service technicians to generate accurate, professional warranty narratives using Grok AI — complete with voice input, field-level encryption, and a tamper-evident audit trail.
 
 ---
 
 ## Who This Is For
 
-| Role | Key Benefits |
+| Role | What You Get |
 |------|--------------|
-| **Technicians** | Fast voice input, AI-generated warranty stories, one-click PDF export |
-| **Service Managers** | Complete visibility, user management, full audit trail with hash chaining |
-| **Fixed Ops Directors** | Enterprise-ready platform with strong security, session controls, and compliance features |
+| **Technicians** | Fast voice-to-story workflow and professional PDF output |
+| **Service Managers** | Full visibility, audit logs, user management, and compliance tools |
+| **Fixed Ops Directors** | A secure, auditable, and scalable warranty documentation system |
 
 ---
 
 ## Key Features
 
-- Voice-first input with stable text editing and cursor preservation
-- Grok AI-powered intelligent warranty story generation
-- AES-256-GCM encryption at rest for all sensitive data
+- Voice-first input with stable text editing during dictation
+- Intelligent Grok AI-powered warranty story generation
+- AES-256-GCM encryption for all sensitive data
 - Immutable SHA-256 hash-chained audit trail
-- Client-side image compression and secure blob storage
+- Client-side image compression and secure storage
 - Professional branded PDF generation
 - Role-based access control with instant session revocation
+- Built for reliability in high-pressure dealership environments
 
 ---
 
@@ -37,47 +38,54 @@ A secure, purpose-built platform that enables Mercedes-Benz service technicians 
 
 ```mermaid
 flowchart TD
-    subgraph Frontend["Browser — Next.js 15 + React 19"]
-        T1[Voice + Stable Text Editing]
-        T2[OCR + Image Compression]
-        T1 --> T2
+    subgraph Frontend["Frontend — Next.js 15 + React 19"]
+        A[Voice + Stable Text Editing]
+        B[OCR + Image Compression]
+        A --> B
     end
 
-    subgraph Backend["Next.js API Routes"]
-        B1[JWT Auth + Session Revocation]
-        B2[Server-side AES-256 Encryption]
-        B3[Grok AI Story Generation]
-        B4[Structured Logging]
-        B1 --> B2 --> B3 --> B4
+    subgraph Security["Security Layer"]
+        C[JWT Auth + Session Revocation]
+        D[Server-side AES-256-GCM Encryption]
+        C --> D
     end
 
-    subgraph Services["External Services"]
-        S1[(PostgreSQL)]
-        S2[Vercel Blob]
-        S3[xAI Grok API]
+    subgraph Backend["Backend — Next.js API Routes"]
+        E[Grok AI Story Generation]
+        D --> E
     end
 
     subgraph Audit["Audit Trail"]
-        A1[SHA-256 Hash-Chained Logging]
+        F[SHA-256 Hash-Chained Logging]
+        E --> F
     end
 
-    T2 --> Backend
-    B4 --> S1
-    B4 --> Audit
-    Backend --> S2
-    Backend --> S3
+    subgraph Output["Output"]
+        G[Branded PDF Export]
+        E --> G
+    end
+
+    B --> C
+
+    classDef frontend fill:#dbeafe,stroke:#1e40af
+    classDef security fill:#dcfce7,stroke:#166534
+    classDef audit fill:#fef3c7,stroke:#92400e
+    class A,B frontend
+    class C,D security
+    class F audit
 ```
 
 ---
 
 ## Common Failure Modes & Troubleshooting
 
-| Issue | Symptom | Fix |
-|-------|---------|-----|
-| **Grok API Timeout** | Long loading or timeout message | Shorten input and click **Regenerate** |
-| **Voice Input Not Working** | Microphone button does nothing | Allow microphone permission in Chrome or Edge |
-| **PDF Generation Failed** | "Failed to generate PDF" | Fill all required fields, then regenerate story |
-| **Frequent Logouts** | Session expires often | Check device time or clear browser cache |
+| Issue | Error Message / Symptom | Recommended Fix |
+|-------|-------------------------|-----------------|
+| **Grok API Timeout** | Request timed out or long loading spinner | Shorten your input and click **Regenerate** |
+| **Voice Input Not Working** | Microphone does not respond | Allow microphone permission in Chrome or Edge |
+| **PDF Generation Failed** | Failed to generate PDF | Ensure all required fields are filled, then regenerate story |
+| **Session Expiring Frequently** | Logged out unexpectedly | Check device clock or clear browser cache |
+| **Audit Chain Warning** | Hash chain integrity error | Stop use and notify IT immediately |
 
 ---
 
@@ -93,6 +101,6 @@ npm run dev
 
 ---
 
-**Important:** This system requires a signed Data Processing Agreement (DPA) with xAI before processing real customer or vehicle data in production.
+**Important:** A signed Data Processing Agreement with xAI is required before processing real customer or vehicle data.
 
-Built specifically for Mercedes-Benz Fixed Operations teams.
+Built specifically for Mercedes-Benz Fixed Operations teams that demand both speed and full accountability.
