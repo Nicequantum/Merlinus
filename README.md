@@ -184,6 +184,33 @@ Screenshot placeholders in the docs use `./docs/images/` — replace with dealer
 
 ---
 
+## Production Go-Live
+
+Final deliverable package for launching Merlin to production at Mercedes-Benz dealerships. Use these documents in the order below — each step builds on the last.
+
+| Step | Document | Audience | When to use |
+|------|----------|----------|-------------|
+| 1 | [**Go-Live Summary**](./docs/Go-Live-Summary.md) | GM, Fixed Ops Director | Secure leadership approval and set expectations |
+| 2 | [**Admin Setup Guide**](./docs/Admin-Setup-Guide.md) | IT, Service Manager | Provision environment, database, and validation |
+| 3 | [**Rollout Checklist**](./docs/Rollout-Checklist.md) | IT, SM, FO, Trainer | Phase 1 preparation (1–2 weeks before go-live) |
+| 4 | [**Go-Live Checklist**](./docs/Go-Live-Checklist.md) | IT, SM, FO | Final go/no-go review **24–48 hours before launch** |
+| 5 | [**Training Outline**](./docs/Training-Outline.md) | Trainer, Lead Technician | 30–45 min hands-on session on deployment day |
+| 6 | [**Go-Live Email Template**](./docs/Go-Live-Email-Template.md) | Service Manager | Announce launch and training to the service team |
+| 7 | [**Technician Quick Start**](./docs/Technician-Quick-Start.md) | Technicians | Print at every bay tablet — daily reference |
+| 8 | [**Support Playbook**](./docs/Support-Playbook.md) | IT, Service Manager | Post-launch troubleshooting and escalation |
+
+**Go-live week at a glance:**
+
+1. **T−14 to T−7** — IT completes setup; Phase 1 of [Rollout Checklist](./docs/Rollout-Checklist.md)
+2. **T−5 to T−3** — Send [Go-Live Email](./docs/Go-Live-Email-Template.md); schedule training
+3. **T−2 to T−1** — Complete [Go-Live Checklist](./docs/Go-Live-Checklist.md) go/no-go sign-off
+4. **Launch day** — Training, floor support, first live stories reviewed by service manager
+5. **T+1 to T+5** — [Support Playbook](./docs/Support-Playbook.md) active; Phase 3 verification
+
+Replace `[BRACKETED]` placeholders in each document with dealership name, go-live date, URLs, and support contacts before printing or distributing.
+
+---
+
 ## Deployment
 
 ### Local development

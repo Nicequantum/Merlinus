@@ -199,6 +199,10 @@ Use this checklist for **each dealership location**. Copy the checkboxes into yo
 
 | Document | Link |
 |----------|------|
+| Go-Live Summary | [Go-Live-Summary.md](./Go-Live-Summary.md) |
+| Go-Live Checklist (final go/no-go) | [Go-Live-Checklist.md](./Go-Live-Checklist.md) |
+| Go-Live Email Template | [Go-Live-Email-Template.md](./Go-Live-Email-Template.md) |
+| Support Playbook | [Support-Playbook.md](./Support-Playbook.md) |
 | Technician Quick Start | [Technician-Quick-Start.md](./Technician-Quick-Start.md) |
 | Admin Setup Guide | [Admin-Setup-Guide.md](./Admin-Setup-Guide.md) |
 | Training Outline | [Training-Outline.md](./Training-Outline.md) |
