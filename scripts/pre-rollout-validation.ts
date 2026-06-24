@@ -37,7 +37,7 @@ import {
   isMaintenanceModeEnabled,
   validateEnvironment,
 } from '../src/lib/env';
-import type { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { isKvConfigured, RATE_LIMITS } from '../src/lib/rate-limit';
 import { SYSTEM_PROMPT, buildWarrantyStoryUserMessage } from '../src/prompts/warrantyStory';
 import { PROMPT_VERSION } from '../src/prompts/version';
@@ -46,6 +46,15 @@ import { createRepairOrderFromScan } from '../src/utils/repairOrderFactory';
 
 let prisma: PrismaClient | null = null;
 let databaseConfigError: string | null = null;
+let resolvedDatabaseUrl: string | null = null;
+
+interface DatabaseTarget {
+  hostname: string;
+  port: string;
+  database: string;
+  sslmode: string;
+  protocol: string;
+}
 
 // ─── Console styling ───────────────────────────────────────────────────────────
 
@@ -104,65 +113,116 @@ function loadEnvironment(): void {
   loadDotenv({ path: resolve(root, '.env.production'), override: true });
 }
 
+/** Strip optional wrapping quotes from a dotenv value. */
+function stripEnvQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 /**
- * Validate and normalize DATABASE_URL from the environment.
- * Remote hosts (Prisma Data Platform, Neon, Vercel Postgres, etc.) get sslmode=require
- * when omitted so SSL handshakes succeed.
+ * Validate and normalize DATABASE_URL from `.env.local`.
+ * - Accepts postgres:// and postgresql:// (Prisma prefers postgresql://)
+ * - Fixes common typos (textpostgres://)
+ * - Adds sslmode=require for remote hosts (db.prisma.io, Neon, etc.)
  */
-function resolveDatabaseUrl(): string {
-  const raw = process.env.DATABASE_URL?.trim();
-  if (!raw) {
+function normalizeDatabaseUrl(rawInput: string): string {
+  let url = stripEnvQuotes(rawInput);
+  if (!url) {
     throw new Error(
-      'DATABASE_URL is not set. Add it to .env.local (see .env.example). ' +
-        'Example: postgresql://user:pass@host:5432/db?sslmode=require'
+      'DATABASE_URL is empty. Set it in .env.local (see .env.example). ' +
+        'Example: postgresql://USER:PASSWORD@db.prisma.io:5432/postgres?sslmode=require'
     );
   }
 
-  const normalizedScheme = raw.replace(/^textpostgres:\/\//i, 'postgresql://');
-  if (!/^postgres(ql)?:\/\//i.test(normalizedScheme)) {
+  url = url.replace(/^textpostgres:\/\//i, 'postgresql://');
+  if (/^postgres:\/\//i.test(url) && !/^postgresql:\/\//i.test(url)) {
+    url = url.replace(/^postgres:\/\//i, 'postgresql://');
+  }
+
+  if (!/^postgresql:\/\//i.test(url)) {
     throw new Error(
-      'DATABASE_URL must start with postgresql:// or postgres://. ' +
+      'DATABASE_URL must use postgres:// or postgresql://. ' +
         'Check .env.local for typos (e.g. textpostgres://).'
     );
   }
 
-  let url: URL;
+  let parsed: URL;
   try {
-    url = new URL(normalizedScheme);
+    parsed = new URL(url);
   } catch {
-    throw new Error('DATABASE_URL is malformed. Verify the connection string in .env.local.');
+    throw new Error(
+      'DATABASE_URL is malformed — verify username, password, host, and port in .env.local.'
+    );
   }
 
-  if (!url.hostname) {
-    throw new Error('DATABASE_URL is missing a hostname. Verify the connection string in .env.local.');
+  if (!parsed.hostname) {
+    throw new Error('DATABASE_URL is missing a hostname. Example host: db.prisma.io');
   }
 
   const isLocal =
-    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-  if (!isLocal && !url.searchParams.has('sslmode')) {
-    url.searchParams.set('sslmode', 'require');
+    parsed.hostname === 'localhost' ||
+    parsed.hostname === '127.0.0.1' ||
+    parsed.hostname === '::1';
+
+  if (!isLocal && !parsed.searchParams.has('sslmode')) {
+    parsed.searchParams.set('sslmode', 'require');
   }
 
-  return url.toString();
+  return parsed.toString();
 }
 
-function describeDatabaseHost(connectionUrl: string): string {
-  try {
-    return new URL(connectionUrl).hostname;
-  } catch {
-    return 'unknown-host';
+function resolveDatabaseUrlFromEnv(): string {
+  const raw = process.env.DATABASE_URL;
+  if (!raw?.trim()) {
+    throw new Error(
+      'DATABASE_URL is not set. Add it to .env.local (see .env.example). ' +
+        'Remote Prisma example: postgresql://USER:PASSWORD@db.prisma.io:5432/postgres?sslmode=require'
+    );
   }
+  return normalizeDatabaseUrl(raw);
+}
+
+/** Safe connection summary — never includes credentials. */
+function describeDatabaseTarget(connectionUrl: string): DatabaseTarget {
+  const parsed = new URL(connectionUrl);
+  return {
+    protocol: parsed.protocol.replace(':', ''),
+    hostname: parsed.hostname,
+    port: parsed.port || '5432',
+    database: parsed.pathname.replace(/^\//, '') || 'postgres',
+    sslmode: parsed.searchParams.get('sslmode') ?? 'not set',
+  };
+}
+
+function formatDatabaseTarget(target: DatabaseTarget): string {
+  return `${target.protocol}://${target.hostname}:${target.port}/${target.database} (sslmode=${target.sslmode})`;
 }
 
 async function initPrismaFromEnvironment(): Promise<PrismaClient | null> {
   try {
-    const databaseUrl = resolveDatabaseUrl();
-    process.env.DATABASE_URL = databaseUrl;
-    const { prisma: client } = await import('../src/lib/db');
-    return client;
+    resolvedDatabaseUrl = resolveDatabaseUrlFromEnv();
+    process.env.DATABASE_URL = resolvedDatabaseUrl;
+
+    const target = describeDatabaseTarget(resolvedDatabaseUrl);
+    console.log(
+      `  ${c.dim}Database target: ${target.hostname}:${target.port}/${target.database} · sslmode=${target.sslmode}${c.reset}`
+    );
+
+    // Dedicated client with explicit datasource — avoids stale singleton from src/lib/db.
+    return new PrismaClient({
+      datasources: { db: { url: resolvedDatabaseUrl } },
+      log: ['error'],
+    });
   } catch (error) {
     databaseConfigError =
       error instanceof Error ? error.message : 'DATABASE_URL is missing or invalid';
+    console.log(`  ${c.red}Database config error: ${databaseConfigError}${c.reset}`);
     return null;
   }
 }
@@ -223,6 +283,29 @@ async function checkEnvironment(): Promise<void> {
   } else {
     record('Environment', 'Build date stamped', 'pass', `Built: ${new Date(parsedDate).toISOString()}`);
   }
+
+  if (resolvedDatabaseUrl) {
+    const target = describeDatabaseTarget(resolvedDatabaseUrl);
+    const isLocal = target.hostname === 'localhost' || target.hostname === '127.0.0.1';
+    if (isLocal) {
+      record(
+        'Environment',
+        'DATABASE_URL target host',
+        'warn',
+        `${target.hostname}:${target.port} — use db.prisma.io (or production host) for rollout`,
+        false
+      );
+    } else {
+      record(
+        'Environment',
+        'DATABASE_URL target host',
+        'pass',
+        `${target.hostname}:${target.port}/${target.database} (sslmode=${target.sslmode})`
+      );
+    }
+  } else if (databaseConfigError) {
+    record('Environment', 'DATABASE_URL target host', 'fail', databaseConfigError);
+  }
 }
 
 async function checkCoreSystems(): Promise<void> {
@@ -237,22 +320,38 @@ async function checkCoreSystems(): Promise<void> {
         'DATABASE_URL not configured — add a valid PostgreSQL URL to .env.local'
     );
   } else {
+    const target = resolvedDatabaseUrl
+      ? describeDatabaseTarget(resolvedDatabaseUrl)
+      : null;
+    const targetLabel = target ? `${target.hostname}:${target.port}` : 'unknown host';
+
     try {
+      console.log(`  ${c.dim}Connecting to ${targetLabel}…${c.reset}`);
       const started = Date.now();
-      await prisma.$queryRaw`SELECT 1`;
-      const host = describeDatabaseHost(process.env.DATABASE_URL ?? '');
-      const ssl = process.env.DATABASE_URL?.includes('sslmode=') ? 'SSL on' : 'SSL not specified';
-      record(
-        'Core Systems',
-        'Database connection',
-        'pass',
-        `PostgreSQL OK in ${Date.now() - started}ms (${host}, ${ssl})`
-      );
+      const result = await prisma.$queryRaw<Array<{ ok: number }>>`SELECT 1 AS ok`;
+      const elapsed = Date.now() - started;
+      const ok = result?.[0]?.ok === 1;
+      if (!ok) {
+        record('Core Systems', 'Database connection', 'fail', `Query to ${targetLabel} returned unexpected result`);
+      } else {
+        record(
+          'Core Systems',
+          'Database connection',
+          'pass',
+          `Connected to ${targetLabel}/${target?.database ?? 'postgres'} in ${elapsed}ms (sslmode=${target?.sslmode ?? 'n/a'})`
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Connection failed';
-      const hint = message.includes('localhost')
-        ? ' Start local Postgres or point DATABASE_URL in .env.local at your remote database.'
-        : ' Verify DATABASE_URL in .env.local includes ?sslmode=require for remote hosts.';
+      console.log(`  ${c.red}Connection to ${targetLabel} failed${c.reset}`);
+      let hint = ' Check DATABASE_URL in .env.local.';
+      if (message.includes('localhost') || target?.hostname === 'localhost') {
+        hint = ' DATABASE_URL still points at localhost — set your remote db.prisma.io URL in .env.local.';
+      } else if (target?.hostname.includes('prisma.io')) {
+        hint = ' Confirm Prisma Data Platform credentials and that the database is active.';
+      } else if (!resolvedDatabaseUrl?.includes('sslmode=')) {
+        hint = ' Remote hosts need ?sslmode=require on DATABASE_URL.';
+      }
       record('Core Systems', 'Database connection', 'fail', `${message}${hint}`);
     }
   }
