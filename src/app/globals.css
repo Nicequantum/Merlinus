@@ -952,11 +952,118 @@
     color: var(--benz-red);
   }
 
+  .benz-voice-stack {
+    @apply flex flex-col items-end gap-2 shrink-0;
+    max-width: min(100%, 18rem);
+  }
+
+  .benz-voice-controls {
+    @apply flex items-center gap-1.5;
+  }
+
+  .benz-voice-panel {
+    @apply w-full rounded-xl p-2.5 text-xs;
+    background: var(--benz-surface-2);
+    border: 1px solid var(--benz-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .benz-voice-panel-row {
+    @apply flex flex-wrap gap-3 mb-2;
+  }
+
+  .benz-voice-metric {
+    @apply flex flex-col gap-1 min-w-[5.5rem];
+  }
+
+  .benz-voice-metric-label {
+    @apply uppercase tracking-wide font-medium;
+    color: var(--benz-text-muted);
+    font-size: 0.65rem;
+  }
+
+  .benz-voice-metric-value {
+    color: var(--benz-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .benz-voice-noise-track {
+    @apply h-1.5 rounded-full overflow-hidden;
+    background: var(--benz-surface-input);
+    border: 1px solid var(--benz-border);
+  }
+
+  .benz-voice-noise-fill {
+    @apply h-full rounded-full transition-all duration-150;
+    background: linear-gradient(90deg, var(--benz-blue), var(--benz-amber), var(--benz-red));
+  }
+
+  .benz-voice-confidence {
+    color: var(--benz-blue);
+    font-weight: 600;
+  }
+
+  .benz-voice-transcript-preview {
+    @apply rounded-lg px-2 py-1.5 leading-snug break-words;
+    background: var(--benz-surface-input);
+    border: 1px dashed var(--benz-border);
+    max-height: 4.5rem;
+    overflow-y: auto;
+  }
+
+  .benz-voice-transcript-final {
+    color: var(--benz-text);
+  }
+
+  .benz-voice-transcript-interim {
+    color: var(--benz-amber);
+    font-style: italic;
+  }
+
+  .benz-voice-banner {
+    @apply flex items-center justify-between gap-2 mt-2 rounded-lg px-2 py-1.5;
+  }
+
+  .benz-voice-banner-warn {
+    background: var(--benz-amber-dim);
+    color: var(--benz-amber);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
+
+  .benz-voice-banner-error {
+    background: var(--benz-red-dim);
+    color: var(--benz-red);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+  }
+
+  .benz-voice-retry-btn {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium transition-colors;
+    background: var(--benz-surface-2);
+    border: 1px solid var(--benz-border);
+    color: inherit;
+  }
+
+  .benz-voice-retry-btn:hover {
+    border-color: var(--benz-border-accent);
+  }
+
+  .benz-voice-hint,
+  .benz-voice-fallback-hint {
+    @apply text-right leading-snug;
+    color: var(--benz-text-muted);
+    font-size: 0.7rem;
+    max-width: 12rem;
+  }
+
   .benz-voice-btn {
-    @apply p-2.5 rounded-xl transition-all duration-200;
+    @apply relative p-2.5 rounded-xl transition-all duration-200;
     background: var(--benz-surface-input);
     border: 1px solid var(--benz-border);
     color: var(--benz-blue);
+  }
+
+  .benz-voice-btn-inner {
+    @apply relative z-10 inline-flex items-center justify-center;
   }
 
   .benz-voice-btn:hover {
@@ -968,6 +1075,50 @@
     border-color: var(--benz-border-accent);
     box-shadow: 0 0 0 3px var(--benz-blue-glow);
     color: var(--benz-red);
+  }
+
+  .benz-voice-btn-restarting {
+    opacity: 0.85;
+  }
+
+  .benz-voice-pulse {
+    @apply absolute inset-0 rounded-xl;
+    border: 2px solid var(--benz-red);
+    animation: benz-voice-pulse 1.4s ease-out infinite;
+    pointer-events: none;
+  }
+
+  .benz-voice-pulse-delay {
+    animation-delay: 0.55s;
+  }
+
+  .benz-voice-mode-btn {
+    @apply p-2 rounded-lg transition-all duration-200;
+    background: var(--benz-surface-input);
+    border: 1px solid var(--benz-border);
+    color: var(--benz-text-muted);
+  }
+
+  .benz-voice-mode-btn:hover {
+    border-color: var(--benz-border-accent);
+    color: var(--benz-text);
+  }
+
+  .benz-voice-mode-btn-active {
+    border-color: var(--benz-border-accent);
+    color: var(--benz-blue);
+    box-shadow: 0 0 0 2px var(--benz-blue-glow);
+  }
+}
+
+@keyframes benz-voice-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
   }
 }
 

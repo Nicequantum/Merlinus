@@ -95,12 +95,64 @@ flowchart LR
 
 ---
 
+## Voice Input (Shop-Floor Tablets)
+
+Merlin uses the browser **Web Speech API** for hands-free warranty story entry on rugged tablets in noisy service bays. Voice is optional — **manual typing is always available** on every field.
+
+### How technicians use it
+
+| Mode | Action |
+|------|--------|
+| **Tap to toggle** (default) | Tap the mic once to start, tap again to stop |
+| **Push-to-talk** | Tap the hand/toggle button to switch modes, then **hold** the mic while speaking |
+
+While listening, a panel shows **bay noise level**, **recognition confidence** (when Chrome exposes it), and a live preview that distinguishes **final** vs *interim* text.
+
+### Noise robustness
+
+- A parallel microphone stream requests **auto gain control**, **noise suppression**, and **echo cancellation** where the browser supports them
+- **Adaptive confidence threshold** lowers as background noise rises so usable dictation is not rejected on loud shop floors
+- **Auto-restart** recovers from brief silence, network blips, and recognizer `onend` events (capped to prevent runaway loops)
+- **Listening timeout** (15s default) ends a stuck session with a one-tap **Retry** button
+
+### Browser requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| **Browser** | Chrome or Edge (Chromium Web Speech API) |
+| **Microphone** | Allow mic permission for the dealership site |
+| **Network** | Cloud speech recognition requires connectivity |
+| **Fallback** | Unsupported browsers show “Voice unavailable — type below.” |
+
+### Dealership configuration
+
+Edit `DEFAULT_VOICE_INPUT_SETTINGS` in `src/lib/voice/voiceSettings.ts` (re-exported as `VOICE_INPUT_SETTINGS` from `src/lib/constants.ts`):
+
+- `listeningTimeoutMs`, `maxAutoRestarts`, `silenceRestartDelayMs`
+- `baseConfidenceThreshold` / `minConfidenceThreshold` / `noiseAdjustmentFactor`
+- `pushToTalkDefault`, `enabled` (master switch)
+- Audio constraints: `autoGainControl`, `noiseSuppression`, `echoCancellation`
+
+### Architecture
+
+```
+StableTextarea / StableInput
+        └── VoiceInputButton (UI + animations)
+                └── useVoiceInput (React hook)
+                        └── VoiceInputService (src/lib/voice/)
+                                ├── Web Speech API (continuous + interim)
+                                ├── NoiseMonitor (Web Audio RMS)
+                                └── Adaptive confidence + error recovery
+```
+
+---
+
 ## Common Failure Modes & Troubleshooting
 
 | Issue | Symptom | Recommended Fix |
 |-------|---------|-----------------|
 | **Grok Timeout** | Long loading or timeout error | Shorten input and click **Regenerate** |
-| **Voice Input Not Working** | Microphone button does nothing | Allow microphone permission in Chrome or Edge |
+| **Voice Input Not Working** | Mic button does nothing or stops mid-sentence | Allow mic in Chrome/Edge; switch to push-to-talk; check bay Wi‑Fi; use **Retry** or type manually |
 | **PDF Generation Failed** | "Failed to generate PDF" | Complete all required fields first, then regenerate |
 | **Frequent Logouts** | Unexpected session expiry | Verify device clock; clear browser cache |
 | **Audit Chain Warning** | Integrity error in audit log | Stop use; notify Service Manager and IT immediately |
