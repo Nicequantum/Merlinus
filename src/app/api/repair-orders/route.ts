@@ -18,27 +18,20 @@ import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { createRepairOrderSchema, parseRequestBody } from '@/lib/validation';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
+import {
+  buildRepairOrderListWhere,
+  getTodayStartIso,
+  parseRepairOrderListParams,
+} from '@/lib/roListQuery';
 import { createRepairOrderFromScan } from '@/utils/repairOrderFactory';
-
-const DEFAULT_RO_PAGE_SIZE = 50;
-const MAX_RO_PAGE_SIZE = 100;
 
 export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
       const url = new URL(request.url);
-      const limitRaw = Number(url.searchParams.get('limit') ?? DEFAULT_RO_PAGE_SIZE);
-      const limit = Math.min(
-        MAX_RO_PAGE_SIZE,
-        Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : DEFAULT_RO_PAGE_SIZE)
-      );
-      const cursor = url.searchParams.get('cursor')?.trim() || undefined;
-
-      const where =
-        session.role === 'manager'
-          ? { dealershipId: session.dealershipId }
-          : { technicianId: session.technicianId };
+      const params = parseRepairOrderListParams(url);
+      const where = buildRepairOrderListWhere(session, params);
 
       const orders = await prisma.repairOrder.findMany({
         where,
@@ -48,17 +41,17 @@ export async function GET(request: Request) {
           serviceAdvisor: { select: { id: true, displayName: true } },
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-        ...(cursor
+        take: params.limit + 1,
+        ...(params.cursor
           ? {
-              cursor: { id: cursor },
+              cursor: { id: params.cursor },
               skip: 1,
             }
           : {}),
       });
 
-      const hasMore = orders.length > limit;
-      const page = hasMore ? orders.slice(0, limit) : orders;
+      const hasMore = orders.length > params.limit;
+      const page = hasMore ? orders.slice(0, params.limit) : orders;
 
       const repairOrders = page.map((ro) => {
         const mapped = dbToRepairOrder(ro);
@@ -70,6 +63,8 @@ export async function GET(request: Request) {
         repairOrders,
         nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
         hasMore,
+        scope: params.q ? 'search' : params.scope,
+        todayStart: getTodayStartIso(),
       };
     },
     { rateLimitKey: 'ros.list' }

@@ -12,7 +12,7 @@ import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { LoadErrorScreen } from '@/components/LoadErrorScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ManagerDashboard } from '@/components/ManagerDashboard';
-import { RepairOrderList } from '@/components/RepairOrderList';
+import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ROView } from '@/components/ROView';
 import { AuditLogView } from '@/components/AuditLogView';
 import { ServiceAdvisorsView } from '@/components/ServiceAdvisorsView';
@@ -43,7 +43,7 @@ export function BenzTechApp() {
   }
 
   if (ro.loading && !ro.listError) {
-    return <LoadingScreen label="Loading repair orders" sublabel="Syncing dealership data..." />;
+    return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
   }
 
   if (ro.listError) {
@@ -77,19 +77,22 @@ export function BenzTechApp() {
   const isManager = session.role === 'manager';
 
   const roListSection = (
-    <>
-      {ro.filteredROs.length > 0 && (
-        <div className="benz-section-title mb-2.5 px-1">Previous Repair Orders</div>
-      )}
-      <RepairOrderList
-        repairOrders={ro.filteredROs}
-        openingROId={ro.openingROId}
-        onOpenRO={ro.openRO}
-        onDeleteRO={ro.deleteRO}
-        emptyMessage="No repair orders match your search."
-        emptyHint="Scan a repair order to get started."
-      />
-    </>
+    <RepairOrderHomeLists
+      searchTerm={ro.searchTerm}
+      searchLoading={ro.searchLoading}
+      searchResults={ro.searchROs}
+      todayROs={ro.todayROs}
+      previousROs={ro.previousROs}
+      previousExpanded={ro.previousExpanded}
+      onTogglePrevious={ro.togglePreviousExpanded}
+      previousLoading={ro.previousLoading}
+      previousLoadingMore={ro.previousLoadingMore}
+      previousHasMore={ro.previousHasMore}
+      onLoadMorePrevious={ro.loadMorePrevious}
+      openingROId={ro.openingROId}
+      onOpenRO={ro.openRO}
+      onDeleteRO={ro.deleteRO}
+    />
   );
 
   const openingRoNumber =
@@ -139,9 +142,18 @@ export function BenzTechApp() {
       {ro.view === 'home' && !isManager && (
         <HomeView
           technicianName={session.name}
-          filteredROs={ro.filteredROs}
           searchTerm={ro.searchTerm}
           onSearchChange={ro.setSearchTerm}
+          searchLoading={ro.searchLoading}
+          searchROs={ro.searchROs}
+          todayROs={ro.todayROs}
+          previousROs={ro.previousROs}
+          previousExpanded={ro.previousExpanded}
+          onTogglePrevious={ro.togglePreviousExpanded}
+          previousLoading={ro.previousLoading}
+          previousLoadingMore={ro.previousLoadingMore}
+          previousHasMore={ro.previousHasMore}
+          onLoadMorePrevious={ro.loadMorePrevious}
           pendingROImages={ro.pendingROImages}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}

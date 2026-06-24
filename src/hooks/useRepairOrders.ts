@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
+import { isRepairOrderActiveToday } from '@/lib/dealershipDayBoundary';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { runDiagnosticOCR, runMultiPassOCR } from '@/services/ocr';
 import type {
@@ -63,6 +64,34 @@ interface UseRepairOrdersOptions {
   setScanStatusMessage: (message: string) => void;
 }
 
+const PREVIOUS_PAGE_SIZE = 25;
+const SEARCH_PAGE_SIZE = 50;
+
+function mergeRepairOrders(...lists: RepairOrder[][]): RepairOrder[] {
+  const map = new Map<string, RepairOrder>();
+  for (const list of lists) {
+    for (const ro of list) {
+      map.set(ro.id, ro);
+    }
+  }
+  return Array.from(map.values());
+}
+
+function matchesROSearch(ro: RepairOrder, term: string): boolean {
+  const q = term.toLowerCase();
+  return (
+    ro.roNumber.toLowerCase().includes(q) ||
+    (ro.vehicle.make?.toLowerCase().includes(q) ?? false) ||
+    (ro.vehicle.model?.toLowerCase().includes(q) ?? false) ||
+    (ro.vehicle.year?.includes(q) ?? false) ||
+    (ro.vehicle.vin?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+function sortRepairOrdersNewestFirst(orders: RepairOrder[]): RepairOrder[] {
+  return [...orders].sort((a, b) => ((b.updatedAt || b.createdAt || '0') > (a.updatedAt || a.createdAt || '0') ? 1 : -1));
+}
+
 export function useRepairOrders({
   session,
   onOcrStart,
@@ -87,6 +116,15 @@ export function useRepairOrders({
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [listRetrying, setListRetrying] = useState(false);
+  const [todayStartIso, setTodayStartIso] = useState<string | null>(null);
+  const [previousROs, setPreviousROs] = useState<RepairOrder[]>([]);
+  const [previousExpanded, setPreviousExpanded] = useState(false);
+  const [previousLoading, setPreviousLoading] = useState(false);
+  const [previousLoadingMore, setPreviousLoadingMore] = useState(false);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
+  const [previousHasMore, setPreviousHasMore] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const previousLoadedRef = useRef(false);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
   const scanInFlightRef = useRef(false);
@@ -115,16 +153,26 @@ export function useRepairOrders({
   const refreshList = useCallback(async () => {
     if (!session) {
       setAllROs([]);
+      setPreviousROs([]);
       setListError(null);
       setLoading(false);
       setListRetrying(false);
+      previousLoadedRef.current = false;
+      setPreviousExpanded(false);
       return;
     }
 
     setListError(null);
     try {
-      const { repairOrders } = await api.listRepairOrders();
-      setAllROs(repairOrders.map(normalizeRepairOrder));
+      const { repairOrders, todayStart } = await api.listRepairOrders({ scope: 'today' });
+      const normalized = repairOrders.map(normalizeRepairOrder);
+      setAllROs(normalized);
+      if (todayStart) setTodayStartIso(todayStart);
+      setPreviousROs([]);
+      setPreviousCursor(null);
+      setPreviousHasMore(false);
+      previousLoadedRef.current = false;
+      setPreviousExpanded(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setAllROs([]);
@@ -138,6 +186,53 @@ export function useRepairOrders({
       setListRetrying(false);
     }
   }, [normalizeRepairOrder, session]);
+
+  /** Lazy-load older repair orders — only when the Previous section is opened. */
+  const loadPreviousPage = useCallback(
+    async (append: boolean) => {
+      if (!session) return;
+      if (append) setPreviousLoadingMore(true);
+      else setPreviousLoading(true);
+
+      try {
+        const { repairOrders, nextCursor, hasMore, todayStart } = await api.listRepairOrders({
+          scope: 'previous',
+          limit: PREVIOUS_PAGE_SIZE,
+          cursor: append ? previousCursor ?? undefined : undefined,
+        });
+        const normalized = repairOrders.map(normalizeRepairOrder);
+        setPreviousROs((prev) => (append ? mergeRepairOrders([prev, normalized]) : normalized));
+        setAllROs((prev) => mergeRepairOrders([prev, normalized]));
+        setPreviousCursor(nextCursor ?? null);
+        setPreviousHasMore(Boolean(hasMore));
+        if (todayStart) setTodayStartIso(todayStart);
+        previousLoadedRef.current = true;
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 401)) {
+          toast.error('Could not load previous repair orders — try again.');
+        }
+      } finally {
+        setPreviousLoading(false);
+        setPreviousLoadingMore(false);
+      }
+    },
+    [normalizeRepairOrder, previousCursor, session]
+  );
+
+  const togglePreviousExpanded = useCallback(() => {
+    setPreviousExpanded((expanded) => {
+      const next = !expanded;
+      if (next && !previousLoadedRef.current) {
+        void loadPreviousPage(false);
+      }
+      return next;
+    });
+  }, [loadPreviousPage]);
+
+  const loadMorePrevious = useCallback(() => {
+    if (previousLoading || previousLoadingMore || !previousHasMore) return;
+    void loadPreviousPage(true);
+  }, [loadPreviousPage, previousHasMore, previousLoading, previousLoadingMore]);
 
   const retryListLoad = useCallback(async () => {
     setListRetrying(true);
@@ -154,6 +249,7 @@ export function useRepairOrders({
       setLoading(false);
       setListError(null);
       setAllROs([]);
+      setPreviousROs([]);
       return;
     }
 
@@ -162,6 +258,34 @@ export function useRepairOrders({
       toast.error('Could not load repair orders — check your connection');
     });
   }, [session, refreshList]);
+
+  // Server search for historical ROs; client filter adds VIN matches from loaded rows.
+  useEffect(() => {
+    const q = searchTerm.trim();
+    if (!session || !q) {
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    const timer = setTimeout(() => {
+      api
+        .listRepairOrders({ q, limit: SEARCH_PAGE_SIZE })
+        .then(({ repairOrders, todayStart }) => {
+          const normalized = repairOrders.map(normalizeRepairOrder);
+          setAllROs((prev) => mergeRepairOrders([prev, normalized]));
+          if (todayStart) setTodayStartIso(todayStart);
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof ApiError && error.status === 401)) {
+            clientLog.warn('Repair order search failed', error);
+          }
+        })
+        .finally(() => setSearchLoading(false));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [normalizeRepairOrder, searchTerm, session]);
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
   useEffect(() => {
@@ -1103,16 +1227,21 @@ export function useRepairOrders({
     return quality.scoredAgainstStory?.trim() !== storyText;
   })();
 
-  const filteredROs = allROs
-    .filter(
-      (ro) =>
-        ro.roNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ro.vehicle.make && ro.vehicle.make.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (ro.vehicle.model && ro.vehicle.model.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (ro.vehicle.year && ro.vehicle.year.includes(searchTerm)) ||
-        (ro.vehicle.vin && ro.vehicle.vin.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
-    .sort((a, b) => ((b.createdAt || '0') > (a.createdAt || '0') ? 1 : -1));
+  const todayROs = useMemo(() => {
+    const active = todayStartIso
+      ? allROs.filter((ro) => isRepairOrderActiveToday(ro.updatedAt, todayStartIso, ro.createdAt))
+      : allROs;
+    return sortRepairOrdersNewestFirst(active);
+  }, [allROs, todayStartIso]);
+
+  const searchROs = useMemo(() => {
+    const q = searchTerm.trim();
+    if (!q) return [];
+    return sortRepairOrdersNewestFirst(allROs.filter((ro) => matchesROSearch(ro, q)));
+  }, [allROs, searchTerm]);
+
+  /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
+  const filteredROs = searchTerm.trim() ? searchROs : todayROs;
 
   const navigateToLine = useCallback(
     (lineId: string) => {
@@ -1152,6 +1281,16 @@ export function useRepairOrders({
     clearCdkSanitizedNotice,
     openingROId,
     filteredROs,
+    todayROs,
+    searchROs,
+    searchLoading,
+    previousROs,
+    previousExpanded,
+    togglePreviousExpanded,
+    previousLoading,
+    previousLoadingMore,
+    previousHasMore,
+    loadMorePrevious,
     flushPendingSave,
     navigateToLine,
     deleteRO,

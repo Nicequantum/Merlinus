@@ -71,6 +71,7 @@ describe('High priority audit fixes (H1–H15)', () => {
     const src = readSrc('src/app/api/repair-orders/route.ts');
     assert.ok(src.includes('nextCursor'));
     assert.ok(src.includes('hasMore'));
+    assert.ok(readSrc('src/lib/roListQuery.ts').includes("'previous'"));
   });
 
   it('H11: no hardcoded changeme123 in seed sources', () => {

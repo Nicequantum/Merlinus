@@ -1,14 +1,23 @@
 import { Settings } from 'lucide-react';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { RepairOrderList } from '@/components/RepairOrderList';
+import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ScanROSection } from '@/components/ScanROSection';
 import type { PendingImage, RepairOrder } from '../types';
 
 interface HomeViewProps {
   technicianName?: string;
-  filteredROs: RepairOrder[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  searchLoading: boolean;
+  searchROs: RepairOrder[];
+  todayROs: RepairOrder[];
+  previousROs: RepairOrder[];
+  previousExpanded: boolean;
+  onTogglePrevious: () => void;
+  previousLoading: boolean;
+  previousLoadingMore: boolean;
+  previousHasMore: boolean;
+  onLoadMorePrevious: () => void;
   pendingROImages: PendingImage[];
   isProcessingOCR: boolean;
   ocrProgress: number;
@@ -27,9 +36,18 @@ interface HomeViewProps {
 
 export function HomeView({
   technicianName,
-  filteredROs,
   searchTerm,
   onSearchChange,
+  searchLoading,
+  searchROs,
+  todayROs,
+  previousROs,
+  previousExpanded,
+  onTogglePrevious,
+  previousLoading,
+  previousLoadingMore,
+  previousHasMore,
+  onLoadMorePrevious,
   pendingROImages,
   isProcessingOCR,
   ocrProgress,
@@ -88,17 +106,21 @@ export function HomeView({
           />
         </div>
 
-        {filteredROs.length > 0 && (
-          <div className="benz-section-title mb-3 px-0.5">Previous Repair Orders</div>
-        )}
-
-        <RepairOrderList
-          repairOrders={filteredROs}
+        <RepairOrderHomeLists
+          searchTerm={searchTerm}
+          searchLoading={searchLoading}
+          searchResults={searchROs}
+          todayROs={todayROs}
+          previousROs={previousROs}
+          previousExpanded={previousExpanded}
+          onTogglePrevious={onTogglePrevious}
+          previousLoading={previousLoading}
+          previousLoadingMore={previousLoadingMore}
+          previousHasMore={previousHasMore}
+          onLoadMorePrevious={onLoadMorePrevious}
           openingROId={openingROId}
           onOpenRO={onOpenRO}
           onDeleteRO={onDeleteRO}
-          emptyMessage="No repair orders yet."
-          emptyHint="Tap Scan RO to capture or upload repair order pages."
         />
       </div>
     </div>

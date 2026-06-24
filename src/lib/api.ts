@@ -106,14 +106,25 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
-  listRepairOrders: (params?: { limit?: number; cursor?: string }) => {
+  listRepairOrders: (params?: {
+    limit?: number;
+    cursor?: string;
+    scope?: 'today' | 'previous';
+    q?: string;
+  }) => {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.scope) query.set('scope', params.scope);
+    if (params?.q?.trim()) query.set('q', params.q.trim());
     const suffix = query.toString() ? `?${query.toString()}` : '';
-    return apiFetch<{ repairOrders: RepairOrder[]; nextCursor?: string | null; hasMore?: boolean }>(
-      `/api/repair-orders${suffix}`
-    );
+    return apiFetch<{
+      repairOrders: RepairOrder[];
+      nextCursor?: string | null;
+      hasMore?: boolean;
+      scope?: 'today' | 'previous' | 'search';
+      todayStart?: string;
+    }>(`/api/repair-orders${suffix}`);
   },
 
   getRepairOrder: (id: string) => apiFetch<{ repairOrder: RepairOrder }>(`/api/repair-orders/${id}`),
