@@ -51,7 +51,10 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
     },
   });
 
-  const knowledgeBase = await prisma.knowledgeBase.upsert({
+  // M4: Customer Pay templates live in the template table only — not the warranty KB.
+  let knowledgeBase = null;
+  if (input.category !== 'customer') {
+  knowledgeBase = await prisma.knowledgeBase.upsert({
     where: {
       dealershipId_title: {
         dealershipId: input.dealershipId,
@@ -78,10 +81,11 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       dealershipId: input.dealershipId,
     },
   });
+  }
 
   return {
     template: mapTemplate(template),
-    knowledgeBase: mapKnowledgeBase(knowledgeBase),
+    knowledgeBase: knowledgeBase ? mapKnowledgeBase(knowledgeBase) : null,
     tags,
   };
 }

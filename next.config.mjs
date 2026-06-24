@@ -29,28 +29,11 @@ const nextConfig = {
     },
   },
   async headers() {
-    const csp = [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self'",
-      // Self API + xAI (server uses fetch without CSP) + Google Speech (Web Speech API on tablets)
-      "connect-src 'self' https://api.x.ai https://*.google.com https://*.gstatic.com wss://*.google.com",
-      "worker-src 'self' blob: https://cdn.jsdelivr.net",
-      "child-src 'self' blob:",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-      "upgrade-insecure-requests",
-    ].join('; ');
-
+    // M12: CSP is applied in src/middleware.ts with per-request nonces (no unsafe-inline/eval).
     return [
       {
         source: '/(.*)',
         headers: [
-          { key: 'Content-Security-Policy', value: csp },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },

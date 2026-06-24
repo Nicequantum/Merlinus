@@ -283,6 +283,8 @@ export function selectRelevantKnowledgeEntries(
     entry.fullOriginalText.trim().length > 0 || entry.cleanTemplate.trim().length > 0;
 
   const scored = [...entries]
+    // M4: never surface Customer Pay entries in warranty AI knowledge selection.
+    .filter((entry) => entry.category !== 'customer')
     .filter(hasUsableContent)
     .map((entry) => ({ entry, score: scoreKnowledgeEntry(entry, haystack, line.description) }))
     .filter((item) => item.score > 0)

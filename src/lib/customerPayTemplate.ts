@@ -1,8 +1,7 @@
-import { writeCustomerPayTemplateAudit } from '@/lib/audit';
-import { encryptOptionalSensitiveText, decryptSensitiveText } from '@/lib/encryption';
+import { appendAuditLogInTransaction } from '@/lib/audit';
+import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
-import { GLOBAL_DEALERSHIP_ID, recordTemplateUsage } from '@/lib/templateLibrary';
-
+import { GLOBAL_DEALERSHIP_ID } from '@/lib/templateLibrary';
 
 export interface ApplyCustomerPayTemplateInput {
   repairOrderId: string;
@@ -17,16 +16,64 @@ export interface ApplyCustomerPayTemplateResult {
   warrantyStory: string;
   templateTitle: string;
   isCustomerPay: true;
+  /** M3: true when apply was skipped because line already had this template story. */
+  idempotent?: boolean;
+}
+
+export interface ClearCustomerPayModeInput {
+  repairOrderId: string;
+  repairLineId: string;
+  dealershipId: string;
+}
+
+/**
+ * M1: Explicitly clear Customer Pay mode so warranty AI generation can resume.
+ */
+export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Promise<void> {
+  const ro = await prisma.repairOrder.findFirst({
+    where: { id: input.repairOrderId, dealershipId: input.dealershipId },
+    include: { repairLines: true },
+  });
+  if (!ro) throw new Error('Repair order not found');
+  const line = ro.repairLines.find((l) => l.id === input.repairLineId);
+  if (!line) throw new Error('Repair line not found');
+
+  await prisma.repairLine.update({
+    where: { id: input.repairLineId },
+    data: { isCustomerPay: false },
+  });
+}
+
+/** M3: Skip duplicate audit/usage when the same template story is already on the line. */
+async function isDuplicateTemplateApply(
+  line: { isCustomerPay: boolean; warrantyStoryEncrypted: string | null },
+  templateId: string,
+  repairLineId: string,
+  dealershipId: string,
+  preWrittenStory: string
+): Promise<boolean> {
+  if (!line.isCustomerPay) return false;
+  const existingStory = decryptOptionalSensitiveText(line.warrantyStoryEncrypted);
+  if (existingStory !== preWrittenStory) return false;
+
+  const recent = await prisma.auditLog.findFirst({
+    where: {
+      action: 'customerPayTemplateApplied',
+      entityId: repairLineId,
+      dealershipId,
+      createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+      metadata: { contains: `"templateId":"${templateId}"` },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return Boolean(recent);
 }
 
 /**
  * Apply a Customer Pay template to a repair line.
- *
- * Compliance bypass (intentional):
- * - No Grok API call
- * - No MI 2.0 story quality scoring
- * - No Merlin promptVersion on audit (uses customer-pay sentinel)
- * Warranty AI flows remain unchanged for non–Customer Pay lines.
+ * Customer Pay bypasses Grok — instant pre-written stories with lightweight audit only.
+ * M2: Line update, usage counter, and audit run in one transaction.
+ * M3: Idempotent when the same template story is already applied.
  */
 export async function applyCustomerPayTemplate(
   input: ApplyCustomerPayTemplateInput
@@ -42,7 +89,6 @@ export async function applyCustomerPayTemplate(
     throw new Error('Template not found');
   }
 
-  // H14: explicit flag only — category/templateType alone cannot trigger compliance bypass.
   if (!template.isCustomerPay) {
     throw new Error('This template is not a Customer Pay template');
   }
@@ -63,24 +109,56 @@ export async function applyCustomerPayTemplate(
 
   const preWrittenStory = decryptSensitiveText(template.contentEncrypted);
 
-  await prisma.repairLine.update({
-    where: { id: input.repairLineId },
-    data: {
-      warrantyStoryEncrypted: encryptOptionalSensitiveText(preWrittenStory),
+  if (
+    await isDuplicateTemplateApply(
+      line,
+      template.id,
+      input.repairLineId,
+      input.dealershipId,
+      preWrittenStory
+    )
+  ) {
+    return {
+      warrantyStory: preWrittenStory,
+      templateTitle: template.title,
       isCustomerPay: true,
-    },
-  });
+      idempotent: true,
+    };
+  }
 
-  await recordTemplateUsage(input.templateId, input.dealershipId);
+  const encryptedStory = encryptOptionalSensitiveText(preWrittenStory);
 
-  await writeCustomerPayTemplateAudit({
-    dealershipId: input.dealershipId,
-    technicianId: input.technicianId,
-    repairLineId: input.repairLineId,
-    repairOrderId: input.repairOrderId,
-    templateId: template.id,
-    templateTitle: template.title,
-    ipAddress: input.ipAddress,
+  // M2: atomic apply — rollback line + usage + audit together on failure.
+  await prisma.$transaction(async (tx) => {
+    await tx.repairLine.update({
+      where: { id: input.repairLineId },
+      data: {
+        warrantyStoryEncrypted: encryptedStory,
+        isCustomerPay: true,
+      },
+    });
+
+    await tx.template.updateMany({
+      where: {
+        id: input.templateId,
+        OR: [{ dealershipId: input.dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }],
+      },
+      data: { useCount: { increment: 1 }, lastUsedAt: new Date() },
+    });
+
+    await appendAuditLogInTransaction(tx, {
+      action: 'customerPayTemplateApplied',
+      dealershipId: input.dealershipId,
+      technicianId: input.technicianId,
+      entityType: 'repairLine',
+      entityId: input.repairLineId,
+      metadata: {
+        templateId: template.id,
+        templateTitle: template.title,
+        repairOrderId: input.repairOrderId,
+      },
+      ipAddress: input.ipAddress,
+    });
   });
 
   return {

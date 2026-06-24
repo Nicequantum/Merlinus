@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { PROMPT_VERSION } from '@/prompts/version';
+import { sanitizeAuditMetadata } from './auditMetadataSanitize';
 import { prisma } from './db';
 import {
   AUDIT_CUSTOMER_PAY_SENTINEL,
@@ -141,56 +143,66 @@ export async function writeCustomerPayTemplateAudit(input: CustomerPayTemplateAu
   });
 }
 
-export async function writeAuditLog(input: AuditLogInput): Promise<void> {
+/**
+ * M2: Append audit inside an existing transaction (e.g. Customer Pay template apply).
+ * M13: Metadata is sanitized before persistence.
+ */
+export async function appendAuditLogInTransaction(
+  tx: Prisma.TransactionClient,
+  input: AuditLogInput,
+  createdAt = new Date()
+): Promise<void> {
   const promptVersion = resolvePromptVersion(input);
   assertPromptVersionValid(input.action, promptVersion);
+  const metadata = JSON.stringify(sanitizeAuditMetadata(input.metadata, input.action));
 
+  // H5: per-dealership advisory lock prevents concurrent hash-chain forks.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.dealershipId}::text))`;
+
+  const last = await tx.auditLog.findFirst({
+    where: { dealershipId: input.dealershipId },
+    orderBy: { createdAt: 'desc' },
+    select: { entryHash: true },
+  });
+
+  const previousHash = last?.entryHash || AUDIT_GENESIS_HASH;
+  const id = randomUUID();
+  const entryHash = computeAuditEntryHash({
+    id,
+    action: input.action,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    technicianId: input.technicianId ?? null,
+    dealershipId: input.dealershipId,
+    metadata,
+    ipAddress: input.ipAddress ?? null,
+    createdAt: createdAt.toISOString(),
+    previousHash,
+    promptVersion,
+  });
+
+  await tx.auditLog.create({
+    data: {
+      id,
+      action: input.action,
+      dealershipId: input.dealershipId,
+      technicianId: input.technicianId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      metadata,
+      ipAddress: input.ipAddress,
+      promptVersion,
+      previousHash,
+      entryHash,
+      createdAt,
+    },
+  });
+}
+
+export async function writeAuditLog(input: AuditLogInput): Promise<void> {
   try {
-    const metadata = JSON.stringify(input.metadata ?? {});
-    const createdAt = new Date();
-
     await prisma.$transaction(async (tx) => {
-      // H5: per-dealership advisory lock prevents concurrent hash-chain forks.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.dealershipId}::text))`;
-
-      const last = await tx.auditLog.findFirst({
-        where: { dealershipId: input.dealershipId },
-        orderBy: { createdAt: 'desc' },
-        select: { entryHash: true },
-      });
-
-      const previousHash = last?.entryHash || AUDIT_GENESIS_HASH;
-      const id = randomUUID();
-      const entryHash = computeAuditEntryHash({
-        id,
-        action: input.action,
-        entityType: input.entityType ?? null,
-        entityId: input.entityId ?? null,
-        technicianId: input.technicianId ?? null,
-        dealershipId: input.dealershipId,
-        metadata,
-        ipAddress: input.ipAddress ?? null,
-        createdAt: createdAt.toISOString(),
-        previousHash,
-        promptVersion,
-      });
-
-      await tx.auditLog.create({
-        data: {
-          id,
-          action: input.action,
-          dealershipId: input.dealershipId,
-          technicianId: input.technicianId,
-          entityType: input.entityType,
-          entityId: input.entityId,
-          metadata,
-          ipAddress: input.ipAddress,
-          promptVersion,
-          previousHash,
-          entryHash,
-          createdAt,
-        },
-      });
+      await appendAuditLogInTransaction(tx, input);
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Audit log rejected:')) {

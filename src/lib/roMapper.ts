@@ -99,9 +99,13 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     ? decryptPII(ro.serviceAdvisorNameEncrypted)
     : undefined;
 
+  const roNumberEncrypted = (ro as DbRO & { roNumberEncrypted?: string }).roNumberEncrypted;
+  const decryptedRoNumber = roNumberEncrypted ? decryptPII(roNumberEncrypted) : '';
+  const roNumber = decryptedRoNumber || ro.roNumber;
+
   return {
     id: ro.id,
-    roNumber: ro.roNumber,
+    roNumber,
     vehicle: {
       vin: decryptPII(ro.vinEncrypted),
       year: ro.year,
@@ -137,10 +141,16 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
 }
 
 export function dbToRepairLine(line: DbLine): RepairLine {
+  const descriptionEncrypted = (line as DbLine & { descriptionEncrypted?: string }).descriptionEncrypted;
+  const description =
+    descriptionEncrypted && descriptionEncrypted.trim()
+      ? decryptSensitiveText(descriptionEncrypted)
+      : line.description;
+
   return {
     id: line.id,
     lineNumber: line.lineNumber,
-    description: line.description,
+    description,
     customerConcern: decryptPII(line.customerConcernEncrypted),
     technicianNotes: decryptSensitiveText(line.technicianNotesEncrypted),
     xentryImages: parseImageAttachments(line.xentryImageUrls),
@@ -170,9 +180,12 @@ export interface RepairOrderInput {
   repairLines: RepairLine[];
 }
 
-export function repairOrderToDbFields(input: RepairOrderInput) {
+export function repairOrderToDbFields(
+  input: RepairOrderInput & { serviceAdvisorName?: string }
+) {
   return {
     roNumber: input.roNumber,
+    roNumberEncrypted: encryptPII(input.roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
     year: input.vehicle.year,
     make: input.vehicle.make,
@@ -184,6 +197,9 @@ export function repairOrderToDbFields(input: RepairOrderInput) {
     complaintsEncrypted: encryptComplaintsPayload(input.complaints, input.complaintLabels),
     xentryImageUrls: imageAttachmentsToJson(input.xentryImages),
     xentryOcrTextsEncrypted: encryptStringArray(input.xentryOcrTexts || []),
+    ...(input.serviceAdvisorName
+      ? { serviceAdvisorNameEncrypted: encryptPII(input.serviceAdvisorName) }
+      : {}),
   };
 }
 
@@ -191,6 +207,7 @@ export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
     description: line.description,
+    descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),
     technicianNotesEncrypted: encryptSensitiveText(line.technicianNotes),
     xentryImageUrls: imageAttachmentsToJson(line.xentryImages),

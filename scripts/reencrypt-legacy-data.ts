@@ -16,25 +16,40 @@ import {
 
 const prisma = new PrismaClient();
 
+/** M26: batch size keeps memory flat on large production databases. */
+const BATCH_SIZE = Math.max(10, Number(process.env.REENCRYPT_BATCH_SIZE ?? 100));
+
 interface MigrationStats {
   scanned: number;
   updated: number;
 }
 
 async function migrateRepairOrders(): Promise<MigrationStats> {
-  const rows = await prisma.repairOrder.findMany({
-    select: {
-      id: true,
-      vinEncrypted: true,
-      customerNameEncrypted: true,
-      complaintsEncrypted: true,
-      xentryOcrTextsEncrypted: true,
-      serviceAdvisorNameEncrypted: true,
-    },
-  });
-
+  let scanned = 0;
   let updated = 0;
-  for (const row of rows) {
+  let cursor: string | undefined;
+
+  for (;;) {
+    const rows = await prisma.repairOrder.findMany({
+      take: BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        vinEncrypted: true,
+        customerNameEncrypted: true,
+        complaintsEncrypted: true,
+        xentryOcrTextsEncrypted: true,
+        serviceAdvisorNameEncrypted: true,
+        roNumberEncrypted: true,
+        roNumber: true,
+      },
+    });
+    if (rows.length === 0) break;
+    cursor = rows[rows.length - 1]?.id;
+
+    for (const row of rows) {
+      scanned += 1;
     const data: Record<string, string> = {};
 
     const vin = migratePlaintextToEncrypted(row.vinEncrypted);
@@ -52,29 +67,46 @@ async function migrateRepairOrders(): Promise<MigrationStats> {
     const advisorName = migratePlaintextToEncrypted(row.serviceAdvisorNameEncrypted);
     if (advisorName !== row.serviceAdvisorNameEncrypted) data.serviceAdvisorNameEncrypted = advisorName;
 
+    const roNumberEnc = migratePlaintextToEncrypted(row.roNumberEncrypted || row.roNumber);
+    if (roNumberEnc && roNumberEnc !== row.roNumberEncrypted) data.roNumberEncrypted = roNumberEnc;
+
     if (Object.keys(data).length > 0) {
       await prisma.repairOrder.update({ where: { id: row.id }, data });
       updated += 1;
     }
+    }
+    if (rows.length < BATCH_SIZE) break;
   }
 
-  return { scanned: rows.length, updated };
+  return { scanned, updated };
 }
 
 async function migrateRepairLines(): Promise<MigrationStats> {
-  const rows = await prisma.repairLine.findMany({
-    select: {
-      id: true,
-      customerConcernEncrypted: true,
-      technicianNotesEncrypted: true,
-      xentryOcrTextsEncrypted: true,
-      extractedDataEncrypted: true,
-      warrantyStoryEncrypted: true,
-    },
-  });
-
+  let scanned = 0;
   let updated = 0;
-  for (const row of rows) {
+  let cursor: string | undefined;
+
+  for (;;) {
+    const rows = await prisma.repairLine.findMany({
+      take: BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        description: true,
+        descriptionEncrypted: true,
+        customerConcernEncrypted: true,
+        technicianNotesEncrypted: true,
+        xentryOcrTextsEncrypted: true,
+        extractedDataEncrypted: true,
+        warrantyStoryEncrypted: true,
+      },
+    });
+    if (rows.length === 0) break;
+    cursor = rows[rows.length - 1]?.id;
+
+    for (const row of rows) {
+      scanned += 1;
     const data: Record<string, string | null> = {};
 
     const customerConcern = migratePlaintextToEncrypted(row.customerConcernEncrypted);
@@ -92,13 +124,18 @@ async function migrateRepairLines(): Promise<MigrationStats> {
     const warrantyStory = migratePlaintextOptionalToEncrypted(row.warrantyStoryEncrypted);
     if (warrantyStory !== row.warrantyStoryEncrypted) data.warrantyStoryEncrypted = warrantyStory;
 
+    const descriptionEnc = migratePlaintextToEncrypted(row.descriptionEncrypted || row.description);
+    if (descriptionEnc && descriptionEnc !== row.descriptionEncrypted) data.descriptionEncrypted = descriptionEnc;
+
     if (Object.keys(data).length > 0) {
       await prisma.repairLine.update({ where: { id: row.id }, data });
       updated += 1;
     }
+    }
+    if (rows.length < BATCH_SIZE) break;
   }
 
-  return { scanned: rows.length, updated };
+  return { scanned, updated };
 }
 
 async function migrateAdvisorObservations(): Promise<MigrationStats> {

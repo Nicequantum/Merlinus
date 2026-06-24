@@ -87,6 +87,8 @@ const repairLineSchema = z.object({
   warrantyStory: safeTextOptional(5000),
   /** Sticky Customer Pay flag — preserved on RO save when omitted from client payload. */
   isCustomerPay: z.boolean().optional(),
+  /** M1: Explicit intent to clear Customer Pay mode (isCustomerPay: false alone is ignored). */
+  clearCustomerPay: z.boolean().optional(),
 });
 
 const advisorExtractionSourceSchema = z.enum(['grok', 'ocr_fallback', 'manual']);

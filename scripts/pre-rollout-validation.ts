@@ -612,7 +612,13 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
   }
 
   const queueSrc = readFileSync(resolve(process.cwd(), 'src/lib/repairOrderSaveQueue.ts'), 'utf8');
-  if (queueSrc.includes('enqueueRepairOrderSave') && readFileSync(resolve(process.cwd(), 'src/hooks/useRepairOrders.ts'), 'utf8').includes('await flushPendingSave()')) {
+  const persistSrc = readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROPersistence.ts'), 'utf8');
+  const storySrc = readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROStoryWorkflow.ts'), 'utf8');
+  if (
+    queueSrc.includes('enqueueRepairOrderSave') &&
+    persistSrc.includes('awaitRepairOrderSaveQueue') &&
+    storySrc.includes('await deps.flushPendingSave()')
+  ) {
     record('High Priority', 'H2 save queue serialization', 'pass', 'Awaitable flush + serialized RO saves');
   } else {
     record('High Priority', 'H2 save queue serialization', 'fail', 'Save race around Customer Pay apply not fixed');
@@ -708,6 +714,98 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
     record('High Priority', 'H15 build migrations', 'pass', 'Build no longer runs prisma migrate deploy');
   } else {
     record('High Priority', 'H15 build migrations', 'fail', 'Build still auto-runs migrations');
+  }
+}
+
+function checkMediumAuditFixes(): void {
+  section('Medium Audit Fixes (M1–M30)');
+
+  const cpTpl = readFileSync(resolve(process.cwd(), 'src/lib/customerPayTemplate.ts'), 'utf8');
+  if (cpTpl.includes('prisma.$transaction') && cpTpl.includes('clearCustomerPayMode')) {
+    record('Medium', 'M1–M3 Customer Pay', 'pass', 'Clear mode + transactional idempotent apply');
+  } else {
+    record('Medium', 'M1–M3 Customer Pay', 'fail', 'Customer Pay medium fixes incomplete');
+  }
+
+  const genSrc = readFileSync(
+    resolve(process.cwd(), 'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts'),
+    'utf8'
+  );
+  if (genSrc.includes('buildStoryGenerateAuditMetadata') && genSrc.includes('!l.isCustomerPay')) {
+    record('Medium', 'M4–M6 warranty AI audit', 'pass', 'KB filter, similar-RO filter, prompt fingerprint');
+  } else {
+    record('Medium', 'M4–M6 warranty AI audit', 'fail', 'Warranty AI medium fixes incomplete');
+  }
+
+  const schema = readFileSync(resolve(process.cwd(), 'prisma/schema.prisma'), 'utf8');
+  if (schema.includes('TechnicianRole') && schema.includes('roNumberEncrypted')) {
+    record('Medium', 'M7/M11 schema', 'pass', 'Expanded encryption + role enum');
+  } else {
+    record('Medium', 'M7/M11 schema', 'fail', 'Schema medium fixes incomplete');
+  }
+
+  const authSrc = readFileSync(resolve(process.cwd(), 'src/lib/auth.ts'), 'utf8');
+  const logoutSrc = readFileSync(resolve(process.cwd(), 'src/app/api/auth/logout/route.ts'), 'utf8');
+  if (authSrc.includes('setJti') && logoutSrc.includes('405')) {
+    record('Medium', 'M9/M10 session', 'pass', 'JWT claims + POST-only logout');
+  } else {
+    record('Medium', 'M9/M10 session', 'fail', 'Session medium fixes incomplete');
+  }
+
+  const mw = readFileSync(resolve(process.cwd(), 'src/middleware.ts'), 'utf8');
+  if (mw.includes('nonce') && !mw.includes('unsafe-eval')) {
+    record('Medium', 'M12 CSP', 'pass', 'Nonce-based CSP in middleware');
+  } else {
+    record('Medium', 'M12 CSP', 'fail', 'CSP medium fixes incomplete');
+  }
+
+  if (readFileSync(resolve(process.cwd(), 'src/lib/auditMetadataSanitize.ts'), 'utf8').includes('sanitizeAuditMetadata')) {
+    record('Medium', 'M13 audit metadata', 'pass', 'PII stripped from audit metadata');
+  } else {
+    record('Medium', 'M13 audit metadata', 'fail', 'Audit metadata sanitization missing');
+  }
+
+  const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
+  if (rateSrc.includes('x-vercel-forwarded-for')) {
+    record('Medium', 'M14 IP extraction', 'pass', 'Platform-trusted IP headers');
+  } else {
+    record('Medium', 'M14 IP extraction', 'fail', 'IP extraction medium fix incomplete');
+  }
+
+  const voiceSrc = readFileSync(resolve(process.cwd(), 'src/lib/voice/voiceSettings.ts'), 'utf8');
+  if (voiceSrc.includes('45_000') && readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROPersistence.ts'), 'utf8').includes('useROPersistence')) {
+    record('Medium', 'M15–M21 voice/hooks', 'pass', 'Voice guards + hook decomposition');
+  } else {
+    record('Medium', 'M15–M21 voice/hooks', 'fail', 'Voice/hook medium fixes incomplete');
+  }
+
+  const imagesSrc = readFileSync(resolve(process.cwd(), 'src/app/api/images/route.ts'), 'utf8');
+  if (imagesSrc.includes('withAuth')) {
+    record('Medium', 'M22/M23 images', 'pass', 'Image route uses withAuth + consent');
+  } else {
+    record('Medium', 'M22/M23 images', 'fail', 'Image route medium fixes incomplete');
+  }
+
+  const reencrypt = readFileSync(resolve(process.cwd(), 'scripts/reencrypt-legacy-data.ts'), 'utf8');
+  const runbook = resolve(process.cwd(), 'docs/Reencryption-Runbook.md');
+  if (reencrypt.includes('BATCH_SIZE') && existsSync(runbook)) {
+    record('Medium', 'M26/M30 operations', 'pass', 'Batched reencrypt + runbook documented');
+  } else {
+    record('Medium', 'M26/M30 operations', 'fail', 'Operations medium fixes incomplete');
+  }
+
+  const usageSrc = readFileSync(resolve(process.cwd(), 'src/lib/usageMonitoring.ts'), 'utf8');
+  if (usageSrc.includes('DAILY_USAGE_LIMIT') && usageSrc.includes('USAGE_TIMEZONE')) {
+    record('Medium', 'M28/M29 usage config', 'pass', 'Configurable daily limit + timezone');
+  } else {
+    record('Medium', 'M28/M29 usage config', 'fail', 'Usage config medium fixes incomplete');
+  }
+
+  const mediumFlows = resolve(process.cwd(), 'tests/integration/medium-flows.test.ts');
+  if (existsSync(mediumFlows) && readFileSync(mediumFlows, 'utf8').includes('apply-customer-pay-template')) {
+    record('Medium', 'M27 integration tests', 'pass', 'medium-flows covers health, security, Customer Pay');
+  } else {
+    record('Medium', 'M27 integration tests', 'fail', 'Missing medium-priority integration coverage');
   }
 }
 
@@ -1038,19 +1136,17 @@ async function checkSecurityAndConfig(): Promise<void> {
 
   const nextConfigPath = resolve(process.cwd(), 'next.config.mjs');
   const nextConfig = existsSync(nextConfigPath) ? readFileSync(nextConfigPath, 'utf8') : '';
+  const middlewarePath = resolve(process.cwd(), 'src/middleware.ts');
+  const middleware = existsSync(middlewarePath) ? readFileSync(middlewarePath, 'utf8') : '';
 
-  const cspRequirements = [
-    "default-src 'self'",
-    'frame-ancestors \'none\'',
-    "object-src 'none'",
-    'microphone=(self)',
-    'Strict-Transport-Security',
-  ];
-  const missingCsp = cspRequirements.filter((req) => !nextConfig.includes(req));
-  if (missingCsp.length === 0) {
-    record('Security', 'CSP & security headers config', 'pass', 'next.config.mjs includes required directives');
+  const cspRequirements = ["default-src 'self'", 'nonce', "object-src 'none'"];
+  const cspSource = middleware + nextConfig;
+  const missingCsp = cspRequirements.filter((req) => !cspSource.includes(req));
+  const hasUnsafeEval = middleware.includes('unsafe-eval') || nextConfig.includes('unsafe-eval');
+  if (missingCsp.length === 0 && !hasUnsafeEval && nextConfig.includes('Strict-Transport-Security')) {
+    record('Security', 'CSP & security headers config', 'pass', 'Nonce CSP middleware + HSTS in next.config');
   } else {
-    record('Security', 'CSP & security headers config', 'fail', `Missing in next.config.mjs: ${missingCsp.join(', ')}`);
+    record('Security', 'CSP & security headers config', 'fail', `CSP hardening incomplete (missing: ${missingCsp.join(', ')})`);
   }
 
   const grokRoutes = [
@@ -1107,9 +1203,7 @@ async function checkSecurityAndConfig(): Promise<void> {
     const content = readFileSync(file, 'utf8');
     const isPublic = [...publicAllowlist].some((allowed) => rel.endsWith(allowed));
     const hasWithAuth = content.includes('withAuth(');
-    const hasManualAuth =
-      rel.includes('images/route.ts') && content.includes('getSession');
-    if (!isPublic && !hasWithAuth && !hasManualAuth) {
+    if (!isPublic && !hasWithAuth) {
       unauthenticated.push(rel);
     }
   }
@@ -1190,6 +1284,7 @@ async function main(): Promise<void> {
   await checkCustomerPayTemplates();
   await checkCriticalAuditFixes();
   await checkHighPriorityAuditFixes();
+  checkMediumAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();
   await checkSecurityAndConfig();

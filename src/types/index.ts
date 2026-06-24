@@ -40,6 +40,8 @@ export interface RepairLine {
   warrantyStory?: string;
   /** Set when a Customer Pay template was applied — bypasses AI generation and quality audit. */
   isCustomerPay?: boolean;
+  /** M1: client-only flag to explicitly clear Customer Pay on save. */
+  clearCustomerPay?: boolean;
 }
 
 export interface VehicleWarrantyInfo {
@@ -99,6 +101,8 @@ export interface StoryTemplate {
   category: TemplateCategory;
   content: string;
   isCustomerPay?: boolean;
+  /** M1: client-only flag to explicitly clear Customer Pay on save. */
+  clearCustomerPay?: boolean;
   templateType?: 'Warranty' | 'CustomerPay';
   description?: string | null;
   source?: string;

@@ -17,9 +17,9 @@ describe('voice confidence adaptation', () => {
     assert.equal(threshold, DEFAULT_VOICE_INPUT_SETTINGS.minConfidenceThreshold);
   });
 
-  test('passes when confidence is unknown (browser omission)', () => {
-    assert.equal(passesConfidenceGate(undefined, 0.9), true);
-    assert.equal(passesConfidenceGate(null, 0.9), true);
+  test('M19: null confidence accepted in noisy bays only', () => {
+    assert.equal(passesConfidenceGate(undefined, 0.9, 25), true);
+    assert.equal(passesConfidenceGate(null, 0.9, 5), false);
   });
 
   test('gates low-confidence hypotheses in quiet bays', () => {

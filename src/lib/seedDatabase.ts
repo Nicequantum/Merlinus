@@ -53,6 +53,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         role: 'manager',
         isAdmin: true,
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
       },
     });
@@ -64,6 +65,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         role: 'manager',
         isAdmin: true,
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(managerD7),
       },
@@ -92,6 +94,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         passwordHash: techPasswordHash,
         role: 'technician',
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
       },
     });
@@ -102,8 +105,11 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         passwordHash: techPasswordHash,
         role: 'technician',
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(techD7),
+        consentAt: new Date(),
+        consentVersion: '2026-06-07-v1',
       },
       create: {
         d7Number: techD7,

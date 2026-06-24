@@ -1,0 +1,186 @@
+import assert from 'node:assert/strict';
+import { after, before, describe, test } from 'node:test';
+import { PrismaClient } from '@prisma/client';
+import { GET as getHealth } from '../../src/app/api/health/route';
+import { GET as getSecurityStatus } from '../../src/app/api/auth/security-status/route';
+import { GET as getLogout } from '../../src/app/api/auth/logout/route';
+import { POST as postApplyCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/apply-customer-pay-template/route';
+import { POST as postClearCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route';
+import { createSessionToken } from '../../src/lib/auth';
+import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
+
+const prisma = new PrismaClient();
+
+/** M27: integration coverage for health, security-status, logout, and Customer Pay apply. */
+describe('medium-priority route flows', () => {
+  let managerId = '';
+  let dealershipId = '';
+  let managerToken = '';
+  let customerPayTemplateId = '';
+  let testRoId = '';
+  let testLineId = '';
+
+  before(async () => {
+    const dealership = await prisma.dealership.findFirst();
+    assert.ok(dealership, 'Seed dealership required');
+    dealershipId = dealership.id;
+
+    const manager = await prisma.technician.findFirst({
+      where: { dealershipId, role: 'manager', isActive: true },
+    });
+    assert.ok(manager, 'Seed manager required');
+    managerId = manager.id;
+    managerToken = await createSessionToken({
+      technicianId: manager.id,
+      d7Number: manager.d7Number,
+      name: manager.name,
+      role: manager.role,
+      isAdmin: manager.isAdmin,
+      dealershipId: manager.dealershipId,
+      dealershipName: dealership.name,
+      consentAt: manager.consentAt?.toISOString() ?? new Date().toISOString(),
+      sessionVersion: manager.sessionVersion,
+    });
+
+    const cpTemplate = await prisma.template.findFirst({
+      where: { isCustomerPay: true },
+      select: { id: true },
+    });
+    assert.ok(cpTemplate, 'Seed Customer Pay template required');
+    customerPayTemplateId = cpTemplate.id;
+
+    const roInput = {
+      roNumber: `M27-${Date.now().toString().slice(-6)}`,
+      vehicle: {
+        vin: 'WDDWF4KB0FR123456',
+        year: '2015',
+        make: 'Mercedes-Benz',
+        model: 'C-Class',
+        engine: '',
+        mileageIn: '45000',
+        mileageOut: '',
+      },
+      customer: { name: 'M27 Integration Customer' },
+      complaints: ['Customer states check engine light is on'],
+      repairLines: [
+        {
+          id: 'm27-line-1',
+          lineNumber: 1,
+          description: 'Customer states check engine light is on',
+          customerConcern: 'Check engine light on',
+          technicianNotes: '',
+          xentryImages: [],
+        },
+      ],
+    };
+
+    const ro = await prisma.repairOrder.create({
+      data: {
+        ...repairOrderToDbFields(roInput),
+        technicianId: managerId,
+        dealershipId,
+        repairLines: {
+          create: roInput.repairLines.map((line) => repairLineToDbFields(line)),
+        },
+      },
+      include: { repairLines: true },
+    });
+    testRoId = ro.id;
+    testLineId = ro.repairLines[0]!.id;
+  });
+
+  after(async () => {
+    if (testRoId) {
+      await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
+    }
+    await prisma.$disconnect();
+  });
+
+  test('M20: /api/health requires manager auth and reports voice config', async () => {
+    const unauth = await getHealth(new Request('http://localhost/api/health'));
+    const unauthBody = await readJsonResponse(unauth);
+    assert.equal(unauthBody.status, 401);
+
+    const request = buildAuthenticatedRequest('http://localhost/api/health', managerToken);
+    const response = await getHealth(request);
+    const { status, body } = await readJsonResponse<{ services?: { voice?: string } }>(response);
+    assert.equal(status, 200);
+    assert.equal(body.services?.voice, 'ok');
+  });
+
+  test('M4 security-status requires manager session', async () => {
+    const request = buildAuthenticatedRequest('http://localhost/api/auth/security-status', managerToken);
+    const response = await getSecurityStatus(request);
+    const { status } = await readJsonResponse(response);
+    assert.equal(status, 200);
+  });
+
+  test('M10: GET logout returns 405', async () => {
+    const response = await getLogout(new Request('http://localhost/api/auth/logout'));
+    const { status } = await readJsonResponse(response);
+    assert.equal(status, 405);
+  });
+
+  test('M2/M3: Customer Pay apply is transactional and idempotent', async () => {
+    const applyUrl = `http://localhost/api/repair-orders/${testRoId}/lines/${testLineId}/apply-customer-pay-template`;
+    const buildApplyRequest = () =>
+      buildAuthenticatedRequest(applyUrl, managerToken, {
+        method: 'POST',
+        body: { templateId: customerPayTemplateId },
+      });
+
+    const first = await postApplyCustomerPay(buildApplyRequest(), {
+      params: Promise.resolve({ id: testRoId, lineId: testLineId }),
+    });
+    const firstBody = await readJsonResponse<{
+      isCustomerPay: boolean;
+      warrantyStory: string;
+      idempotent?: boolean;
+    }>(first);
+    assert.equal(firstBody.status, 200);
+    assert.equal(firstBody.body.isCustomerPay, true);
+    assert.ok(firstBody.body.warrantyStory.length > 0);
+    assert.equal(firstBody.body.idempotent, undefined);
+
+    const auditCount = await prisma.auditLog.count({
+      where: {
+        action: 'customerPayTemplateApplied',
+        entityId: testLineId,
+        dealershipId,
+      },
+    });
+    assert.equal(auditCount, 1);
+
+    const second = await postApplyCustomerPay(buildApplyRequest(), {
+      params: Promise.resolve({ id: testRoId, lineId: testLineId }),
+    });
+    const secondBody = await readJsonResponse<{ idempotent?: boolean }>(second);
+    assert.equal(secondBody.status, 200);
+    assert.equal(secondBody.body.idempotent, true);
+
+    const auditCountAfter = await prisma.auditLog.count({
+      where: {
+        action: 'customerPayTemplateApplied',
+        entityId: testLineId,
+        dealershipId,
+      },
+    });
+    assert.equal(auditCountAfter, 1);
+  });
+
+  test('M1: clear Customer Pay mode restores warranty AI eligibility', async () => {
+    const clearUrl = `http://localhost/api/repair-orders/${testRoId}/lines/${testLineId}/clear-customer-pay`;
+    const clearRequest = buildAuthenticatedRequest(clearUrl, managerToken, { method: 'POST' });
+    const clearResponse = await postClearCustomerPay(clearRequest, {
+      params: Promise.resolve({ id: testRoId, lineId: testLineId }),
+    });
+    assert.equal(clearResponse.status, 200);
+
+    const line = await prisma.repairLine.findUnique({
+      where: { id: testLineId },
+      select: { isCustomerPay: true },
+    });
+    assert.equal(line?.isCustomerPay, false);
+  });
+});

@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/** M11: enforce technician/manager at the database layer. */
+enum TechnicianRole {
+  technician
+  manager
+}
+
 model Dealership {
   id              String                        @id @default(cuid())
   name            String
@@ -25,7 +31,7 @@ model Technician {
   d7Number       String        @unique
   name           String
   passwordHash   String
-  role           String        @default("technician")
+  role           TechnicianRole @default(technician)
   isAdmin        Boolean       @default(false)
   isActive       Boolean       @default(true)
   sessionVersion Int           @default(0)
@@ -48,6 +54,8 @@ model Technician {
 model RepairOrder {
   id                         String       @id @default(cuid())
   roNumber                   String
+  /** M7: encrypted RO number — roNumber may hold legacy/plain lookup token during migration. */
+  roNumberEncrypted          String       @default("")
   technicianId               String
   technician                 Technician   @relation(fields: [technicianId], references: [id])
   dealershipId               String
@@ -86,6 +94,8 @@ model ServiceAdvisor {
   dealershipId    String
   dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   displayName     String
+  /** M7: encrypted advisor display name for PII at rest. */
+  displayNameEncrypted String @default("")
   nameFingerprint String
   advisorCode     String?
   status          String   @default("active")
@@ -155,6 +165,8 @@ model RepairLine {
   repairOrder               RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
   lineNumber                Int
   description               String
+  /** M7: encrypted line description when it may contain customer text. */
+  descriptionEncrypted      String      @default("")
   customerConcernEncrypted  String      @default("")
   technicianNotesEncrypted  String      @default("")
   xentryImageUrls           String      @default("[]")

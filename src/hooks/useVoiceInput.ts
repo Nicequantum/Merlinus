@@ -58,7 +58,16 @@ export function useVoiceInput() {
     serviceRef.current = service;
     void service.refreshPermission();
 
+    // M17: release mic when tab is hidden or page unloads.
+    const onHide = () => service.stop();
+    const onPageHide = () => service.destroy();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') onHide();
+    });
+    window.addEventListener('pagehide', onPageHide);
+
     return () => {
+      window.removeEventListener('pagehide', onPageHide);
       service.destroy();
       serviceRef.current = null;
     };

@@ -23,9 +23,9 @@ import {
   rebuildExtractedFromOcrTexts,
 } from '@/utils/diagnosticParser';
 import { getSuggestions } from '@/utils/mercedesKb';
-import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { debounce } from '@/lib/debounce';
-import { awaitRepairOrderSaveQueue, enqueueRepairOrderSave } from '@/lib/repairOrderSaveQueue';
+
+import { useROPersistence } from '@/hooks/repairOrders/useROPersistence';
+import { useROStoryWorkflow } from '@/hooks/repairOrders/useROStoryWorkflow';
 import {
   createManualRepairOrder,
   createNewRepairLine,
@@ -111,7 +111,11 @@ export function useRepairOrders({
   }, [normalizeRepairOrder]);
 
   useEffect(() => {
-    refreshList().catch(() => setLoading(false));
+    refreshList().catch((error) => {
+      console.error('[useRepairOrders] refreshList failed', error);
+      toast.error('Could not load repair orders — check your connection');
+      setLoading(false);
+    });
   }, [refreshList]);
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
@@ -129,87 +133,11 @@ export function useRepairOrders({
     }
   }, [view, currentRO, currentLineId]);
 
-  const persistRO = useCallback(
-    async (ro: RepairOrder): Promise<RepairOrder> => {
-      return enqueueRepairOrderSave(async () => {
-        const isNew = !allROs.some((r) => r.id === ro.id) || ro.id.startsWith('ro-');
-        if (isNew && ro.id.startsWith('ro-')) {
-          const { repairOrder } = await api.createRepairOrder(ro);
-          setAllROs((prev) => [repairOrder, ...prev.filter((r) => r.id !== ro.id)]);
-          return repairOrder;
-        }
-        const { repairOrder } = await api.updateRepairOrder(ro.id, ro);
-        setAllROs((prev) => prev.map((r) => (r.id === repairOrder.id ? repairOrder : r)));
-        return repairOrder;
-      });
-    },
-    [allROs]
-  );
-
-  const saveROImmediate = useCallback(
-    async (ro: RepairOrder | null) => {
-      if (ro) {
-        try {
-          const persisted = await persistRO(ro);
-          const saved = ensureComplaintIds(
-            ro.complaintIds && ro.complaintIds.length === persisted.complaints.length
-              ? { ...persisted, complaintIds: ro.complaintIds }
-              : persisted
-          );
-          roRef.current = saved;
-          setCurrentRO(saved);
-          setAllROs((prev) => {
-            const idx = prev.findIndex((r) => r.id === saved.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = saved;
-              return copy;
-            }
-            return [saved, ...prev];
-          });
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Failed to save repair order');
-        }
-      } else {
-        roRef.current = null;
-        setCurrentRO(null);
-      }
-    },
-    [persistRO]
-  );
-
-  const debouncedPersistRef = useRef(
-    debounce((ro: RepairOrder) => {
-      void saveROImmediate(ro);
-    }, 450)
-  );
-
-  const flushPendingSave = useCallback(async () => {
-    await debouncedPersistRef.current.flush();
-    await awaitRepairOrderSaveQueue();
-  }, []);
-
-  const scheduleSaveRO = useCallback((ro: RepairOrder) => {
-    debouncedPersistRef.current(ro);
-  }, []);
-
-  const applyROUpdate = useCallback(
-    (updater: (ro: RepairOrder) => RepairOrder, options?: { immediate?: boolean }) => {
-      const base = roRef.current;
-      if (!base) return null;
-      const updated = ensureComplaintIds(structuredClone(updater(base)));
-      roRef.current = updated;
-      setCurrentRO(updated);
-      setAllROs((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      if (options?.immediate) {
-        debouncedPersistRef.current.cancel();
-        void saveROImmediate(updated);
-      } else {
-        scheduleSaveRO(updated);
-      }
-      return updated;
-    },
-    [flushPendingSave, saveROImmediate, scheduleSaveRO]
+  const { flushPendingSave, applyROUpdate, saveROImmediate } = useROPersistence(
+    allROs,
+    setAllROs,
+    roRef,
+    setCurrentRO
   );
 
   const navigateView = useCallback(
@@ -1052,203 +980,30 @@ export function useRepairOrders({
     });
   }, []);
 
-  const applyCustomerPayTemplate = useCallback(
-    async (lineId: string, templateId: string) => {
-      await flushPendingSave();
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const roId = latestRO.id;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
-      if (!line) {
-        toast.error('Repair line not found — refresh the RO and try again');
-        return;
-      }
-
-      clearLineQualityState(lineId);
-      invalidateReviewRequests();
-      setStoryReviewByLine((prev) => {
-        if (!prev[lineId]) return prev;
-        const next = { ...prev };
-        delete next[lineId];
-        return next;
-      });
-
-      try {
-        const result = await api.applyCustomerPayTemplate(roId, lineId, templateId);
-        applyROUpdate(
-          (ro) => {
-            if (ro.id !== roId) return ro;
-            return {
-              ...ro,
-              repairLines: ro.repairLines.map((l) =>
-                l.id === lineId
-                  ? { ...l, warrantyStory: result.warrantyStory, isCustomerPay: true }
-                  : l
-              ),
-            };
-          },
-          { immediate: true }
-        );
-        toast.success(`"${result.templateTitle}" applied — Customer Pay instant story`);
-      } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : 'Failed to apply Customer Pay template');
-      }
-    },
-    [applyROUpdate, clearLineQualityState, flushPendingSave, invalidateReviewRequests]
-  );
-
-  const generateStory = useCallback(
-    async (lineId: string) => {
-      if (storyGenerationInFlightRef.current) return;
-      if (storyReviewInFlightRef.current) {
-        invalidateReviewRequests();
-      }
-      flushPendingSave();
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const roId = latestRO.id;
-      const targetLine = latestRO.repairLines.find((line) => line.id === lineId);
-      if (!targetLine) {
-        toast.error('Repair line not found — refresh the RO and try again');
-        return;
-      }
-      if (isCustomerPayRepairLine(targetLine)) {
-        toast.error('Customer Pay line — story is already set. Edit directly or pick another template.');
-        return;
-      }
-
-      clearLineQualityState(lineId);
-      invalidateReviewRequests();
-
-      const seq = ++generateStorySeqRef.current;
-      storyGenerationInFlightRef.current = true;
-      setGeneratingLineId(lineId);
-      setIsGenerating(true);
-      try {
-        const { warrantyStory, quality } = await api.generateStory(roId, lineId);
-        if (seq !== generateStorySeqRef.current) return;
-
-        const activeRO = roRef.current;
-        if (!activeRO || activeRO.id !== roId) {
-          toast.success('Story generated — reopen the repair order to view it');
-          return;
-        }
-
-        if (!activeRO.repairLines.some((l) => l.id === lineId)) {
-          toast.success('Story generated — reopen this line to view it');
-          return;
-        }
-
-        setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
-        applyROUpdate(
-          (ro) => {
-            if (ro.id !== roId) return ro;
-            return {
-              ...ro,
-              repairLines: ro.repairLines.map((l) => (l.id === lineId ? { ...l, warrantyStory } : l)),
-            };
-          },
-          { immediate: true }
-        );
-
-        if (quality) {
-          const baseline = (quality.scoredAgainstStory ?? warrantyStory).trim();
-          if (baseline === warrantyStory.trim()) {
-            setStoryQualityByLine((prev) => ({ ...prev, [lineId]: { ...quality, scoredAgainstStory: baseline } }));
-          }
-        }
-
-        toast.success(
-          quality
-            ? `Warranty story generated — MI 2.0 score: ${quality.score}/100`
-            : 'Warranty story generated — edit as needed, then save as a template'
-        );
-      } catch (error: unknown) {
-        if (seq === generateStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story generation failed');
-        }
-      } finally {
-        if (seq === generateStorySeqRef.current) {
-          storyGenerationInFlightRef.current = false;
-          setIsGenerating(false);
-          setGeneratingLineId(null);
-        }
-      }
-    },
-    [applyROUpdate, clearLineQualityState, flushPendingSave, invalidateReviewRequests]
-  );
+  const { applyCustomerPayTemplate, clearCustomerPayMode, generateStory, reviewStory } =
+    useROStoryWorkflow(
+      {
+        roRef,
+        generateStorySeqRef,
+        reviewStorySeqRef,
+        storyGenerationInFlightRef,
+        storyReviewInFlightRef,
+      },
+      {
+        setIsGenerating,
+        setGeneratingLineId,
+        setIsReviewing,
+        setReviewingLineId,
+        setLastGeneratedStoryByLine,
+        setStoryQualityByLine,
+        setStoryReviewByLine,
+      },
+      { flushPendingSave, applyROUpdate, clearLineQualityState, invalidateReviewRequests }
+    );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {
     setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: text }));
   }, []);
-
-  const reviewStory = useCallback(
-    async (lineId: string) => {
-      if (storyReviewInFlightRef.current) return;
-      if (storyGenerationInFlightRef.current) {
-        toast.error('Wait for story generation to finish before reviewing');
-        return;
-      }
-      flushPendingSave();
-      const latestRO = roRef.current;
-      const targetLine = latestRO?.repairLines.find((l) => l.id === lineId);
-      if (isCustomerPayRepairLine(targetLine)) {
-        toast.message('Customer Pay stories skip AI review — edit the text if needed.');
-        return;
-      }
-      if (!latestRO) return;
-      const roId = latestRO.id;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
-      const storyText = line?.warrantyStory?.trim();
-      if (!storyText) {
-        toast.error('Write or generate a warranty story before reviewing');
-        return;
-      }
-
-      clearLineQualityState(lineId);
-
-      const seq = ++reviewStorySeqRef.current;
-      storyReviewInFlightRef.current = true;
-      setReviewingLineId(lineId);
-      setIsReviewing(true);
-      try {
-        const { review } = await api.reviewStory(roId, lineId, storyText);
-        if (seq !== reviewStorySeqRef.current) return;
-
-        const activeRO = roRef.current;
-        if (!activeRO || activeRO.id !== roId) {
-          toast.success('Review complete — reopen the repair line to view feedback');
-          return;
-        }
-
-        const activeLine = activeRO.repairLines.find((l) => l.id === lineId);
-        const currentStory = activeLine?.warrantyStory?.trim() ?? '';
-        if (!currentStory || currentStory !== storyText) {
-          // Story changed while review was in flight — discard stale feedback
-          return;
-        }
-
-        if (review.scoredAgainstStory?.trim() !== storyText) {
-          review.scoredAgainstStory = storyText;
-        }
-
-        setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
-        setStoryQualityByLine((prev) => ({ ...prev, [lineId]: review }));
-        toast.success(`MI 2.0 review complete — ${review.score}/100 (${review.grade})`);
-      } catch (error: unknown) {
-        if (seq === reviewStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story review failed');
-        }
-      } finally {
-        if (seq === reviewStorySeqRef.current) {
-          storyReviewInFlightRef.current = false;
-          setIsReviewing(false);
-          setReviewingLineId(null);
-        }
-      }
-    },
-    [clearLineQualityState, flushPendingSave]
-  );
 
   const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
   const lastGeneratedStoryForLine =
@@ -1352,6 +1107,7 @@ export function useRepairOrders({
     deleteLineXentryImage,
     deleteROXentryImage,
     applyCustomerPayTemplate,
+    clearCustomerPayMode,
     generateStory,
     reviewStory,
     acknowledgeStoryBaseline,

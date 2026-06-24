@@ -43,6 +43,8 @@ export class VoiceInputService {
   private callbacks: VoiceInputCallbacks | null = null;
   private target: VoiceInputTargetContext | null = null;
   private targetElement: HTMLTextAreaElement | HTMLInputElement | null = null;
+  /** M15: detach when target is removed; resync prefix/suffix on manual edits during dictation. */
+  private manualEditListener: ((event: Event) => void) | null = null;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private userStopped = false;
@@ -128,8 +130,10 @@ export class VoiceInputService {
     });
 
     try {
+      // M16: probe mic permission, then release stream before SpeechRecognition claims the mic.
       await this.noiseMonitor.start(this.settings);
       await this.refreshPermission();
+      await this.noiseMonitor.stop();
     } catch {
       await this.noiseMonitor.stop();
       this.patchState({
@@ -143,9 +147,11 @@ export class VoiceInputService {
       return false;
     }
 
+    this.attachManualEditGuard(element);
+
     const started = this.startRecognition(Ctor);
     if (!started) {
-      // H13: release mic stream when SpeechRecognition fails to start.
+      this.detachManualEditGuard();
       await this.noiseMonitor.stop();
     }
     return started;
@@ -163,6 +169,7 @@ export class VoiceInputService {
       }
     }
     releaseVoiceSession(this.sessionHandle);
+    this.detachManualEditGuard();
     void this.noiseMonitor.stop();
     this.patchState({
       isListening: false,
@@ -178,6 +185,7 @@ export class VoiceInputService {
     this.clearTimers();
     this.disposeRecognition();
     releaseVoiceSession(this.sessionHandle);
+    this.detachManualEditGuard();
     void this.noiseMonitor.stop();
     this.callbacks = null;
     this.target = null;
@@ -284,7 +292,7 @@ export class VoiceInputService {
         batchConfidence = batchConfidence == null ? confidence : Math.max(batchConfidence, confidence);
       }
 
-      if (!passesConfidenceGate(confidence, threshold)) continue;
+      if (!passesConfidenceGate(confidence, threshold, this.state.noiseLevel)) continue;
 
       const text = alternative.transcript ?? '';
       if (result.isFinal) {
@@ -324,6 +332,28 @@ export class VoiceInputService {
         }
       });
     }
+  }
+
+  /** M15: manual keyboard edits during dictation become the new committed baseline. */
+  private attachManualEditGuard(element: HTMLTextAreaElement | HTMLInputElement): void {
+    this.detachManualEditGuard();
+    this.manualEditListener = () => {
+      if (!this.target || !this.targetElement) return;
+      const value = this.targetElement.value;
+      const cursor = this.targetElement.selectionStart ?? value.length;
+      this.target.prefix = value.slice(0, cursor);
+      this.target.suffix = value.slice(cursor);
+      this.target.committed = '';
+      this.patchState({ committedText: '', interimText: '' });
+    };
+    element.addEventListener('input', this.manualEditListener);
+  }
+
+  private detachManualEditGuard(): void {
+    if (this.targetElement && this.manualEditListener) {
+      this.targetElement.removeEventListener('input', this.manualEditListener);
+    }
+    this.manualEditListener = null;
   }
 
   private handleNoiseLevel(level: number): void {

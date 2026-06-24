@@ -5,5 +5,7 @@ export const DEALERSHIP_DISPLAY_NAME =
   process.env.DEALERSHIP_DISPLAY_NAME?.trim() || 'Mercedes-Benz of Tiverton';
 export const DEALERSHIP_CODE = process.env.DEALERSHIP_CODE?.trim() || 'VITI';
 
-/** Dealership voice input tuning — edit per site for bay noise and technician preference. */
-export { DEFAULT_VOICE_INPUT_SETTINGS as VOICE_INPUT_SETTINGS } from '@/lib/voice/voiceSettings';
+import { resolveVoiceInputSettings } from '@/lib/voice/voiceSettings';
+
+/** Dealership voice input tuning — M18/M19 env overrides applied at module load. */
+export const VOICE_INPUT_SETTINGS = resolveVoiceInputSettings();

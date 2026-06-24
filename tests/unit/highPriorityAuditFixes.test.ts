@@ -16,17 +16,19 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.equal(isCustomerPayRepairLine({ isCustomerPay: true }), true);
     assert.equal(isCustomerPayRepairLine({ isCustomerPay: false }), false);
     assert.equal(isCustomerPayRepairLine({}), false);
-    const hookSrc = readSrc('src/hooks/useRepairOrders.ts');
-    assert.ok(hookSrc.includes('isCustomerPayRepairLine'));
+    const storySrc = readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts');
+    assert.ok(storySrc.includes('isCustomerPayRepairLine'));
   });
 
   it('H2: serialized save queue and awaitable debounce flush', () => {
     const queueSrc = readSrc('src/lib/repairOrderSaveQueue.ts');
     const debounceSrc = readSrc('src/lib/debounce.ts');
-    const hookSrc = readSrc('src/hooks/useRepairOrders.ts');
+    const persistSrc = readSrc('src/hooks/repairOrders/useROPersistence.ts');
+    const storySrc = readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts');
     assert.ok(queueSrc.includes('enqueueRepairOrderSave'));
     assert.ok(debounceSrc.includes('flush: () => Promise<void>'));
-    assert.ok(hookSrc.includes('await flushPendingSave()'));
+    assert.ok(persistSrc.includes('awaitRepairOrderSaveQueue'));
+    assert.ok(storySrc.includes('await deps.flushPendingSave()'));
   });
 
   it('H3/H4: customer pay story audit actions', () => {

@@ -1,7 +1,7 @@
 import { list } from '@vercel/blob';
 import { VOICE_INPUT_SETTINGS } from './constants';
 import { isMaintenanceModeEnabled, validateEnvironment } from './env';
-import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey';
+import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared';
 import { encryptPII, decryptPII } from './encryption';
 import { prisma } from './db';
 import { isKvConfigured } from './rate-limit';
@@ -182,14 +182,23 @@ export async function checkKvStore(): Promise<DependencyCheck> {
   }
 }
 
-/** Voice is client-side Web Speech API — health reports config readiness, not live mic access. */
+/** M20: validate voice config + Web Speech API browser requirement (client-side API). */
 export function checkVoiceInput(): DependencyCheck {
   if (!VOICE_INPUT_SETTINGS.enabled) {
     return { status: 'warn', detail: 'Voice input disabled in dealership configuration' };
   }
+  const lang = VOICE_INPUT_SETTINGS.language;
+  const langValid = /^[a-z]{2}(-[A-Z]{2})?$/.test(lang);
+  const timeoutOk = VOICE_INPUT_SETTINGS.listeningTimeoutMs >= 15_000;
+  const issues: string[] = [];
+  if (!langValid) issues.push(`invalid language tag "${lang}"`);
+  if (!timeoutOk) issues.push(`listening timeout ${VOICE_INPUT_SETTINGS.listeningTimeoutMs}ms too low`);
+  if (issues.length > 0) {
+    return { status: 'error', detail: `Voice config invalid: ${issues.join('; ')}` };
+  }
   return {
     status: 'ok',
-    detail: `Voice enabled (${VOICE_INPUT_SETTINGS.language}, push-to-talk default: ${VOICE_INPUT_SETTINGS.pushToTalkDefault})`,
+    detail: `Voice ready (${lang}, ${VOICE_INPUT_SETTINGS.listeningTimeoutMs}ms timeout). Requires Chrome/Edge Web Speech API on shop tablets.`,
   };
 }
 

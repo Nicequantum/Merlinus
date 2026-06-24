@@ -200,9 +200,16 @@ export const api = {
 
   /** Customer Pay — instant pre-written story; bypasses Grok and quality audit. */
   applyCustomerPayTemplate: (roId: string, lineId: string, templateId: string) =>
-    apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true }>(
+    apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true; idempotent?: boolean }>(
       `/api/repair-orders/${roId}/lines/${lineId}/apply-customer-pay-template`,
       { method: 'POST', body: JSON.stringify({ templateId }), timeoutMs: 15_000 }
+    ),
+
+  /** M1: clear Customer Pay mode so warranty AI generation can resume. */
+  clearCustomerPayMode: (roId: string, lineId: string) =>
+    apiFetch<{ ok: boolean; isCustomerPay: false }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/clear-customer-pay`,
+      { method: 'POST', timeoutMs: 15_000 }
     ),
 
   listTemplates: (category?: TemplateCategory) => {

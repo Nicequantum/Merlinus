@@ -107,11 +107,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           for (const line of data.repairLines) {
             if (line.id) {
               const existingLine = existing.repairLines.find((l) => l.id === line.id);
-              // C1: merge DB flag — once Customer Pay, stays Customer Pay unless client explicitly sets true again;
-              // omitted/false from stale client payloads cannot strip a persisted isCustomerPay.
+              // M1: explicit clearCustomerPay or dedicated clear endpoint strips the flag;
+              // omitted/false alone cannot accidentally clear a persisted Customer Pay line.
               const isCustomerPay =
-                line.isCustomerPay === true ||
-                existingLine?.isCustomerPay === true;
+                line.clearCustomerPay === true
+                  ? false
+                  : line.isCustomerPay === true || existingLine?.isCustomerPay === true;
 
               const lineFields = repairLineToDbFields({
                 id: line.id,

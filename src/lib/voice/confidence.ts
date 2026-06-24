@@ -16,12 +16,17 @@ export function computeAdaptiveConfidenceThreshold(
   return Math.max(settings.minConfidenceThreshold, Math.min(1, adjusted));
 }
 
-/** Returns true when a hypothesis should be accepted given adaptive thresholding. */
+/**
+ * M19: When Chrome omits confidence, accept in noisy bays but gate in quiet conditions
+ * where low-quality hallucinations are more likely without a score signal.
+ */
 export function passesConfidenceGate(
   confidence: number | null | undefined,
-  threshold: number
+  threshold: number,
+  noiseLevel = 0
 ): boolean {
-  // Chrome does not always populate confidence — accept when unknown.
-  if (confidence == null || Number.isNaN(confidence)) return true;
+  if (confidence == null || Number.isNaN(confidence)) {
+    return noiseLevel >= 20;
+  }
   return confidence >= threshold;
 }

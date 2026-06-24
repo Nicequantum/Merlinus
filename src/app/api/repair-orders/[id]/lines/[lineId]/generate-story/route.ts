@@ -6,7 +6,7 @@ import {
 } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
 import { generateWarrantyStory, scoreWarrantyStory } from '@/lib/grok';
-import { PROMPT_VERSION } from '@/prompts/version';
+import { hashPromptFragment, buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import {
   formatKnowledgeBaseForPrompt,
   GLOBAL_DEALERSHIP_ID,
@@ -49,7 +49,7 @@ export async function POST(
       const dbLine = ro.repairLines.find((l) => l.id === lineId);
       if (isCustomerPayRepairLine(dbLine)) {
         return apiError(
-          'This line uses a Customer Pay template. AI warranty generation is not required — edit the story or clear Customer Pay mode from the template library.',
+          'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
           400
         );
       }
@@ -72,7 +72,8 @@ export async function POST(
             .map((r) => {
               const m = dbToRepairOrder(r);
               return m.repairLines
-                .filter((l) => l.warrantyStory)
+                // M5: exclude Customer Pay stories from warranty style reference.
+                .filter((l) => l.warrantyStory && !l.isCustomerPay)
                 .map((l) => `For ${l.description}: ${l.warrantyStory!.substring(0, 250)}...`)
                 .join('\n');
             })
@@ -85,6 +86,8 @@ export async function POST(
       await seedTemplateLibraryIfEmpty();
       const kbRows = await prisma.knowledgeBase.findMany({
         where: {
+          // M4: Customer Pay templates must not pollute warranty AI knowledge base.
+          category: { not: 'customer' },
           OR: [{ dealershipId: GLOBAL_DEALERSHIP_ID }, { dealershipId: session.dealershipId, source: 'user' }],
         },
         orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }],
@@ -115,24 +118,27 @@ export async function POST(
       }
 
       // C3: durable audit trail before persisting story — if audit fails, story is not saved.
+      const historyContextLineCount = historyContext
+        ? historyContext.split('\n').filter((row) => row.startsWith('For ')).length
+        : 0;
+
       await writeAuditLog({
         action: 'story.generate',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
         entityType: 'repairLine',
         entityId: lineId,
-        promptVersion: PROMPT_VERSION,
-        metadata: {
+        metadata: buildStoryGenerateAuditMetadata({
           repairOrderId: id,
           lineNumber: line.lineNumber,
-          promptVersion: PROMPT_VERSION,
           advisorIntelligenceUsed: Boolean(advisorCtx),
-          knowledgeBaseEntriesUsed: relevantKb.map((entry) => entry.title),
-          serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
-          serviceAdvisorName: advisorCtx?.displayName ?? null,
+          advisorContextHash: advisorContext ? hashPromptFragment(advisorContext) : null,
+          knowledgeBaseEntryIds: relevantKb.map((entry) => entry.id),
+          historyContextLineCount,
           qualityScore: quality?.score ?? null,
           qualityGrade: quality?.grade ?? null,
-        },
+          serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
+        }),
         ipAddress: getRequestIp(request),
       });
 

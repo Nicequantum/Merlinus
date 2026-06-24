@@ -190,6 +190,7 @@ export function BenzTechApp() {
           onApplyCustomerPayTemplate={(templateId) =>
             ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
           }
+          onClearCustomerPayMode={() => ro.clearCustomerPayMode(ro.currentLine!.id)}
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
         />
       )}

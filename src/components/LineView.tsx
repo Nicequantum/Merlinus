@@ -40,6 +40,7 @@ interface LineViewProps {
   onGenerateStory: () => void;
   onReviewStory: () => void;
   onApplyCustomerPayTemplate: (templateId: string) => void | Promise<void>;
+  onClearCustomerPayMode?: () => void | Promise<void>;
   onAcknowledgeStoryBaseline: (text: string) => void;
 }
 
@@ -73,6 +74,7 @@ export function LineView({
   onGenerateStory,
   onReviewStory,
   onApplyCustomerPayTemplate,
+  onClearCustomerPayMode,
   onAcknowledgeStoryBaseline,
 }: LineViewProps) {
   const isCustomerPayLine = isCustomerPayRepairLine(line);
@@ -310,7 +312,7 @@ export function LineView({
             </button>
           )}
 
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-4 flex-wrap">
             <button
               type="button"
               onClick={() => setShowTemplateLibrary(true)}
@@ -319,6 +321,16 @@ export function LineView({
             >
               {isCustomerPayLine ? 'Change Customer Pay template' : 'Browse template library'}
             </button>
+            {isCustomerPayLine && onClearCustomerPayMode && (
+              <button
+                type="button"
+                onClick={() => void onClearCustomerPayMode()}
+                disabled={isGenerating || isReviewing}
+                className="benz-tertiary-link text-benz-amber disabled:opacity-50"
+              >
+                Switch to warranty AI
+              </button>
+            )}
             {canSaveAsTemplate && lastGeneratedStoryText && (
               <button
                 type="button"

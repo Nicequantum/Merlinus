@@ -1,44 +1,47 @@
 import { streamPrivateBlob } from '@/lib/blob';
-import { getSession } from '@/lib/auth';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, UNAUTHORIZED_ERROR } from '@/lib/errors';
+import { withAuth } from '@/lib/apiRoute';
+import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { isAllowedImagePathname } from '@/lib/imageUrls';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 
+/** M22/M23: images route uses withAuth for consent gate + consistent rate limiting. */
 export async function GET(request: Request) {
-  const rateLimited = await checkRateLimit(request, 'images.get');
-  if (rateLimited) return rateLimited;
+  return withAuth(
+    request,
+    async (session) => {
+      const pathname = new URL(request.url).searchParams.get('pathname');
+      if (!pathname || !isAllowedImagePathname(pathname)) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
 
-  const session = await getSession(request);
-  if (!session) {
-    return apiError(UNAUTHORIZED_ERROR, 401);
-  }
+      const allowed = await userCanAccessImage(session, pathname);
+      if (!allowed) {
+        return apiError(NOT_FOUND_ERROR, 404);
+      }
 
-  const pathname = new URL(request.url).searchParams.get('pathname');
-  if (!pathname || !isAllowedImagePathname(pathname)) {
-    return apiError(NOT_FOUND_ERROR, 404);
-  }
+      try {
+        const result = await streamPrivateBlob(pathname);
+        if (!result) {
+          return apiError(NOT_FOUND_ERROR, 404);
+        }
 
-  const allowed = await userCanAccessImage(session, pathname);
-  if (!allowed) {
-    return apiError(FORBIDDEN_ERROR, 403);
-  }
-
-  try {
-    const result = await streamPrivateBlob(pathname);
-    if (!result) {
-      return apiError(NOT_FOUND_ERROR, 404);
-    }
-
-    return new Response(result.stream, {
-      headers: {
-        'Content-Type': result.blob.contentType || 'application/octet-stream',
-        'Cache-Control': 'private, no-store',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    });
-  } catch (error) {
-    console.error('[images]', error);
-    return apiError('Unable to load image.', 500);
-  }
+        return new Response(result.stream, {
+          headers: {
+            'Content-Type': result.blob.contentType || 'application/octet-stream',
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      } catch (error) {
+        logger.error('images.stream_failed', {
+          pathname,
+          technicianId: session.technicianId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+        return apiError('Unable to load image.', 500);
+      }
+    },
+    { rateLimitKey: 'images.get' }
+  );
 }

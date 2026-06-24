@@ -15,7 +15,7 @@
     "db:reencrypt": "npx tsx scripts/reencrypt-legacy-data.ts",
     "db:studio": "prisma studio",
     "test": "tsx --test tests/unit/**/*.test.ts",
-    "test:integration": "tsx --test tests/integration/**/*.test.ts",
+    "test:integration": "tsx --import ./tests/setup/integration.ts --env-file=.env.local --test tests/integration/**/*.test.ts",
     "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
     "postinstall": "prisma generate && npm run setup:tesseract"
   },

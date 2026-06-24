@@ -1,41 +1,24 @@
 /**
  * Dealership voice input configuration.
- * Tuned for noisy Mercedes-Benz service bays (tools, lifts, compressors).
- * Override per deployment by editing these defaults or extending constants.ts.
+ * M18/M19: env overrides for timeout and confidence tuning on shop-floor tablets.
  */
 
 export interface VoiceInputSettings {
-  /** Master switch — when false, UI hides voice controls and manual input remains. */
   enabled: boolean;
-  /** BCP-47 language tag passed to SpeechRecognition. */
   language: string;
-  /** Keep the recognizer alive across pauses (with controlled auto-restart). */
   continuous: boolean;
-  /** Stop and prompt retry if no usable speech within this window. */
   listeningTimeoutMs: number;
-  /** Delay before auto-restart after benign errors or recognizer `onend`. */
   silenceRestartDelayMs: number;
-  /** Cap auto-restarts to avoid infinite loops on broken mic/network states. */
   maxAutoRestarts: number;
-  /** Baseline minimum confidence (0–1) in quiet conditions. */
   baseConfidenceThreshold: number;
-  /** Floor confidence when background noise is high. */
   minConfidenceThreshold: number;
-  /** How much noise level (0–100) lowers the confidence threshold. */
   noiseAdjustmentFactor: number;
-  /** Default interaction mode for new sessions on this device. */
   pushToTalkDefault: boolean;
-  /** Show real-time noise meter near the microphone control. */
   showNoiseMeter: boolean;
-  /** Show recognition confidence percentage when the browser exposes it. */
   showConfidence: boolean;
-  /** Request auto gain control on the monitoring microphone stream. */
   autoGainControl: boolean;
-  /** Request browser noise suppression on the monitoring stream. */
   noiseSuppression: boolean;
-  /** Request echo cancellation (helps when tablet speakers play notifications). */
   echoCancellation: boolean;
-  /** Local storage key for technician push-to-talk preference. */
   modeStorageKey: string;
 }
 
@@ -43,7 +26,7 @@ export const DEFAULT_VOICE_INPUT_SETTINGS: VoiceInputSettings = {
   enabled: true,
   language: 'en-US',
   continuous: true,
-  listeningTimeoutMs: 15_000,
+  listeningTimeoutMs: 45_000,
   silenceRestartDelayMs: 600,
   maxAutoRestarts: 10,
   baseConfidenceThreshold: 0.55,
@@ -57,3 +40,35 @@ export const DEFAULT_VOICE_INPUT_SETTINGS: VoiceInputSettings = {
   echoCancellation: true,
   modeStorageKey: 'merlin-voice-input-mode',
 };
+
+function envBool(key: string, fallback: boolean): boolean {
+  const raw = process.env[key]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function envNumber(key: string, fallback: number): number {
+  const raw = Number(process.env[key]);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+/** Resolve settings with optional deployment overrides (M18/M19). */
+export function resolveVoiceInputSettings(): VoiceInputSettings {
+  return {
+    ...DEFAULT_VOICE_INPUT_SETTINGS,
+    enabled: envBool('VOICE_INPUT_ENABLED', DEFAULT_VOICE_INPUT_SETTINGS.enabled),
+    language: process.env.VOICE_INPUT_LANGUAGE?.trim() || DEFAULT_VOICE_INPUT_SETTINGS.language,
+    listeningTimeoutMs: envNumber(
+      'VOICE_LISTENING_TIMEOUT_MS',
+      DEFAULT_VOICE_INPUT_SETTINGS.listeningTimeoutMs
+    ),
+    baseConfidenceThreshold: envNumber(
+      'VOICE_BASE_CONFIDENCE',
+      DEFAULT_VOICE_INPUT_SETTINGS.baseConfidenceThreshold
+    ),
+    minConfidenceThreshold: envNumber(
+      'VOICE_MIN_CONFIDENCE',
+      DEFAULT_VOICE_INPUT_SETTINGS.minConfidenceThreshold
+    ),
+  };
+}
