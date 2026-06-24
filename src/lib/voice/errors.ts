@@ -23,5 +23,6 @@ export function shouldAutoRestartAfterError(
   maxRestarts: number
 ): boolean {
   if (restartCount >= maxRestarts) return false;
-  return code === 'no-speech' || code === 'network' || code === 'aborted';
+  // C7: never auto-restart on 'aborted' — superseded recognizers fire aborted during normal handoff.
+  return code === 'no-speech' || code === 'network';
 }

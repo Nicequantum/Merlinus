@@ -7,7 +7,7 @@ import {
   AUDIT_GENESIS_HASH,
   type AuditChainPayload,
 } from '@/lib/auditChain';
-import { CUSTOMER_PAY_AUDIT_ACTIONS, STORY_PROMPT_AUDIT_ACTIONS } from '@/lib/audit';
+import { CRITICAL_AUDIT_ACTIONS, CUSTOMER_PAY_AUDIT_ACTIONS, STORY_PROMPT_AUDIT_ACTIONS } from '@/lib/audit';
 import { CUSTOMER_PAY_TEMPLATES, templateRowIsCustomerPay } from '@/prompts/templates/customerPayTemplates';
 import { isCustomerPayStoryTemplate } from '@/lib/templateLibrary';
 import type { StoryTemplate } from '@/types';
@@ -53,6 +53,7 @@ describe('Customer Pay audit compliance', () => {
   it('uses customerPayTemplateApplied outside Merlin story prompt actions', () => {
     assert.ok(CUSTOMER_PAY_AUDIT_ACTIONS.has('customerPayTemplateApplied'));
     assert.equal(STORY_PROMPT_AUDIT_ACTIONS.has('customerPayTemplateApplied'), false);
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('customerPayTemplateApplied'));
   });
 
   it('hash chain accepts customer-pay sentinel without Merlin PROMPT_VERSION', () => {

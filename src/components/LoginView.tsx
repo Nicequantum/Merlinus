@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { toast } from 'sonner';
 
@@ -9,25 +8,10 @@ interface LoginViewProps {
   onLogin: (d7Number: string, password: string) => Promise<unknown>;
 }
 
-interface SecurityStatus {
-  usingDefaultSeedPasswords: boolean;
-  warnings: string[];
-}
-
 export function LoginView({ onLogin }: LoginViewProps) {
   const [d7Number, setD7Number] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
-
-  useEffect(() => {
-    fetch('/api/auth/security-status', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setSecurityStatus(data as SecurityStatus);
-      })
-      .catch(() => undefined);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,22 +29,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
   return (
     <div className="login-shell">
       <div className="w-full max-w-sm">
-        {securityStatus?.usingDefaultSeedPasswords && (
-          <div className="mb-5 benz-card p-4 benz-alert-warn flex items-start gap-3">
-            <AlertTriangle size={18} className="text-benz-amber mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-benz-amber">Default Seed Passwords Detected</p>
-              <ul className="text-xs text-benz-secondary mt-1.5 leading-relaxed space-y-1 list-disc pl-4">
-                {securityStatus.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-              <p className="text-xs text-benz-muted mt-2">
-                Rotate all seed account passwords in Settings before production use.
-              </p>
-            </div>
-          </div>
-        )}
+
 
         <div className="text-center mb-8">
           <div className="benz-logo-ring w-20 h-20 mx-auto mb-5">

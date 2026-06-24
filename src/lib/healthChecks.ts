@@ -110,73 +110,27 @@ export async function checkBlobStorage(): Promise<DependencyCheck> {
   }
 }
 
+/**
+ * C5: Configuration-only Grok check — no live API calls from /api/health (cost + leakage risk).
+ */
 export async function checkGrokApi(): Promise<DependencyCheck> {
   const exposedPublicKeys = getExposedPublicGrokEnvKeys();
   if (exposedPublicKeys.length > 0) {
     return {
       status: 'error',
-      detail: `Remove frontend xAI env vars (${exposedPublicKeys.join(', ')}) and use server-only GROK_API_KEY`,
+      detail: 'Frontend xAI env vars detected — use server-only GROK_API_KEY',
     };
   }
 
-  let key: string;
   try {
-    key = getGrokApiKey();
+    getGrokApiKey();
+    return { status: 'ok', detail: 'GROK_API_KEY configured' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'GROK_API_KEY not configured';
     if (message.includes('not configured')) {
       return { status: 'warn', detail: 'GROK_API_KEY not configured — AI features disabled' };
     }
-    return { status: 'error', detail: message };
-  }
-
-  try {
-    const { latencyMs } = await timed(async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12_000);
-      try {
-        const response = await fetch('https://api.x.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'grok-3',
-            messages: [{ role: 'user', content: 'Reply with exactly: ok' }],
-            max_tokens: 4,
-            temperature: 0,
-          }),
-          signal: controller.signal,
-        });
-
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(`API key rejected (HTTP ${response.status})`);
-        }
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Chat completions failed (HTTP ${response.status}): ${errText.slice(0, 120)}`);
-        }
-
-        const payload = (await response.json()) as {
-          choices?: Array<{ message?: { content?: string } }>;
-        };
-        const content = payload.choices?.[0]?.message?.content?.trim();
-        if (!content) {
-          throw new Error('Grok chat completions returned an empty response');
-        }
-        return true;
-      } finally {
-        clearTimeout(timeout);
-      }
-    });
-    return { status: 'ok', latencyMs, detail: 'chat/completions reachable (grok-3)' };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Grok API unreachable';
-    if (message.includes('aborted')) {
-      return { status: 'error', detail: 'Grok API request timed out' };
-    }
-    return { status: 'error', detail: message };
+    return { status: 'error', detail: 'Grok API key configuration invalid' };
   }
 }
 
@@ -261,6 +215,20 @@ export async function runAllHealthChecks(): Promise<Record<string, DependencyChe
   ]);
 
   return { environment, database, encryption, session, blob, grok, kv, voice, maintenance, advisorIntelligence };
+}
+
+/** C5: Minimal manager health matrix — no env var names or dependency error strings in API output. */
+export async function runAuthenticatedHealthChecks(): Promise<Record<string, DependencyCheck>> {
+  const voice = checkVoiceInput();
+  const maintenance = checkMaintenanceMode();
+  const [database, encryption, grok, kv] = await Promise.all([
+    checkDatabase(),
+    checkEncryption(),
+    checkGrokApi(),
+    checkKvStore(),
+  ]);
+
+  return { database, encryption, grok, kv, voice, maintenance };
 }
 
 export function aggregateHealthStatus(

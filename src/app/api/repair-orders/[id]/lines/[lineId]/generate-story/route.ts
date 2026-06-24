@@ -106,18 +106,14 @@ export async function POST(
         return apiError(mapped.message, mapped.status);
       }
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
-        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
-      });
-
       let quality = null;
       try {
         quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
       } catch {
-        // Story saved — quality score is best-effort
+        // Quality score is best-effort — audit still records generation.
       }
 
+      // C3: durable audit trail before persisting story — if audit fails, story is not saved.
       await writeAuditLog({
         action: 'story.generate',
         dealershipId: session.dealershipId,
@@ -137,6 +133,11 @@ export async function POST(
           qualityGrade: quality?.grade ?? null,
         },
         ipAddress: getRequestIp(request),
+      });
+
+      await prisma.repairLine.update({
+        where: { id: lineId },
+        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
       });
 
       return { warrantyStory, quality };

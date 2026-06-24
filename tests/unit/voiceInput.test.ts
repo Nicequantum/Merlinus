@@ -37,6 +37,7 @@ describe('voice error recovery', () => {
   test('auto-restarts only for recoverable errors within cap', () => {
     assert.equal(shouldAutoRestartAfterError('no-speech', 0, 10), true);
     assert.equal(shouldAutoRestartAfterError('network', 2, 10), true);
+    assert.equal(shouldAutoRestartAfterError('aborted', 0, 10), false);
     assert.equal(shouldAutoRestartAfterError('not-allowed', 0, 10), false);
     assert.equal(shouldAutoRestartAfterError('no-speech', 10, 10), false);
   });

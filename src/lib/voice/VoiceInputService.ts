@@ -14,6 +14,7 @@ import type {
   VoicePermissionState,
 } from './types';
 import type { VoiceInputSettings } from './voiceSettings';
+import { claimVoiceSession, releaseVoiceSession, type VoiceSessionHandle } from './voiceSessionCoordinator';
 
 const INITIAL_STATE: VoiceInputState = {
   listeningState: 'idle',
@@ -46,6 +47,11 @@ export class VoiceInputService {
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private userStopped = false;
   private destroyed = false;
+  /** C7: true while intentionally replacing a recognizer — ignore its aborted/error callbacks. */
+  private supersedingRecognition = false;
+  private readonly sessionHandle: VoiceSessionHandle = {
+    stop: () => this.stop(),
+  };
 
   constructor(private readonly settings: VoiceInputSettings) {
     this.state.isSupported = getSpeechRecognitionCtor() != null;
@@ -97,6 +103,8 @@ export class VoiceInputService {
 
     this.clearTimers();
     this.userStopped = false;
+    // C6: stop any other field's voice session before claiming the mic.
+    claimVoiceSession(this.sessionHandle);
     this.callbacks = callbacks;
     this.targetElement = element;
 
@@ -141,7 +149,14 @@ export class VoiceInputService {
   stop(): void {
     this.userStopped = true;
     this.clearTimers();
-    this.recognition?.stop();
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch {
+        this.disposeRecognition();
+      }
+    }
+    releaseVoiceSession(this.sessionHandle);
     void this.noiseMonitor.stop();
     this.patchState({
       isListening: false,
@@ -155,8 +170,8 @@ export class VoiceInputService {
     this.destroyed = true;
     this.userStopped = true;
     this.clearTimers();
-    this.recognition?.abort();
-    this.recognition = null;
+    this.disposeRecognition();
+    releaseVoiceSession(this.sessionHandle);
     void this.noiseMonitor.stop();
     this.callbacks = null;
     this.target = null;
@@ -172,7 +187,8 @@ export class VoiceInputService {
   }
 
   private startRecognition(Ctor: NonNullable<ReturnType<typeof getSpeechRecognitionCtor>>): boolean {
-    this.recognition?.abort();
+    // C7: detach handlers before abort so superseded instances cannot schedule restarts.
+    this.disposeRecognition();
 
     const recognition = new Ctor();
     recognition.continuous = this.settings.continuous;
@@ -189,7 +205,7 @@ export class VoiceInputService {
 
     recognition.onerror = (event) => {
       const code = event.error;
-      if (code === 'aborted' && this.userStopped) return;
+      if (code === 'aborted' && (this.userStopped || this.supersedingRecognition)) return;
 
       const message = resolveVoiceErrorMessage(code);
       this.patchState({
@@ -212,7 +228,7 @@ export class VoiceInputService {
     };
 
     recognition.onend = () => {
-      if (this.userStopped || this.destroyed) {
+      if (this.userStopped || this.destroyed || this.supersedingRecognition) {
         this.patchState({ isListening: false, listeningState: 'idle', interimText: '' });
         return;
       }
@@ -354,6 +370,27 @@ export class VoiceInputService {
   private clearTimers(): void {
     this.clearRestartTimer();
     this.clearTimeoutTimer();
+  }
+
+  /** C7: detach event handlers then abort — prevents ghost onend/onerror restart loops. */
+  private disposeRecognition(): void {
+    const recognition = this.recognition;
+    if (!recognition) return;
+
+    this.supersedingRecognition = true;
+    this.recognition = null;
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+
+    try {
+      recognition.abort();
+    } catch {
+      // ignore — browser may already be tearing down
+    }
+
+    this.supersedingRecognition = false;
   }
 
   private patchState(patch: Partial<VoiceInputState>): void {

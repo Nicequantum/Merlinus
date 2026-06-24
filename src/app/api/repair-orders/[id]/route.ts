@@ -98,6 +98,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (data.repairLines && Array.isArray(data.repairLines)) {
           for (const line of data.repairLines) {
             if (line.id) {
+              const existingLine = existing.repairLines.find((l) => l.id === line.id);
+              // C1: merge DB flag — once Customer Pay, stays Customer Pay unless client explicitly sets true again;
+              // omitted/false from stale client payloads cannot strip a persisted isCustomerPay.
+              const isCustomerPay =
+                line.isCustomerPay === true ||
+                existingLine?.isCustomerPay === true;
+
               const lineFields = repairLineToDbFields({
                 id: line.id,
                 lineNumber: line.lineNumber || 1,
@@ -108,6 +115,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 xentryOcrTexts: line.xentryOcrTexts || [],
                 extractedData: { ...emptyExtractedData(), ...line.extractedData },
                 warrantyStory: line.warrantyStory,
+                isCustomerPay,
               });
 
               await tx.repairLine.upsert({

@@ -1,23 +1,24 @@
+import { withAuth } from '@/lib/apiRoute';
 import { checkSeedPasswordSecurity } from '@/lib/seedSecurity';
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { handleRouteError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * C4: Manager-only — seed password hygiene must not be probeable before authentication.
+ */
 export async function GET(request: Request) {
-  const rateLimited = await checkRateLimit(request, 'auth.security-status', RATE_LIMITS.default);
-  if (rateLimited) return rateLimited;
-
-  try {
-    const status = await checkSeedPasswordSecurity();
-    return Response.json(
-      {
-        usingDefaultSeedPasswords: status.usingDefaultSeedPasswords,
-        warnings: status.warnings,
-      },
-      { headers: { 'Cache-Control': 'no-store' } }
-    );
-  } catch (error) {
-    return handleRouteError(error, 'auth.security-status');
-  }
+  return withAuth(
+    request,
+    async () => {
+      const status = await checkSeedPasswordSecurity();
+      return Response.json(
+        {
+          usingDefaultSeedPasswords: status.usingDefaultSeedPasswords,
+          warnings: status.warnings,
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    },
+    { rateLimitKey: 'auth.security-status', requireManager: true }
+  );
 }

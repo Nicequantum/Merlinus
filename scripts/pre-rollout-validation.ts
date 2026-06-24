@@ -42,7 +42,7 @@ import { isKvConfigured, RATE_LIMITS } from '../src/lib/rate-limit';
 import { SYSTEM_PROMPT, buildWarrantyStoryUserMessage } from '../src/prompts/warrantyStory';
 import { PROMPT_VERSION } from '../src/prompts/version';
 import { CUSTOMER_PAY_TEMPLATES } from '../src/prompts/templates/customerPayTemplates';
-import { CUSTOMER_PAY_AUDIT_ACTIONS, STORY_PROMPT_AUDIT_ACTIONS } from '../src/lib/audit';
+import { CRITICAL_AUDIT_ACTIONS, CUSTOMER_PAY_AUDIT_ACTIONS, STORY_PROMPT_AUDIT_ACTIONS } from '../src/lib/audit';
 import { AUDIT_CUSTOMER_PAY_SENTINEL } from '../src/lib/auditChain';
 import { normalizeWarrantyStoryText } from '../src/utils/pdfExport';
 import { createRepairOrderFromScan } from '../src/utils/repairOrderFactory';
@@ -508,6 +508,99 @@ async function checkCustomerPayTemplates(): Promise<void> {
   }
 }
 
+async function checkCriticalAuditFixes(): Promise<void> {
+  section('Critical Audit Fixes (C1–C7)');
+
+  const validationSrc = readFileSync(resolve(process.cwd(), 'src/lib/validation.ts'), 'utf8');
+  if (validationSrc.includes('isCustomerPay: z.boolean().optional()')) {
+    record('Critical Fixes', 'C1 repairLineSchema isCustomerPay', 'pass', 'Schema preserves Customer Pay flag');
+  } else {
+    record('Critical Fixes', 'C1 repairLineSchema isCustomerPay', 'fail', 'Missing isCustomerPay on repairLineSchema');
+  }
+
+  const roPutSrc = readFileSync(
+    resolve(process.cwd(), 'src/app/api/repair-orders/[id]/route.ts'),
+    'utf8'
+  );
+  if (roPutSrc.includes('existingLine?.isCustomerPay') && roPutSrc.includes('isCustomerPay,')) {
+    record('Critical Fixes', 'C1 PUT merges isCustomerPay', 'pass', 'RO update merges persisted Customer Pay flag');
+  } else {
+    record('Critical Fixes', 'C1 PUT merges isCustomerPay', 'fail', 'PUT handler does not merge isCustomerPay from DB');
+  }
+
+  const auditSrc = readFileSync(resolve(process.cwd(), 'src/lib/audit.ts'), 'utf8');
+  const criticalActionsOk =
+    CRITICAL_AUDIT_ACTIONS.has('story.generate') &&
+    CRITICAL_AUDIT_ACTIONS.has('customerPayTemplateApplied') &&
+    auditSrc.includes('CRITICAL_AUDIT_ACTIONS.has(input.action)');
+  if (criticalActionsOk) {
+    record('Critical Fixes', 'C2 critical audit rethrow', 'pass', 'Compliance-critical audit failures abort operation');
+  } else {
+    record('Critical Fixes', 'C2 critical audit rethrow', 'fail', 'writeAuditLog must rethrow for CRITICAL_AUDIT_ACTIONS');
+  }
+
+  const generateSrc = readFileSync(
+    resolve(
+      process.cwd(),
+      'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts'
+    ),
+    'utf8'
+  );
+  const auditBeforeUpdate =
+    generateSrc.indexOf("action: 'story.generate'") !== -1 &&
+    generateSrc.indexOf('repairLine.update') !== -1 &&
+    generateSrc.indexOf("action: 'story.generate'") < generateSrc.indexOf('repairLine.update');
+  if (auditBeforeUpdate) {
+    record('Critical Fixes', 'C3 audit before story persist', 'pass', 'story.generate audit precedes repairLine.update');
+  } else {
+    record('Critical Fixes', 'C3 audit before story persist', 'fail', 'Generate route must audit before DB story write');
+  }
+
+  const securityStatusSrc = readFileSync(
+    resolve(process.cwd(), 'src/app/api/auth/security-status/route.ts'),
+    'utf8'
+  );
+  if (securityStatusSrc.includes('withAuth(') && securityStatusSrc.includes('requireManager: true')) {
+    record('Critical Fixes', 'C4 security-status auth', 'pass', 'Seed password status requires manager session');
+  } else {
+    record('Critical Fixes', 'C4 security-status auth', 'fail', '/api/auth/security-status must use withAuth + requireManager');
+  }
+
+  const healthSrc = readFileSync(resolve(process.cwd(), 'src/app/api/health/route.ts'), 'utf8');
+  const healthChecksSrc = readFileSync(resolve(process.cwd(), 'src/lib/healthChecks.ts'), 'utf8');
+  const healthOk =
+    healthSrc.includes('withAuth(') &&
+    healthSrc.includes('runAuthenticatedHealthChecks') &&
+    !healthChecksSrc.includes('api.x.ai/v1/chat/completions');
+  if (healthOk) {
+    record('Critical Fixes', 'C5 health endpoint hardened', 'pass', 'Manager auth + no live Grok probe in health');
+  } else {
+    record('Critical Fixes', 'C5 health endpoint hardened', 'fail', 'Health route must be authenticated without live Grok calls');
+  }
+
+  const voiceCoordSrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/voice/voiceSessionCoordinator.ts'),
+    'utf8'
+  );
+  const voiceServiceSrc = readFileSync(resolve(process.cwd(), 'src/lib/voice/VoiceInputService.ts'), 'utf8');
+  if (voiceCoordSrc.includes('claimVoiceSession') && voiceServiceSrc.includes('claimVoiceSession')) {
+    record('Critical Fixes', 'C6 voice session mutex', 'pass', 'Global coordinator stops competing mic sessions');
+  } else {
+    record('Critical Fixes', 'C6 voice session mutex', 'fail', 'Missing voice session coordinator integration');
+  }
+
+  const errorsSrc = readFileSync(resolve(process.cwd(), 'src/lib/voice/errors.ts'), 'utf8');
+  const voiceLifecycleOk =
+    voiceServiceSrc.includes('disposeRecognition') &&
+    voiceServiceSrc.includes('supersedingRecognition') &&
+    !errorsSrc.includes("code === 'no-speech' || code === 'network' || code === 'aborted'");
+  if (voiceLifecycleOk) {
+    record('Critical Fixes', 'C7 voice lifecycle cleanup', 'pass', 'Handlers detached before abort; no aborted auto-restart');
+  } else {
+    record('Critical Fixes', 'C7 voice lifecycle cleanup', 'fail', 'VoiceInputService lifecycle fixes incomplete');
+  }
+}
+
 async function checkCoreFeatures(): Promise<void> {
   section('Core Feature Tests');
 
@@ -892,12 +985,10 @@ async function checkSecurityAndConfig(): Promise<void> {
   const apiRoot = resolve(process.cwd(), 'src/app/api');
   const routeFiles = listRouteFiles(apiRoot);
   const publicAllowlist = new Set([
-    'health/route.ts',
     'status/route.ts',
     'auth/login/route.ts',
     'auth/logout/route.ts',
     'auth/me/route.ts',
-    'auth/security-status/route.ts',
     'setup/seed/route.ts',
   ]);
   const unauthenticated: string[] = [];
@@ -987,6 +1078,7 @@ async function main(): Promise<void> {
   await checkEnvironment();
   await checkCoreSystems();
   await checkCustomerPayTemplates();
+  await checkCriticalAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();
   await checkSecurityAndConfig();
