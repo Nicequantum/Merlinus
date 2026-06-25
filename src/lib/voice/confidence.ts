@@ -25,7 +25,8 @@ export function passesConfidenceGate(
   threshold: number,
   _noiseLevel = 0
 ): boolean {
-  if (confidence == null || Number.isNaN(confidence)) {
+  // Chrome/Edge often report 0 instead of omitting confidence — treat as unavailable.
+  if (confidence == null || Number.isNaN(confidence) || confidence <= 0) {
     return true;
   }
   return confidence >= threshold;

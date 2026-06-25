@@ -139,8 +139,9 @@ export function useROStoryWorkflow(
 
         deps.clearLineQualityState(lineId);
         deps.invalidateReviewRequests();
-        const { warrantyStory, quality, cdkSanitized } = await api.generateStory(latestRO.id, lineId);
+        const { warrantyStory, cdkSanitized } = await api.generateStory(latestRO.id, lineId);
         if (seq !== refs.generateStorySeqRef.current) return;
+
         setters.setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
         if (cdkSanitized) {
           setters.setCdkSanitizedByLine((prev) => ({ ...prev, [lineId]: true }));
@@ -158,6 +159,19 @@ export function useROStoryWorkflow(
           }),
           { immediate: true }
         );
+        if (cdkSanitized) {
+          toast.message('Story cleaned for CDK compatibility');
+        }
+
+        let quality: StoryQualityResult | null = null;
+        try {
+          const scored = await api.scoreStory(latestRO.id, lineId, warrantyStory);
+          if (seq !== refs.generateStorySeqRef.current) return;
+          quality = scored.quality;
+        } catch {
+          // Scoring is best-effort — story is already saved and visible.
+        }
+
         if (quality) {
           const baseline = (quality.scoredAgainstStory ?? warrantyStory).trim();
           if (baseline === warrantyStory.trim()) {
@@ -167,9 +181,7 @@ export function useROStoryWorkflow(
             }));
           }
         }
-        if (cdkSanitized) {
-          toast.message('Story cleaned for CDK compatibility');
-        }
+
         toast.success(
           quality
             ? `Warranty story generated — MI 4.3 score: ${quality.score}/100`

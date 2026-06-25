@@ -17,9 +17,10 @@ describe('voice confidence adaptation', () => {
     assert.equal(threshold, DEFAULT_VOICE_INPUT_SETTINGS.minConfidenceThreshold);
   });
 
-  test('M19: null confidence accepted for live dictation', () => {
+  test('M19: null or zero confidence accepted for live dictation', () => {
     assert.equal(passesConfidenceGate(undefined, 0.9, 0), true);
     assert.equal(passesConfidenceGate(null, 0.9, 5), true);
+    assert.equal(passesConfidenceGate(0, 0.9, 0), true);
   });
 
   test('gates low-confidence hypotheses in quiet bays', () => {

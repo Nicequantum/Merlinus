@@ -200,7 +200,13 @@ export const api = {
   generateStory: (roId: string, lineId: string) =>
     apiFetch<{ warrantyStory: string; quality: StoryQualityResult | null; cdkSanitized?: boolean }>(
       `/api/repair-orders/${roId}/lines/${lineId}/generate-story`,
-      { method: 'POST', timeoutMs: 180_000 }
+      { method: 'POST', timeoutMs: 120_000 }
+    ),
+
+  scoreStory: (roId: string, lineId: string, warrantyStory: string) =>
+    apiFetch<{ quality: StoryQualityResult }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/score-story`,
+      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 60_000 }
     ),
 
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>

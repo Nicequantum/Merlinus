@@ -5,7 +5,7 @@ import {
   loadAdvisorPromptContextForRepairOrder,
 } from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
-import { generateWarrantyStory, scoreWarrantyStory } from '@/lib/grok';
+import { generateWarrantyStory } from '@/lib/grok';
 import { hashPromptFragment, buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import {
   formatKnowledgeBaseForPrompt,
@@ -55,17 +55,21 @@ export async function POST(
         );
       }
 
-      let historyContext = '';
-      const similar = await prisma.repairOrder.findMany({
-        where: {
-          dealershipId: session.dealershipId,
-          id: { not: id },
-          model: ro.model ? { contains: ro.model.split(' ')[0] } : undefined,
-        },
-        include: { repairLines: true },
-        take: 1,
-      });
+      const [, similar, advisorCtx] = await Promise.all([
+        seedTemplateLibraryIfEmpty(),
+        prisma.repairOrder.findMany({
+          where: {
+            dealershipId: session.dealershipId,
+            id: { not: id },
+            model: ro.model ? { contains: ro.model.split(' ')[0] } : undefined,
+          },
+          include: { repairLines: true },
+          take: 1,
+        }),
+        loadAdvisorPromptContextForRepairOrder(id),
+      ]);
 
+      let historyContext = '';
       if (similar.length > 0) {
         historyContext =
           similar
@@ -80,10 +84,8 @@ export async function POST(
             .join('\n');
       }
 
-      const advisorCtx = await loadAdvisorPromptContextForRepairOrder(id);
       const advisorContext = advisorCtx ? formatAdvisorContextForPrompt(advisorCtx) : '';
 
-      await seedTemplateLibraryIfEmpty();
       const kbRows = await prisma.knowledgeBase.findMany({
         where: {
           // M4: Customer Pay templates must not pollute warranty AI knowledge base.
@@ -91,6 +93,7 @@ export async function POST(
           OR: [{ dealershipId: GLOBAL_DEALERSHIP_ID }, { dealershipId: session.dealershipId, source: 'user' }],
         },
         orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }],
+        take: 40,
       });
       const kbEntries = kbRows.map(mapKnowledgeBase);
       const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId, 3);
@@ -114,13 +117,6 @@ export async function POST(
         return apiError(mapped.message, mapped.status);
       }
 
-      let quality = null;
-      try {
-        quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
-      } catch {
-        // Quality score is best-effort — audit still records generation.
-      }
-
       // C3: durable audit trail before persisting story — if audit fails, story is not saved.
       const historyContextLineCount = historyContext
         ? historyContext.split('\n').filter((row) => row.trim().length > 0).length
@@ -139,8 +135,8 @@ export async function POST(
           advisorContextHash: advisorContext ? hashPromptFragment(advisorContext) : null,
           knowledgeBaseEntryIds: relevantKb.map((entry) => entry.id),
           historyContextLineCount,
-          qualityScore: quality?.score ?? null,
-          qualityGrade: quality?.grade ?? null,
+          qualityScore: null,
+          qualityGrade: null,
           serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
         }),
         ipAddress: getRequestIp(request),
@@ -151,7 +147,7 @@ export async function POST(
         data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
       });
 
-      return { warrantyStory, quality, cdkSanitized };
+      return { warrantyStory, quality: null, cdkSanitized };
     },
     {
       rateLimitKey: 'story.generate',

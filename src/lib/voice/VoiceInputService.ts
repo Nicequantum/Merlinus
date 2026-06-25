@@ -126,20 +126,9 @@ export class VoiceInputService {
       restartCount: 0,
     });
 
-    const micGranted = await this.probeMicrophonePermission();
     await this.refreshPermission();
-
-    if (!micGranted) {
-      this.patchState({
-        listeningState: 'error',
-        isListening: false,
-        permission: 'denied',
-        errorCode: 'not-allowed',
-        errorMessage: resolveVoiceErrorMessage('not-allowed'),
-      });
-      callbacks.onError?.('not-allowed', resolveVoiceErrorMessage('not-allowed'));
-      return false;
-    }
+    // Do not call getUserMedia before SpeechRecognition — releasing the probe stream
+    // can leave the mic unavailable for transcription on Windows shop-floor tablets.
 
     this.attachManualEditGuard(element);
 
@@ -328,6 +317,10 @@ export class VoiceInputService {
       confidenceThreshold: threshold,
       listeningState: 'listening',
     });
+
+    if (this.targetElement) {
+      this.targetElement.value = full;
+    }
 
     this.callbacks.onTranscript(full, meta);
 
