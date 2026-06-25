@@ -1,7 +1,7 @@
 {
   "name": "benz-tech",
   "private": true,
-  "version": "3.0.2",
+  "version": "3.0.3",
   "scripts": {
     "dev": "next dev",
     "validate:env": "node scripts/validate-env.mjs",
