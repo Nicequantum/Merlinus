@@ -20,10 +20,9 @@ import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
-import { STORY_GENERATE_ROUTE_MAX_DURATION_S } from '@/lib/timeouts';
 
-/** Keep in sync with STORY_GENERATE_ROUTE_MAX_DURATION_S in `@/lib/timeouts`. */
-export const maxDuration = STORY_GENERATE_ROUTE_MAX_DURATION_S;
+/** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
+export const maxDuration = 60;
 
 export async function POST(
   request: Request,
