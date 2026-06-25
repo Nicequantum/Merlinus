@@ -19,7 +19,6 @@ import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
-import { getSuggestions } from '@/utils/mercedesKb';
 import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
 
 interface LineViewProps {
@@ -40,7 +39,6 @@ interface LineViewProps {
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   onAddXentryPhotos: () => void;
   onDeleteXentryImage: (imageId: string) => void;
-  onApplySmartDefaults: () => void;
   onGenerateStory: () => void;
   onReviewStory: () => void;
   onApplyCustomerPayTemplate: (templateId: string) => void | Promise<void>;
@@ -76,7 +74,6 @@ export function LineView({
   onUpdateLine,
   onAddXentryPhotos,
   onDeleteXentryImage,
-  onApplySmartDefaults,
   onGenerateStory,
   onReviewStory,
   onApplyCustomerPayTemplate,
@@ -86,7 +83,6 @@ export function LineView({
   const isCustomerPayLine = isCustomerPayRepairLine(line);
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
-  const suggestions = getSuggestions(ro);
   const storyLen = line.warrantyStory?.length ?? 0;
   const advisorName = ro.serviceAdvisor?.displayName || ro.serviceAdvisorName;
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
@@ -246,7 +242,7 @@ export function LineView({
           </div>
         </div>
 
-        <div className="benz-card p-5 min-w-0 w-full">
+        <div className="benz-card benz-diagnostic-card p-5 min-w-0 w-full">
           <div className="benz-section-title mb-1">Diagnostic Evidence</div>
           <p className="benz-hint mb-4">Grok vision + on-device OCR — tap a photo to view or delete</p>
           <button
@@ -262,32 +258,6 @@ export function LineView({
             <XentryImageGallery images={line.xentryImages} onDeleteImage={onDeleteXentryImage} />
           )}
           <ExtractedDataPreview data={line.extractedData} />
-        </div>
-
-        <div className="benz-line-aside">
-          <div className="flex justify-between items-center mb-2.5">
-            <div className="benz-section-title">Reference · common issues</div>
-            <button
-              onClick={onApplySmartDefaults}
-              className="secondary-btn benz-btn-accent-outline text-xs px-3 h-9 font-medium"
-            >
-              Add to notes
-            </button>
-          </div>
-          <div className="text-xs text-benz-secondary space-y-2 leading-relaxed">
-            <div className="font-medium text-benz-silver">{suggestions.bandNote}</div>
-            <div>
-              <span className="text-benz-muted">Common issues: </span>
-              {suggestions.issues.join(' · ')}
-            </div>
-            <div>
-              <span className="text-benz-muted">Typical specs: </span>
-              {suggestions.tests.map((t) => `${t.label}: ${t.spec}`).join(' · ')}
-            </div>
-          </div>
-          <div className="benz-hint mt-3">
-            Reference only — not performed work unless documented in notes or OCR.
-          </div>
         </div>
 
         {advisorName && (

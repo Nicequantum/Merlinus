@@ -26,7 +26,7 @@ import {
   parseDiagnosticExtraction,
   rebuildExtractedFromOcrTexts,
 } from '@/utils/diagnosticParser';
-import { getSuggestions } from '@/utils/mercedesKb';
+
 
 import { useROPersistence } from '@/hooks/repairOrders/useROPersistence';
 import { useROStoryWorkflow } from '@/hooks/repairOrders/useROStoryWorkflow';
@@ -891,22 +891,6 @@ export function useRepairOrders({
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);
 
-  const applySmartDefaultsToLine = useCallback(
-    (lineId: string) => {
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
-      if (!line) return;
-      const sugg = getSuggestions(latestRO);
-      let notes = (line.technicianNotes || '').trim();
-      const addBlock = `\n\n[Reference only — not performed unless documented]\n[Smart defaults for ${sugg.bandNote}]\nCommon issues at this mileage: ${sugg.issues.join(' • ')}\nTypical spec references: ${sugg.tests.map((t) => `${t.label}: ${t.spec}${t.note ? ' (' + t.note + ')' : ''}`).join('; ')}`;
-      if (!notes.includes('Smart defaults')) notes = (notes + addBlock).trim();
-      updateLine(lineId, { technicianNotes: notes });
-      toast.success('Reference notes added');
-    },
-    [updateLine]
-  );
-
   const analyzeXentryImage = useCallback(
     async (file: File, attachment: ImageAttachment, onProgress: (p: number) => void) => {
       let extracted: Partial<ExtractedData> = {};
@@ -1311,7 +1295,6 @@ export function useRepairOrders({
     updateRONumber,
     decodeVinForRO,
     addRepairLine,
-    applySmartDefaultsToLine,
     addXentryPhotos,
     addROXentryPhotos,
     deleteLineXentryImage,

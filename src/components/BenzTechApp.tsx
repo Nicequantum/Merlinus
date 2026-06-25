@@ -211,7 +211,6 @@ export function BenzTechApp() {
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
           onDeleteXentryImage={(imageId) => void ro.deleteLineXentryImage(ro.currentLine!.id, imageId)}
-          onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
           onGenerateStory={() => {
             const lineId = ro.currentLineId;
             if (!lineId || typeof ro.generateStory !== 'function') {

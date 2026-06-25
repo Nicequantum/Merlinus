@@ -232,12 +232,6 @@ export interface StructuredROExtraction {
   serviceAdvisorName?: string;
 }
 
-export interface MercedesSuggestions {
-  issues: string[];
-  tests: Array<{ label: string; spec: string; note?: string }>;
-  bandNote: string;
-}
-
 export interface TechnicianSession {
   technicianId: string;
   d7Number: string;

@@ -502,6 +502,7 @@
     }
 
     .benz-line-flow .benz-line-doc-card,
+    .benz-line-flow .benz-diagnostic-card,
     .benz-line-flow .benz-generate-panel,
     .benz-line-flow .story-card,
     .benz-line-flow .benz-story-empty-state {
