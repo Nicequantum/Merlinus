@@ -2,17 +2,17 @@ import type { RepairLine, RepairOrder } from '../types';
 import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
 import { PROMPT_VERSION } from './version';
 
-/** Low temperature — fast, consistent output. */
-export const WARRANTY_STORY_TEMPERATURE = 0.15;
+/** Balanced for quality + speed — slightly higher than bare-minimum for richer 3C prose. */
+export const WARRANTY_STORY_TEMPERATURE = 0.2;
 
-/** Tight cap — typical stories fit in ~350 tokens. */
-export const WARRANTY_STORY_MAX_TOKENS = 400;
+/** Typical production stories fit in ~450 tokens; cap keeps responses fast. */
+export const WARRANTY_STORY_MAX_TOKENS = 500;
 
-/** Aggressive field caps to keep user messages small. */
+/** Field caps — enough diagnostic context without bloating the user message. */
 export const PROMPT_FIELD_LIMITS = {
-  ocr: 350,
-  notes: 600,
-  concern: 300,
+  ocr: 400,
+  notes: 800,
+  concern: 350,
 } as const;
 
 function truncatePromptField(text: string, maxLen: number): string {
@@ -35,15 +35,31 @@ export const WARRANTY_WORKFLOW_STEPS = [
   'Final verification test drive (typically 3–5 miles) to confirm the repair (mileage in/out)',
 ] as const;
 
-/** Compact workflow hint for the user message (full list kept for tests/audit). */
+/** Compact workflow hint for prompts (full list kept for tests/audit). */
 export const WARRANTY_WORKFLOW_SUMMARY =
   'test drive → source voltage → battery charger → XENTRY Quick Test → guided tests → findings → repair → clear codes/final Quick Test → disconnect charger/XENTRY → verification drive';
 
+/**
+ * Condensed 3C + MI 2.0 rules — full MI_AUDIT_GUIDELINES omitted to keep latency low.
+ * Injected into SYSTEM_PROMPT; not sent as a separate bloated block.
+ */
+export const THREE_C_GENERATION_RULES = `Production-grade Mercedes-Benz MI 2.0 / Benz Bot 2.0 warranty narratives — NOT a light edit of technician notes.
+
+Natural 3C flow in 3–5 connected paragraphs (NO visible headers, bullets, or lists):
+• Concern — customer presentation, initial test drive, labeled RO complaint for this line.
+• Cause — evidence-linked diagnostics: source voltage → battery charger → XENTRY Quick Test → guided tests → documented findings and root-cause conclusion.
+• Correction — repairs performed, cleared codes, final Quick Test, disconnect charger/XENTRY, verification drive confirming resolution.
+
+First-person technician voice. Active verbs. Precise Mercedes-Benz shop terminology (XENTRY, Quick Test, guided test, DTC/fault code, source voltage).
+Expand sparse notes into professional audit-defensible prose using ONLY provided facts — never copy notes verbatim.
+Weave all 10 workflow steps in chronological order. [NOT DOCUMENTED] for missing steps. Never invent codes, voltages, parts, or test results.`;
+
 export const SYSTEM_PROMPT = `Merlin — Mercedes-Benz warranty story writer (${PROMPT_VERSION}).
 
-Write 3–4 short paragraphs in first person. No headings, bullets, or lists.
-Cover all 10 workflow steps in order: ${WARRANTY_WORKFLOW_SUMMARY}.
-Use only facts from the user message. [NOT DOCUMENTED] for missing steps. Never invent codes, voltages, or parts.`;
+${THREE_C_GENERATION_RULES}
+
+Workflow sequence: ${WARRANTY_WORKFLOW_SUMMARY}.
+Write ONLY the story for the requested line.`;
 
 /** Legacy templates — not injected into fast-generation prompts. */
 export const STORY_TEMPLATES = [
@@ -83,5 +99,5 @@ RO complaints: ${complaint}
 Notes: ${notes}
 Diagnostics: ${xentryText || '[NOT PROVIDED]'}${lineOcr ? ` | OCR: ${lineOcr}` : ''}
 
-Write the warranty story for this line only. Natural paragraphs, all 10 workflow steps.`;
+Write a production 3C warranty narrative for this line only. Transform source data into professional technician prose — do not echo notes verbatim. Cover Concern, Cause, and Correction in flowing paragraphs plus all 10 workflow steps.`;
 }

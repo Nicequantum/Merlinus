@@ -143,6 +143,7 @@ export class VoiceInputService {
   stop(): void {
     this.userStopped = true;
     this.clearTimers();
+    this.flushTranscriptToTarget(true);
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -318,10 +319,7 @@ export class VoiceInputService {
       listeningState: 'listening',
     });
 
-    if (this.targetElement) {
-      this.targetElement.value = full;
-    }
-
+    this.writeTargetValue(full);
     this.callbacks.onTranscript(full, meta);
 
     if (this.targetElement) {
@@ -336,11 +334,36 @@ export class VoiceInputService {
     }
   }
 
+  private writeTargetValue(full: string): void {
+    if (!this.targetElement) return;
+    this.applyingTranscript = true;
+    this.targetElement.value = full;
+    this.applyingTranscript = false;
+  }
+
+  /** Flush the current dictation buffer to the field and optional parent callback. */
+  private flushTranscriptToTarget(markFinal: boolean): void {
+    if (!this.target || !this.callbacks) return;
+    const full = this.target.prefix + this.target.committed + this.target.suffix;
+    this.writeTargetValue(full);
+    this.callbacks.onTranscript(full, {
+      committed: this.target.committed,
+      interim: '',
+      full,
+      hasFinal: markFinal,
+      confidence: this.state.confidence,
+    });
+  }
+
+  private applyingTranscript = false;
+
   /** M15: manual keyboard edits during dictation become the new committed baseline. */
   private attachManualEditGuard(element: HTMLTextAreaElement | HTMLInputElement): void {
     this.detachManualEditGuard();
     this.manualEditListener = () => {
-      if (!this.target || !this.targetElement) return;
+      if (!this.target || !this.targetElement || this.applyingTranscript) return;
+      // While the mic is active, voice drives the field — ignore synthetic input churn.
+      if (this.state.isListening) return;
       const value = this.targetElement.value;
       const cursor = this.targetElement.selectionStart ?? value.length;
       this.target.prefix = value.slice(0, cursor);

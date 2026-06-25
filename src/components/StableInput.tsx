@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
+import type { TranscriptMeta } from '@/lib/voice';
 import { VoiceInputButton } from './VoiceInputButton';
 
 interface StableInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> {
@@ -19,6 +20,8 @@ export function StableInput({
   ...props
 }: StableInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const wasVoiceListeningRef = useRef(false);
   const [draft, setDraft] = useState(value);
   const isFocusedRef = useRef(false);
   const lastEmittedRef = useRef(value);
@@ -29,11 +32,12 @@ export function StableInput({
   }, [fieldKey]);
 
   useEffect(() => {
+    if (voiceListening) return;
     if (isFocusedRef.current) return;
     if (value === lastEmittedRef.current) return;
     lastEmittedRef.current = value;
     setDraft(value);
-  }, [value]);
+  }, [value, voiceListening]);
 
   const commit = useCallback(
     (next: string) => {
@@ -43,6 +47,25 @@ export function StableInput({
     },
     [onChange]
   );
+
+  const handleVoiceTranscript = useCallback(
+    (next: string, meta?: TranscriptMeta) => {
+      setDraft(next);
+      lastEmittedRef.current = next;
+      if (meta?.hasFinal) {
+        onChange(next);
+      }
+    },
+    [onChange]
+  );
+
+  useEffect(() => {
+    if (wasVoiceListeningRef.current && !voiceListening && draft !== lastEmittedRef.current) {
+      lastEmittedRef.current = draft;
+      onChange(draft);
+    }
+    wasVoiceListeningRef.current = voiceListening;
+  }, [voiceListening, draft, onChange]);
 
   return (
     <div className="relative w-full min-w-0">
@@ -69,7 +92,8 @@ export function StableInput({
       {showVoice && (
         <VoiceInputButton
           targetRef={inputRef}
-          onTranscript={commit}
+          onTranscript={handleVoiceTranscript}
+          onListeningChange={setVoiceListening}
           className="right-2 top-1/2 -translate-y-1/2"
         />
       )}

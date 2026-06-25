@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   STORY_TEMPLATES,
   SYSTEM_PROMPT,
+  THREE_C_GENERATION_RULES,
   WARRANTY_STORY_MAX_TOKENS,
   WARRANTY_WORKFLOW_STEPS,
   WARRANTY_WORKFLOW_SUMMARY,
@@ -44,13 +45,15 @@ const baseLine: RepairLine = {
 };
 
 describe('warranty story prompts', () => {
-  test('SYSTEM_PROMPT is compact and covers workflow + audit safety', () => {
+  test('SYSTEM_PROMPT enforces compact 3C quality without style-variation bloat', () => {
     assert.match(SYSTEM_PROMPT, /Merlin/i);
-    assert.match(SYSTEM_PROMPT, /10 workflow steps/i);
+    assert.match(SYSTEM_PROMPT, /3C|Concern|Cause|Correction/i);
     assert.match(SYSTEM_PROMPT, /Quick Test/i);
     assert.match(SYSTEM_PROMPT, /\[NOT DOCUMENTED\]/);
     assert.match(SYSTEM_PROMPT, /WARRANTY_WORKFLOW_SUMMARY|test drive/i);
-    assert.ok(SYSTEM_PROMPT.length < 600);
+    assert.match(THREE_C_GENERATION_RULES, /never copy notes verbatim/i);
+    assert.match(THREE_C_GENERATION_RULES, /Benz Bot 2\.0/i);
+    assert.ok(SYSTEM_PROMPT.length < 1_400);
     assert.doesNotMatch(SYSTEM_PROMPT, /NATURAL STYLE VARIATION/i);
   });
 
@@ -68,18 +71,19 @@ describe('warranty story prompts', () => {
     }
   });
 
-  test('buildWarrantyStoryUserMessage includes line data only', () => {
+  test('buildWarrantyStoryUserMessage includes line data and 3C instruction', () => {
     const message = buildWarrantyStoryUserMessage(baseRo, baseLine);
     assert.match(message, /Line 1/i);
     assert.match(message, /28450→28458/);
     assert.match(message, /P0300/);
-    assert.match(message, /10 workflow steps/i);
-    assert.ok(message.length < 1_200);
+    assert.match(message, /3C warranty narrative/i);
+    assert.match(message, /do not echo notes verbatim/i);
+    assert.ok(message.length < 1_400);
     assert.doesNotMatch(message, /Style variation/i);
     assert.doesNotMatch(message, /Advisor opening/i);
   });
 
   test('WARRANTY_STORY_MAX_TOKENS limits generation output', () => {
-    assert.equal(WARRANTY_STORY_MAX_TOKENS, 400);
+    assert.equal(WARRANTY_STORY_MAX_TOKENS, 500);
   });
 });

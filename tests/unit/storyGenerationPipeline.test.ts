@@ -56,10 +56,10 @@ describe('story generation pipeline audit', () => {
 
   test('audit reports compact prompts and no optional context', () => {
     const audit = auditStoryGenerationPipeline(baseRo, baseLine);
-    assert.ok(audit.systemPromptChars < 600);
-    assert.ok(audit.userMessageChars < 1_200);
-    assert.ok(audit.totalPromptChars < 1_800);
-    assert.equal(audit.maxOutputTokens, 400);
+    assert.ok(audit.systemPromptChars < 1_400);
+    assert.ok(audit.userMessageChars < 1_400);
+    assert.ok(audit.totalPromptChars < 2_600);
+    assert.equal(audit.maxOutputTokens, 500);
     assert.ok(audit.excludedFromPrompt.includes('knowledgeBase'));
     assert.ok(audit.excludedFromPrompt.includes('historyContext'));
     assert.equal(audit.timeouts.grokMs, 25_000);

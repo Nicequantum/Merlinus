@@ -56,14 +56,15 @@ describe('story generation performance settings', () => {
   });
 
   test('caps generation output tokens for fast responses', () => {
-    assert.equal(WARRANTY_STORY_MAX_TOKENS, 400);
+    assert.equal(WARRANTY_STORY_MAX_TOKENS, 500);
     assert.ok(WARRANTY_STORY_TEMPERATURE <= 0.25);
   });
 
   test('prompts stay compact for sub-30s generation', () => {
     const userMessage = buildWarrantyStoryUserMessage(baseRo, baseLine);
-    assert.ok(SYSTEM_PROMPT.length < 600);
-    assert.ok(userMessage.length < 1_200);
+    assert.ok(SYSTEM_PROMPT.length < 1_400);
+    assert.ok(userMessage.length < 1_400);
+    assert.match(SYSTEM_PROMPT, /3C|Concern|Cause|Correction/i);
     assert.match(userMessage, /P0300/);
     assert.doesNotMatch(userMessage, /Style variation/i);
   });

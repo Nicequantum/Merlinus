@@ -4,16 +4,19 @@ import { Mic, MicOff } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
+import type { TranscriptMeta } from '@/lib/voice';
 
 interface VoiceInputButtonProps {
   targetRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
-  onTranscript: (value: string) => void;
+  onTranscript: (value: string, meta?: TranscriptMeta) => void;
+  onListeningChange?: (listening: boolean) => void;
   className?: string;
 }
 
 export function VoiceInputButton({
   targetRef,
   onTranscript,
+  onListeningChange,
   className = '',
 }: VoiceInputButtonProps) {
   const lastErrorRef = useRef<string | null>(null);
@@ -35,6 +38,10 @@ export function VoiceInputButton({
   }, [refreshPermission, stopListening]);
 
   useEffect(() => {
+    onListeningChange?.(isListening || listeningState === 'restarting');
+  }, [isListening, listeningState, onListeningChange]);
+
+  useEffect(() => {
     if (listeningState !== 'error' || !errorMessage) return;
     if (lastErrorRef.current === errorMessage) return;
     lastErrorRef.current = errorMessage;
@@ -42,8 +49,8 @@ export function VoiceInputButton({
   }, [listeningState, errorMessage]);
 
   const handleTranscript = useCallback(
-    (value: string) => {
-      onTranscript(value);
+    (value: string, meta?: TranscriptMeta) => {
+      onTranscript(value, meta);
     },
     [onTranscript]
   );

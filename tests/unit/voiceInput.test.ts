@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from '../../src/lib/voice/confidence';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from '../../src/lib/voice/errors';
@@ -26,6 +28,20 @@ describe('voice confidence adaptation', () => {
   test('gates low-confidence hypotheses in quiet bays', () => {
     assert.equal(passesConfidenceGate(0.8, 0.55), true);
     assert.equal(passesConfidenceGate(0.1, 0.55), false);
+  });
+});
+
+describe('voice dictation stability', () => {
+  test('StableTextarea defers parent sync until finalized speech', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/StableTextarea.tsx'), 'utf8');
+    assert.match(src, /meta\?\.hasFinal/);
+    assert.match(src, /suppressExternalSync|voiceListening/);
+  });
+
+  test('VoiceInputService ignores manual-edit guard while listening', () => {
+    const src = readFileSync(join(process.cwd(), 'src/lib/voice/VoiceInputService.ts'), 'utf8');
+    assert.match(src, /this\.state\.isListening\) return/);
+    assert.match(src, /flushTranscriptToTarget/);
   });
 });
 

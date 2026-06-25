@@ -91,15 +91,22 @@ export function LineView({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
 
+  const [storyEditedSinceGenerate, setStoryEditedSinceGenerate] = useState(false);
+
   useEffect(() => {
     setShowSaveTemplate(false);
     setShowTemplateLibrary(false);
+    setStoryEditedSinceGenerate(false);
   }, [line.id]);
+
+  useEffect(() => {
+    setStoryEditedSinceGenerate(false);
+  }, [lastGeneratedStoryText]);
 
   const canSaveAsTemplate = useMemo(() => {
     if (!lastGeneratedStoryText || !line.warrantyStory?.trim()) return false;
-    return line.warrantyStory.trim() !== lastGeneratedStoryText.trim();
-  }, [lastGeneratedStoryText, line.warrantyStory]);
+    return storyEditedSinceGenerate;
+  }, [lastGeneratedStoryText, line.warrantyStory, storyEditedSinceGenerate]);
 
   const defaultTemplateTitle = useMemo(() => {
     const base = line.description?.trim() || 'Warranty Story';
@@ -409,6 +416,7 @@ export function LineView({
                 value={line.warrantyStory}
                 onChange={(v) => {
                   onClearCdkSanitizedNotice?.();
+                  setStoryEditedSinceGenerate(true);
                   onUpdateLine({ warrantyStory: v });
                 }}
                 className="benz-textarea text-[15px] leading-relaxed mb-4 min-h-[220px]"
