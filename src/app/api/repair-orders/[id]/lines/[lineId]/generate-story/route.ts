@@ -1,22 +1,20 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import {
-  formatAdvisorContextForPrompt,
-  loadAdvisorPromptContextForRepairOrder,
-} from '@/lib/advisorIntelligence';
 import { prisma } from '@/lib/db';
-import { generateWarrantyStory, scoreWarrantyStory } from '@/lib/grok';
-import {
-  formatKnowledgeBaseForPrompt,
-  GLOBAL_DEALERSHIP_ID,
-  mapKnowledgeBase,
-  seedTemplateLibraryIfEmpty,
-  selectRelevantKnowledgeEntries,
-} from '@/lib/templateLibrary';
+import { generateWarrantyStory } from '@/lib/grok';
+import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
+import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
+import { logPerformance } from '@/lib/perf';
+import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
+
+/** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
+export const maxDuration = 60;
 
 export async function POST(
   request: Request,
@@ -43,98 +41,68 @@ export async function POST(
       const line = mapped.repairLines.find((l) => l.id === lineId);
       if (!line) return apiError(NOT_FOUND_ERROR, 404);
 
-      let historyContext = '';
-      const similar = await prisma.repairOrder.findMany({
-        where: {
-          dealershipId: session.dealershipId,
-          id: { not: id },
-          model: ro.model ? { contains: ro.model.split(' ')[0] } : undefined,
-        },
-        include: { repairLines: true },
-        take: 2,
-      });
-
-      if (similar.length > 0) {
-        historyContext =
-          '\n\nFor writing style reference only (do NOT copy facts from these — use only current line data):\n' +
-          similar
-            .map((r) => {
-              const m = dbToRepairOrder(r);
-              return m.repairLines
-                .filter((l) => l.warrantyStory)
-                .map((l) => `For ${l.description}: ${l.warrantyStory!.substring(0, 250)}...`)
-                .join('\n');
-            })
-            .join('\n---\n');
+      const dbLine = ro.repairLines.find((l) => l.id === lineId);
+      if (isCustomerPayRepairLine(dbLine)) {
+        return apiError(
+          'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
+          400
+        );
       }
 
-      const advisorCtx = await loadAdvisorPromptContextForRepairOrder(id);
-      const advisorContext = advisorCtx ? formatAdvisorContextForPrompt(advisorCtx) : '';
-
-      await seedTemplateLibraryIfEmpty();
-      const kbRows = await prisma.knowledgeBase.findMany({
-        where: {
-          OR: [{ dealershipId: GLOBAL_DEALERSHIP_ID }, { dealershipId: session.dealershipId, source: 'user' }],
-        },
-        orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }],
-      });
-      const kbEntries = kbRows.map(mapKnowledgeBase);
-      const relevantKb = selectRelevantKnowledgeEntries(mapped, line, kbEntries, session.dealershipId);
-      const knowledgeBaseContext = formatKnowledgeBaseForPrompt(relevantKb);
+      const pipelineAudit = auditStoryGenerationPipeline(mapped, line);
+      logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
 
       let warrantyStory: string;
+      let cdkSanitized = false;
       try {
-        warrantyStory = await generateWarrantyStory(
-          mapped,
-          line,
-          historyContext,
-          advisorContext,
-          knowledgeBaseContext
-        );
+        const grokStartedAt = Date.now();
+        const rawStory = await generateWarrantyStory(mapped, line);
+        logPerformance('grok.story.generate.route', Date.now() - grokStartedAt, {
+          model: pipelineAudit.model,
+          promptChars: pipelineAudit.totalPromptChars,
+        });
+        const cleaned = sanitizeForCDKWithMeta(rawStory);
+        warrantyStory = cleaned.text;
+        cdkSanitized = cleaned.wasModified;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Story generation failed';
-        if (message.includes('GROK_API_KEY')) {
-          return apiError('Story generation is not configured. Contact your administrator.', 503);
-        }
-        if (message.toLowerCase().includes('timed out')) {
-          return apiError('Story generation timed out — try again in a moment.', 504);
-        }
-        return apiError('Story generation failed — try again in a moment.', 502);
+        const mapped = mapGrokRouteError(error, 'Story generation');
+        return apiError(mapped.message, mapped.status);
       }
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
-        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
-      });
-
-      let quality = null;
-      try {
-        quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
-      } catch {
-        // Story saved — quality score is best-effort
-      }
-
+      // C3: durable audit trail before persisting story — if audit fails, story is not saved.
       await writeAuditLog({
         action: 'story.generate',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
         entityType: 'repairLine',
         entityId: lineId,
-        metadata: {
+        metadata: buildStoryGenerateAuditMetadata({
           repairOrderId: id,
           lineNumber: line.lineNumber,
-          advisorIntelligenceUsed: Boolean(advisorCtx),
-          knowledgeBaseEntriesUsed: relevantKb.map((entry) => entry.title),
-          serviceAdvisorId: advisorCtx?.serviceAdvisorId ?? null,
-          serviceAdvisorName: advisorCtx?.displayName ?? null,
-          qualityScore: quality?.score ?? null,
-          qualityGrade: quality?.grade ?? null,
-        },
+          advisorIntelligenceUsed: false,
+          advisorContextHash: null,
+          knowledgeBaseEntryIds: [],
+          historyContextLineCount: 0,
+          qualityScore: null,
+          qualityGrade: null,
+          serviceAdvisorId: null,
+        }),
         ipAddress: getRequestIp(request),
       });
 
-      return { warrantyStory, quality };
+      await prisma.repairLine.update({
+        where: { id: lineId },
+        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
+      });
+
+      return { warrantyStory, quality: null, cdkSanitized };
     },
-    { rateLimitKey: 'story.generate', rateLimit: RATE_LIMITS.generate, trackUsage: true }
+    {
+      rateLimitKey: 'story.generate',
+      rateLimit: RATE_LIMITS.generate,
+      trackUsage: true,
+      blockInMaintenance: true,
+      perfEvent: 'route.story.generate',
+    }
   );
 }

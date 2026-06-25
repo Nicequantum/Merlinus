@@ -27,109 +27,104 @@ export function ScanROSection({
   onClearPendingScan,
   onCancelScan,
   onCreateManualRO,
-  scanButtonLabel = 'SCAN RO',
+  scanButtonLabel = 'Scan RO',
   compact = false,
 }: ScanROSectionProps) {
-  const buttonHeight = compact ? 'h-11' : 'h-12';
+  const buttonHeight = compact ? 'h-11' : 'h-13';
   const buttonText = compact ? 'text-xs' : 'text-sm';
   const hasPending = pendingROImages.length > 0;
 
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       {!isProcessingOCR && (
-        <div className="flex gap-2 mb-2">
+        <div className="space-y-2 mb-3">
           <button
             onClick={onScanRO}
-            className={`primary-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold`}
+            className={`primary-btn w-full ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold touch-target`}
           >
             <Camera size={compact ? 16 : 18} />
-            {hasPending ? 'ADD PAGE' : scanButtonLabel}
+            {hasPending ? 'Add page' : scanButtonLabel}
           </button>
-          <button
-            onClick={onAddFromGallery}
-            className={`secondary-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold`}
-          >
-            <FolderOpen size={compact ? 16 : 18} />
-            GALLERY
-          </button>
-          <button
-            onClick={onCreateManualRO}
-            className={`secondary-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold`}
-          >
-            <Plus size={compact ? 16 : 18} />
-            {compact ? 'MANUAL' : 'MANUAL RO'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onAddFromGallery}
+              className={`secondary-btn flex-1 ${compact ? 'h-10' : 'h-11'} flex items-center justify-center gap-2 ${buttonText} font-medium`}
+            >
+              <FolderOpen size={compact ? 16 : 18} />
+              Gallery
+            </button>
+            <button
+              onClick={onCreateManualRO}
+              className={`benz-tertiary-btn flex-1 ${compact ? 'h-10' : 'h-11'}`}
+            >
+              <Plus size={compact ? 16 : 18} />
+              {compact ? 'Manual' : 'Manual entry'}
+            </button>
+          </div>
         </div>
       )}
 
       {isProcessingOCR && (
-        <div className="flex gap-2 mb-2">
+        <div className="flex gap-2 mb-3">
           <button
             disabled
-            className={`primary-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold opacity-60`}
+            className={`primary-btn w-full ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold opacity-60`}
           >
             <Loader2 size={compact ? 16 : 18} className="animate-spin" />
-            SCANNING… {ocrProgress}%
+            Scanning… {ocrProgress}%
           </button>
         </div>
       )}
 
       {hasPending && !isProcessingOCR && (
-        <div className="flex gap-2 mb-2">
+        <div className="flex gap-2 mb-3">
           <button
             onClick={onProcessScan}
             disabled={isProcessingOCR}
             className={`primary-btn flex-[2] ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold`}
           >
             <Sparkles size={compact ? 16 : 18} />
-            PROCESS RO ({pendingROImages.length} PAGE{pendingROImages.length === 1 ? '' : 'S'})
+            Process RO ({pendingROImages.length} page{pendingROImages.length === 1 ? '' : 's'})
           </button>
           <button
             onClick={onClearPendingScan}
-            className={`secondary-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText} font-semibold`}
+            className={`benz-danger-btn flex-1 ${buttonHeight} flex items-center justify-center gap-2 ${buttonText}`}
           >
             <Trash2 size={compact ? 16 : 18} />
-            CLEAR
+            Clear
           </button>
         </div>
       )}
 
       {isProcessingOCR && (
-        <div className="ios-card p-3 mb-2">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="text-xs uppercase tracking-widest text-[#8e8e93]">Scan in progress</div>
-            <button onClick={onCancelScan} className="text-[10px] text-[#ff9f0a] font-semibold">
-              CANCEL
+        <div className="benz-card p-4 mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="benz-section-title">Scan in progress</div>
+            <button onClick={onCancelScan} className="text-xs font-semibold text-benz-amber hover:opacity-80">
+              Cancel
             </button>
           </div>
-          <div className="h-1.5 bg-[#2c2c2e] rounded-full overflow-hidden mb-2">
-            <div
-              className="h-full bg-[#0a84ff] transition-all duration-300 ease-out"
-              style={{ width: `${Math.max(ocrProgress, 4)}%` }}
-            />
+          <div className="benz-progress-track mb-3">
+            <div className="benz-progress-fill" style={{ width: `${Math.max(ocrProgress, 4)}%` }} />
           </div>
-          <p className="text-xs text-[#8e8e93]">{scanStatusMessage || 'Processing documents…'}</p>
+          <p className="text-xs text-benz-secondary">{scanStatusMessage || 'Processing documents…'}</p>
         </div>
       )}
 
       {hasPending && (
-        <div className="ios-card p-3 mb-2">
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2">
+        <div className="benz-card p-4 mb-3">
+          <div className="benz-section-title mb-3">
             {isProcessingOCR
-              ? `PROCESSING ${pendingROImages.length} PAGE${pendingROImages.length === 1 ? '' : 'S'}`
-              : `READY — ${pendingROImages.length} PAGE${pendingROImages.length === 1 ? '' : 'S'} CAPTURED`}
+              ? `Processing ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'}`
+              : `Ready — ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'} captured`}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2.5">
             {pendingROImages.map((img) => (
-              <div key={img.id} className="relative">
-                <img
-                  src={img.previewUrl}
-                  className="w-full h-16 object-cover rounded border border-[#38383a]"
-                  alt={img.name}
-                />
+              <div key={img.id} className="relative rounded-benz overflow-hidden border border-[var(--benz-border)]">
+                <img src={img.previewUrl} className="w-full h-20 object-cover" alt={img.name} />
                 {isProcessingOCR && (
-                  <div className="absolute inset-0 bg-black/40 rounded flex items-center justify-center">
-                    <Loader2 size={14} className="animate-spin text-white" />
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <Loader2 size={16} className="animate-spin text-white" />
                   </div>
                 )}
               </div>
@@ -139,10 +134,9 @@ export function ScanROSection({
       )}
 
       {!isProcessingOCR && !hasPending && (
-        <p className="text-center text-[10px] text-[#8e8e93] -mt-1 mb-1">
-          Tap {scanButtonLabel} to capture each RO page (usually 3–5). Use flash or even lighting and avoid hand shadows
-          on faded or colored paper. Add from Gallery for PDFs or batch photos. Tap Process RO when all pages are
-          captured.
+        <p className="text-center benz-hint -mt-1 mb-2 px-2">
+          Capture each RO page (usually 3–5). Use even lighting and avoid shadows on colored paper. Add from Gallery for PDFs.
+          Tap Process RO when all pages are captured.
         </p>
       )}
     </div>

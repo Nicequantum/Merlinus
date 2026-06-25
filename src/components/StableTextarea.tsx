@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type TextareaHTMLAttributes } from 'react';
+import type { TranscriptMeta } from '@/lib/voice';
 import { VoiceInputButton } from './VoiceInputButton';
 
 interface StableTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> {
@@ -10,7 +11,7 @@ interface StableTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaEl
   showVoice?: boolean;
 }
 
-function useStableDraft(value: string, fieldKey: string) {
+function useStableDraft(value: string, fieldKey: string, suppressExternalSync: boolean) {
   const [draft, setDraft] = useState(value);
   const isFocusedRef = useRef(false);
   const lastEmittedRef = useRef(value);
@@ -22,11 +23,12 @@ function useStableDraft(value: string, fieldKey: string) {
   }, [fieldKey]);
 
   useEffect(() => {
+    if (suppressExternalSync) return;
     if (isFocusedRef.current) return;
     if (value === lastEmittedRef.current) return;
     lastEmittedRef.current = value;
     setDraft(value);
-  }, [value]);
+  }, [value, suppressExternalSync]);
 
   const commit = useCallback((next: string, el?: HTMLTextAreaElement) => {
     if (el && isFocusedRef.current) {
@@ -60,7 +62,13 @@ export function StableTextarea({
   ...props
 }: StableTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { draft, isFocusedRef, lastEmittedRef, commit, restoreSelection } = useStableDraft(value, fieldKey);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const wasVoiceListeningRef = useRef(false);
+  const { draft, isFocusedRef, lastEmittedRef, commit, restoreSelection } = useStableDraft(
+    value,
+    fieldKey,
+    voiceListening
+  );
 
   const handleChange = (next: string) => {
     commit(next, textareaRef.current ?? undefined);
@@ -68,8 +76,28 @@ export function StableTextarea({
     restoreSelection(textareaRef.current);
   };
 
+  const handleVoiceTranscript = useCallback(
+    (next: string, meta?: TranscriptMeta) => {
+      commit(next, textareaRef.current ?? undefined);
+      restoreSelection(textareaRef.current);
+      // Interim results stay local — parent persistence waits for finalized speech.
+      if (meta?.hasFinal) {
+        onChange(next);
+      }
+    },
+    [commit, onChange, restoreSelection]
+  );
+
+  useEffect(() => {
+    if (wasVoiceListeningRef.current && !voiceListening && draft !== lastEmittedRef.current) {
+      lastEmittedRef.current = draft;
+      onChange(draft);
+    }
+    wasVoiceListeningRef.current = voiceListening;
+  }, [voiceListening, draft, onChange, lastEmittedRef]);
+
   return (
-    <div className="flex gap-2 items-start w-full">
+    <div className="relative w-full min-w-0">
       <textarea
         ref={textareaRef}
         {...props}
@@ -89,9 +117,16 @@ export function StableTextarea({
           props.onBlur?.(e);
         }}
         onChange={(e) => handleChange(e.target.value)}
-        className={`flex-1 touch-manipulation ${className}`}
+        className={`w-full min-w-0 touch-manipulation ${showVoice ? 'pr-10 pb-9 ' : ''}${className}`}
       />
-      {showVoice && <VoiceInputButton targetRef={textareaRef} onTranscript={handleChange} className="mt-2 shrink-0" />}
+      {showVoice && (
+        <VoiceInputButton
+          targetRef={textareaRef}
+          onTranscript={handleVoiceTranscript}
+          onListeningChange={setVoiceListening}
+          className="bottom-2 right-2"
+        />
+      )}
     </div>
   );
 }

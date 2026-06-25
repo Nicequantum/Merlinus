@@ -15,18 +15,23 @@ import {
 import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
 import { apiError, FORBIDDEN_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { createRepairOrderSchema, parseBody } from '@/lib/validation';
+import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
+import { createRepairOrderSchema, parseRequestBody } from '@/lib/validation';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
+import {
+  buildRepairOrderListWhere,
+  getTodayStartIso,
+  parseRepairOrderListParams,
+} from '@/lib/roListQuery';
 import { createRepairOrderFromScan } from '@/utils/repairOrderFactory';
 
 export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const where =
-        session.role === 'manager'
-          ? { dealershipId: session.dealershipId }
-          : { technicianId: session.technicianId };
+      const url = new URL(request.url);
+      const params = parseRepairOrderListParams(url);
+      const where = buildRepairOrderListWhere(session, params);
 
       const orders = await prisma.repairOrder.findMany({
         where,
@@ -35,16 +40,32 @@ export async function GET(request: Request) {
           technician: { select: { name: true } },
           serviceAdvisor: { select: { id: true, displayName: true } },
         },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: params.limit + 1,
+        ...(params.cursor
+          ? {
+              cursor: { id: params.cursor },
+              skip: 1,
+            }
+          : {}),
       });
 
-      const repairOrders = orders.map((ro) => {
+      const hasMore = orders.length > params.limit;
+      const page = hasMore ? orders.slice(0, params.limit) : orders;
+
+      const repairOrders = page.map((ro) => {
         const mapped = dbToRepairOrder(ro);
         mapped.technicianName = ro.technician.name;
         return mapped;
       });
 
-      return { repairOrders };
+      return {
+        repairOrders,
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+        hasMore,
+        scope: params.q ? 'search' : params.scope,
+        todayStart: getTodayStartIso(),
+      };
     },
     { rateLimitKey: 'ros.list' }
   );
@@ -54,11 +75,8 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const body = await request.json();
-      const parsed = parseBody(createRepairOrderSchema, body);
-      if ('error' in parsed) {
-        return apiError(VALIDATION_ERROR, 400);
-      }
+      const parsed = await parseRequestBody(request, createRepairOrderSchema, LARGE_JSON_BODY_LIMIT_BYTES);
+      if ('error' in parsed) return parsed.error;
 
       const data = parsed.data;
       let input: RepairOrderInput;

@@ -38,6 +38,10 @@ export interface RepairLine {
   xentryOcrTexts?: string[];
   extractedData?: ExtractedData;
   warrantyStory?: string;
+  /** Set when a Customer Pay template was applied — bypasses AI generation and quality audit. */
+  isCustomerPay?: boolean;
+  /** M1: client-only flag to explicitly clear Customer Pay on save. */
+  clearCustomerPay?: boolean;
 }
 
 export interface VehicleWarrantyInfo {
@@ -83,6 +87,7 @@ export interface RepairOrder {
   xentryOcrTexts?: string[];
   repairLines: RepairLine[];
   createdAt?: string;
+  updatedAt?: string;
   technicianId?: string;
   technicianName?: string;
 }
@@ -96,6 +101,11 @@ export interface StoryTemplate {
   title: string;
   category: TemplateCategory;
   content: string;
+  isCustomerPay?: boolean;
+  /** M1: client-only flag to explicitly clear Customer Pay on save. */
+  clearCustomerPay?: boolean;
+  templateType?: 'Warranty' | 'CustomerPay';
+  description?: string | null;
   source?: string;
   dealershipId?: string;
   useCount?: number;
@@ -222,12 +232,6 @@ export interface StructuredROExtraction {
   serviceAdvisorName?: string;
 }
 
-export interface MercedesSuggestions {
-  issues: string[];
-  tests: Array<{ label: string; spec: string; note?: string }>;
-  bandNote: string;
-}
-
 export interface TechnicianSession {
   technicianId: string;
   d7Number: string;
@@ -265,6 +269,7 @@ export interface AuditLogEntry {
   ipAddress: string | null;
   createdAt: string;
   entryHash?: string | null;
+  promptVersion?: string | null;
 }
 
 export interface AuditChainInfo {
@@ -329,6 +334,7 @@ export const AUDIT_ACTIONS = [
   'story.generate',
   'story.review',
   'story.edit',
+  'story.pdf_export',
   'user.create',
   'user.deactivate',
   'user.reactivate',
@@ -338,4 +344,7 @@ export const AUDIT_ACTIONS = [
   'advisor.resolve',
   'advisor.capture',
   'template.save',
+  'customerPayTemplateApplied',
+  'customerPayStory.edit',
+  'customerPayStory.pdf_export',
 ] as const;

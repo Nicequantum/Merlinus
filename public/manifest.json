@@ -1,13 +1,13 @@
 {
-  "name": "Benz Tech — Dealership Warranty Platform",
-  "short_name": "BenzTech",
+  "name": "Merlin — Mercedes-Benz Warranty Platform",
+  "short_name": "Merlin",
   "description": "Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#0a0a0a",
-  "background_color": "#0a0a0a",
+  "theme_color": "#08080a",
+  "background_color": "#08080a",
   "lang": "en",
   "icons": [
     {

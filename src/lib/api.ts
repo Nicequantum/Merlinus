@@ -16,7 +16,12 @@ import type {
   ExtractedData,
   UsageAnalytics,
 } from '@/types';
-import { DIAGNOSTIC_EXTRACT_CLIENT_MS, RO_EXTRACT_CLIENT_MS } from '@/lib/timeouts';
+import {
+  DIAGNOSTIC_EXTRACT_CLIENT_MS,
+  RO_EXTRACT_CLIENT_MS,
+  STORY_GENERATE_CLIENT_MS,
+  STORY_SCORE_CLIENT_MS,
+} from '@/lib/timeouts';
 
 export interface TechnicianUser {
   id: string;
@@ -106,7 +111,26 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
-  listRepairOrders: () => apiFetch<{ repairOrders: RepairOrder[] }>('/api/repair-orders'),
+  listRepairOrders: (params?: {
+    limit?: number;
+    cursor?: string;
+    scope?: 'today' | 'previous';
+    q?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.scope) query.set('scope', params.scope);
+    if (params?.q?.trim()) query.set('q', params.q.trim());
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiFetch<{
+      repairOrders: RepairOrder[];
+      nextCursor?: string | null;
+      hasMore?: boolean;
+      scope?: 'today' | 'previous' | 'search';
+      todayStart?: string;
+    }>(`/api/repair-orders${suffix}`);
+  },
 
   getRepairOrder: (id: string) => apiFetch<{ repairOrder: RepairOrder }>(`/api/repair-orders/${id}`),
 
@@ -179,15 +203,35 @@ export const api = {
     }),
 
   generateStory: (roId: string, lineId: string) =>
-    apiFetch<{ warrantyStory: string; quality: StoryQualityResult | null }>(
+    apiFetch<{ warrantyStory: string; quality: StoryQualityResult | null; cdkSanitized?: boolean }>(
       `/api/repair-orders/${roId}/lines/${lineId}/generate-story`,
-      { method: 'POST', timeoutMs: 180_000 }
+      { method: 'POST', timeoutMs: STORY_GENERATE_CLIENT_MS }
+    ),
+
+  scoreStory: (roId: string, lineId: string, warrantyStory: string) =>
+    apiFetch<{ quality: StoryQualityResult }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/score-story`,
+      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: STORY_SCORE_CLIENT_MS }
     ),
 
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>
     apiFetch<{ review: StoryReviewResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/review-story`,
       { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 120_000 }
+    ),
+
+  /** Customer Pay — instant pre-written story; bypasses Grok and quality audit. */
+  applyCustomerPayTemplate: (roId: string, lineId: string, templateId: string) =>
+    apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true; idempotent?: boolean; cdkSanitized?: boolean }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/apply-customer-pay-template`,
+      { method: 'POST', body: JSON.stringify({ templateId }), timeoutMs: 15_000 }
+    ),
+
+  /** M1: clear Customer Pay mode so warranty AI generation can resume. */
+  clearCustomerPayMode: (roId: string, lineId: string) =>
+    apiFetch<{ ok: boolean; isCustomerPay: false }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/clear-customer-pay`,
+      { method: 'POST', timeoutMs: 15_000 }
     ),
 
   listTemplates: (category?: TemplateCategory) => {

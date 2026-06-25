@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { normalizeD7Number } from './d7Number';
@@ -7,7 +8,10 @@ import { prisma } from './db';
 import { logger } from './logger';
 
 export const SESSION_COOKIE = 'benz_tech_session';
-const SESSION_MAX_AGE = 60 * 60 * 12; // 12 hours
+/** M9: shorter session lifetime reduces exposure from stolen cookies. */
+const SESSION_MAX_AGE = 60 * 60 * 8; // 8 hours
+export const JWT_ISSUER = 'merlin';
+export const JWT_AUDIENCE = 'benz-tech-session';
 
 export interface SessionPayload {
   technicianId: string;
@@ -38,6 +42,9 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export async function createSessionToken(payload: SessionPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
+    .setJti(randomUUID())
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE}s`)
     .sign(getSecret());
@@ -45,7 +52,10 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
     return payload as unknown as SessionPayload;
   } catch {
     return null;

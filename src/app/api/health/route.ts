@@ -1,34 +1,50 @@
-import { aggregateHealthStatus, runAllHealthChecks } from '@/lib/healthChecks';
+import { withAuth } from '@/lib/apiRoute';
+import { aggregateHealthStatus, runAuthenticatedHealthChecks } from '@/lib/healthChecks';
+import { getRuntimeConfig } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { PROMPT_VERSION } from '@/prompts/version';
 
 export const dynamic = 'force-dynamic';
 
 const startedAt = Date.now();
 
-export async function GET() {
-  const checks = await runAllHealthChecks();
-  const status = aggregateHealthStatus(checks);
+/**
+ * C5: Manager-authenticated, minimal health — no live Grok calls, no env/infrastructure leakage.
+ */
+export async function GET(request: Request) {
+  return withAuth(
+    request,
+    async () => {
+      const checks = await runAuthenticatedHealthChecks();
+      const status = aggregateHealthStatus(checks);
 
-  if (status === 'error') {
-    logger.warn('health.degraded', {
-      status,
-      failed: Object.entries(checks)
-        .filter(([, c]) => c.status === 'error')
-        .map(([name, c]) => ({ name, detail: c.detail })),
-    });
-  }
+      if (status === 'error') {
+        logger.warn('health.degraded', {
+          status,
+          failed: Object.entries(checks)
+            .filter(([, c]) => c.status === 'error')
+            .map(([name]) => name),
+        });
+      }
 
-  const payload = {
-    status,
-    version: process.env.npm_package_version || '3.0.0',
-    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-    timestamp: new Date().toISOString(),
-    checks,
-  };
+      const config = getRuntimeConfig(PROMPT_VERSION);
+      const payload = {
+        status,
+        version: config.appVersion,
+        promptVersion: PROMPT_VERSION,
+        uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        timestamp: new Date().toISOString(),
+        services: Object.fromEntries(
+          Object.entries(checks).map(([name, check]) => [name, check.status])
+        ),
+      };
 
-  const statusCode = status === 'error' ? 503 : 200;
-  return Response.json(payload, {
-    status: statusCode,
-    headers: { 'Cache-Control': 'no-store' },
-  });
+      const statusCode = status === 'error' ? 503 : 200;
+      return Response.json(payload, {
+        status: statusCode,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    },
+    { rateLimitKey: 'health', requireManager: true }
+  );
 }

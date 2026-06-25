@@ -9,6 +9,7 @@ import {
   Type,
   UserRound,
 } from 'lucide-react';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { AdvisorDetail, AdvisorListItem } from '@/types';
@@ -34,39 +35,39 @@ function AdvisorDetailPanel({ advisor }: { advisor: AdvisorDetail }) {
 
   return (
     <div className="space-y-4">
-      <div className="ios-card p-4">
+      <div className="benz-card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-lg font-semibold">{advisor.displayName}</div>
-            <div className="text-xs text-[#8e8e93] mt-1">
+            <div className="text-lg font-semibold tracking-tight">{advisor.displayName}</div>
+            <div className="text-xs text-benz-secondary mt-1">
               {advisor.roCount} linked RO{advisor.roCount === 1 ? '' : 's'} · First seen{' '}
               {formatDate(advisor.firstSeenAt)}
             </div>
           </div>
-          <span className="status-pill bg-[#0a84ff]/15 text-[#0a84ff]">
+          <span className="status-pill bg-benz-accent/15 text-benz-blue border border-benz-accent/30">
             {advisor.profile?.observationCount ?? 0} obs
           </span>
         </div>
       </div>
 
       {formatting && (
-        <div className="ios-card p-4">
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-3">Writing Style</div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="bg-[#1c1c1e] rounded-lg p-3">
-              <div className="text-[10px] text-[#8e8e93] uppercase">Avg length</div>
+        <div className="benz-card p-4">
+          <div className="benz-section-title mb-3">Writing Style</div>
+          <div className="grid grid-cols-2 gap-2.5 text-sm">
+            <div className="benz-list-row p-3">
+              <div className="text-xs text-benz-secondary">Avg length</div>
               <div className="font-medium mt-1">{formatting.avgComplaintLength || '—'} chars</div>
             </div>
-            <div className="bg-[#1c1c1e] rounded-lg p-3">
-              <div className="text-[10px] text-[#8e8e93] uppercase">Complaints / RO</div>
+            <div className="benz-list-row p-3">
+              <div className="text-xs text-benz-secondary">Complaints / RO</div>
               <div className="font-medium mt-1">{formatting.avgComplaintsPerRo || '—'}</div>
             </div>
-            <div className="bg-[#1c1c1e] rounded-lg p-3">
-              <div className="text-[10px] text-[#8e8e93] uppercase">Letter labels</div>
+            <div className="benz-list-row p-3">
+              <div className="text-xs text-benz-secondary">Letter labels</div>
               <div className="font-medium mt-1">{formatting.usesLetterLabels ? 'Yes' : 'No'}</div>
             </div>
-            <div className="bg-[#1c1c1e] rounded-lg p-3">
-              <div className="text-[10px] text-[#8e8e93] uppercase">ALL CAPS</div>
+            <div className="benz-list-row p-3">
+              <div className="text-xs text-benz-secondary">All caps</div>
               <div className="font-medium mt-1">{formatting.typicallyAllCaps ? 'Usually' : 'Mixed'}</div>
             </div>
           </div>
@@ -74,16 +75,16 @@ function AdvisorDetailPanel({ advisor }: { advisor: AdvisorDetail }) {
       )}
 
       {profile && profile.commonPhrases.length > 0 && (
-        <div className="ios-card p-4">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#8e8e93] mb-3">
+        <div className="benz-card p-4">
+          <div className="flex items-center gap-2 benz-section-title mb-3">
             <Type size={14} />
             Common Phrases
           </div>
           <div className="space-y-2">
             {profile.commonPhrases.slice(0, 8).map((phrase) => (
-              <div key={phrase.text} className="flex justify-between gap-3 bg-[#1c1c1e] rounded-lg px-3 py-2">
+              <div key={phrase.text} className="benz-list-row flex justify-between gap-3 px-3 py-2.5">
                 <span className="text-sm">{phrase.text}</span>
-                <span className="text-[10px] text-[#8e8e93] shrink-0">{phrase.count}x</span>
+                <span className="text-xs text-benz-secondary shrink-0">{phrase.count}x</span>
               </div>
             ))}
           </div>
@@ -91,14 +92,11 @@ function AdvisorDetailPanel({ advisor }: { advisor: AdvisorDetail }) {
       )}
 
       {affinities.length > 0 && (
-        <div className="ios-card p-4">
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-3">Vehicle Families</div>
+        <div className="benz-card p-4">
+          <div className="benz-section-title mb-3">Vehicle Families</div>
           <div className="flex flex-wrap gap-2">
             {affinities.map(([family, weight]) => (
-              <span
-                key={family}
-                className="status-pill bg-[#30d158]/10 text-[#30d158]"
-              >
+              <span key={family} className="status-pill status-pill-valid">
                 {family} {Math.round(weight * 100)}%
               </span>
             ))}
@@ -107,37 +105,35 @@ function AdvisorDetailPanel({ advisor }: { advisor: AdvisorDetail }) {
       )}
 
       {advisor.recentObservations.length > 0 && (
-        <div className="ios-card p-4">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#8e8e93] mb-3">
+        <div className="benz-card p-4">
+          <div className="flex items-center gap-2 benz-section-title mb-3">
             <ClipboardList size={14} />
             Recent Complaints
           </div>
           <div className="space-y-2">
             {advisor.recentObservations.map((obs) => (
-              <div key={obs.id} className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
+              <div key={obs.id} className="benz-list-row px-3 py-2.5">
                 <div className="flex justify-between items-center gap-2 mb-1">
-                  <span className="text-[10px] text-[#0a84ff] font-semibold">
+                  <span className="text-xs text-benz-blue font-semibold">
                     RO {obs.roNumber}
                     {obs.lineLabel ? ` · Line ${obs.lineLabel}` : ''}
                   </span>
-                  <span className="text-[10px] text-[#8e8e93]">{formatDate(obs.observedAt)}</span>
+                  <span className="text-xs text-benz-secondary">{formatDate(obs.observedAt)}</span>
                 </div>
                 <div className="text-sm leading-snug">{obs.complaint}</div>
-                {obs.vehicle && (
-                  <div className="text-[10px] text-[#8e8e93] mt-1">{obs.vehicle}</div>
-                )}
+                {obs.vehicle && <div className="text-xs text-benz-secondary mt-1">{obs.vehicle}</div>}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <div className="ios-card p-4 border border-[#0a84ff]/20">
-        <div className="flex items-center gap-2 text-[#0a84ff] text-sm font-medium mb-2">
+      <div className="benz-card p-4 benz-alert-info border">
+        <div className="flex items-center gap-2 text-benz-blue text-sm font-medium mb-2">
           <Sparkles size={16} />
           Active in story generation
         </div>
-        <p className="text-xs text-[#8e8e93] leading-relaxed">
+        <p className="text-xs text-benz-secondary leading-relaxed">
           When a technician generates a warranty story on an RO linked to this advisor, the AI uses this
           profile to match how the advisor phrases customer concerns — while keeping all diagnostic facts
           audit-safe.
@@ -195,8 +191,8 @@ export function ServiceAdvisorsView({ onBack }: ServiceAdvisorsViewProps) {
   const selectedAdvisor = advisors.find((a) => a.id === selectedId);
 
   return (
-    <div className="px-4 pt-4 pb-8">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="benz-page-compact">
+      <div className="flex items-center gap-3 mb-5">
         <button
           onClick={() => {
             if (selectedId) {
@@ -205,19 +201,17 @@ export function ServiceAdvisorsView({ onBack }: ServiceAdvisorsViewProps) {
             }
             onBack();
           }}
-          className="p-2 -ml-2 text-[#0a84ff] touch-target"
+          className="benz-icon-btn -ml-1 touch-target text-benz-blue"
           aria-label="Back"
         >
           <ArrowLeft size={22} />
         </button>
-        <div className="flex-1">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-[#0a84ff] font-semibold">
-            Advisor Intelligence
-          </div>
-          <h1 className="text-xl font-semibold">
+        <div className="flex-1 min-w-0">
+          <div className="benz-dashboard-eyebrow text-left mb-0.5">Advisor Intelligence</div>
+          <h1 className="text-xl font-bold tracking-tight truncate">
             {selectedAdvisor ? selectedAdvisor.displayName : 'Service Advisors'}
           </h1>
-          <p className="text-xs text-[#8e8e93] mt-0.5">
+          <p className="text-xs text-benz-secondary mt-0.5 leading-snug">
             {selectedAdvisor
               ? 'Writing profile & captured complaints'
               : 'Learn how each advisor writes — so stories match their style'}
@@ -226,42 +220,37 @@ export function ServiceAdvisorsView({ onBack }: ServiceAdvisorsViewProps) {
       </div>
 
       {loading ? (
-        <div className="ios-card p-6 text-sm text-[#8e8e93]">Loading advisors...</div>
+        <div className="benz-card p-6 text-sm text-benz-secondary">Loading advisors...</div>
       ) : selectedId ? (
         detailLoading || !detail ? (
-          <div className="ios-card p-6 text-sm text-[#8e8e93]">Loading profile...</div>
+          <div className="benz-card p-6 text-sm text-benz-secondary">Loading profile...</div>
         ) : (
           <AdvisorDetailPanel advisor={detail} />
         )
       ) : advisors.length === 0 ? (
-        <div className="ios-card p-6 text-center">
-          <UserRound size={32} className="mx-auto text-[#8e8e93] mb-3" />
-          <p className="text-sm text-[#8e8e93]">No service advisors captured yet.</p>
-          <p className="text-xs text-[#8e8e93] mt-2 leading-relaxed">
-            Scan repair orders that show a Service Advisor name in the header. Profiles build
-            automatically in the background.
-          </p>
-        </div>
+        <BenzEmptyState
+          icon={UserRound}
+          title="No service advisors captured yet"
+          hint="Scan repair orders that show a Service Advisor name in the header. Profiles build automatically in the background."
+        />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {advisors.map((advisor) => (
             <button
               key={advisor.id}
               onClick={() => setSelectedId(advisor.id)}
-              className="ios-card w-full p-4 text-left active:bg-[#252528] flex items-center justify-between gap-3"
+              className="benz-settings-nav"
             >
               <div className="min-w-0">
                 <div className="font-semibold text-sm truncate">{advisor.displayName}</div>
-                <div className="text-[10px] text-[#8e8e93] mt-1">
+                <div className="text-xs text-benz-secondary mt-1">
                   {advisor.roCount} RO{advisor.roCount === 1 ? '' : 's'} · {advisor.observationCount}{' '}
                   complaint{advisor.observationCount === 1 ? '' : 's'}
                   {advisor.typicallyAllCaps ? ' · ALL CAPS' : ''}
                 </div>
-                <div className="text-[10px] text-[#8e8e93]">
-                  Last seen {formatDate(advisor.lastSeenAt)}
-                </div>
+                <div className="text-xs text-benz-muted">Last seen {formatDate(advisor.lastSeenAt)}</div>
               </div>
-              <ChevronRight size={18} className="text-[#8e8e93] shrink-0" />
+              <ChevronRight size={18} className="text-benz-secondary shrink-0" />
             </button>
           ))}
         </div>

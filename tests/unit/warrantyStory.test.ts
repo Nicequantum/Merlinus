@@ -3,7 +3,10 @@ import { describe, test } from 'node:test';
 import {
   STORY_TEMPLATES,
   SYSTEM_PROMPT,
+  THREE_C_GENERATION_RULES,
+  WARRANTY_STORY_MAX_TOKENS,
   WARRANTY_WORKFLOW_STEPS,
+  WARRANTY_WORKFLOW_SUMMARY,
   buildWarrantyStoryUserMessage,
 } from '../../src/prompts/warrantyStory';
 import type { RepairLine, RepairOrder } from '../../src/types';
@@ -42,22 +45,23 @@ const baseLine: RepairLine = {
 };
 
 describe('warranty story prompts', () => {
-  test('SYSTEM_PROMPT requires natural paragraphs and full workflow sequence', () => {
-    assert.match(SYSTEM_PROMPT, /Mercedes Intelligence 2\.0/i);
-    assert.match(SYSTEM_PROMPT, /Natural 3 C's flow|natural paragraph/i);
-    assert.match(SYSTEM_PROMPT, /NO visible section headers/i);
-    assert.match(SYSTEM_PROMPT, /Required workflow sequence/i);
-    assert.match(SYSTEM_PROMPT, /test drive/i);
+  test('SYSTEM_PROMPT enforces compact 3C quality without style-variation bloat', () => {
+    assert.match(SYSTEM_PROMPT, /Merlin/i);
+    assert.match(SYSTEM_PROMPT, /3C|Concern|Cause|Correction/i);
     assert.match(SYSTEM_PROMPT, /Quick Test/i);
-    assert.match(SYSTEM_PROMPT, /10 workflow steps/i);
     assert.match(SYSTEM_PROMPT, /\[NOT DOCUMENTED\]/);
-    assert.doesNotMatch(SYSTEM_PROMPT, /Use clear 3 C's section headers/i);
+    assert.match(SYSTEM_PROMPT, /WARRANTY_WORKFLOW_SUMMARY|test drive/i);
+    assert.match(THREE_C_GENERATION_RULES, /never copy notes verbatim/i);
+    assert.match(THREE_C_GENERATION_RULES, /Benz Bot 2\.0/i);
+    assert.ok(SYSTEM_PROMPT.length < 1_400);
+    assert.doesNotMatch(SYSTEM_PROMPT, /NATURAL STYLE VARIATION/i);
   });
 
   test('WARRANTY_WORKFLOW_STEPS lists all 10 billing/audit steps in order', () => {
     assert.equal(WARRANTY_WORKFLOW_STEPS.length, 10);
     assert.match(WARRANTY_WORKFLOW_STEPS[0], /Initial test drive/i);
     assert.match(WARRANTY_WORKFLOW_STEPS[9], /Final verification test drive/i);
+    assert.match(WARRANTY_WORKFLOW_SUMMARY, /verification drive/i);
   });
 
   test('STORY_TEMPLATES reference diagnostic workflow elements', () => {
@@ -67,20 +71,19 @@ describe('warranty story prompts', () => {
     }
   });
 
-  test('buildWarrantyStoryUserMessage injects workflow checklist and natural format requirements', () => {
-    const message = buildWarrantyStoryUserMessage(baseRo, baseLine, '', 0);
-    assert.match(message, /REQUIRED WORKFLOW/);
-    assert.match(message, /Initial test drive to confirm\/reproduce/i);
-    assert.match(message, /Disconnect battery charger and XENTRY/i);
-    assert.match(message, /natural paragraph form/i);
-    assert.match(message, /NO visible headings/i);
-    assert.match(message, /28450 → 28458/);
+  test('buildWarrantyStoryUserMessage includes line data and 3C instruction', () => {
+    const message = buildWarrantyStoryUserMessage(baseRo, baseLine);
+    assert.match(message, /Line 1/i);
+    assert.match(message, /28450→28458/);
     assert.match(message, /P0300/);
-    assert.match(message, /Chronological narrative/);
+    assert.match(message, /3C warranty narrative/i);
+    assert.match(message, /do not echo notes verbatim/i);
+    assert.ok(message.length < 1_400);
+    assert.doesNotMatch(message, /Style variation/i);
+    assert.doesNotMatch(message, /Advisor opening/i);
   });
 
-  test('buildWarrantyStoryUserMessage selects template by index', () => {
-    const explicit = buildWarrantyStoryUserMessage(baseRo, baseLine, '', 2);
-    assert.match(explicit, /Concise audit record/);
+  test('WARRANTY_STORY_MAX_TOKENS limits generation output', () => {
+    assert.equal(WARRANTY_STORY_MAX_TOKENS, 500);
   });
 });

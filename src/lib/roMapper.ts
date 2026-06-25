@@ -2,16 +2,20 @@ import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
   decryptComplaintsPayload,
+  decryptJsonObject,
   decryptOptionalSensitiveText,
   decryptPII,
   decryptSensitiveText,
   decryptStringArray,
   encryptComplaintsPayload,
+  encryptJsonObject,
   encryptOptionalSensitiveText,
   encryptPII,
   encryptSensitiveText,
   encryptStringArray,
 } from './encryption';
+import { emptyExtractedData } from '@/utils/diagnosticParser';
+import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 
 function parseJson<T>(raw: string, fallback: T): T {
@@ -96,9 +100,13 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     ? decryptPII(ro.serviceAdvisorNameEncrypted)
     : undefined;
 
+  const roNumberEncrypted = (ro as DbRO & { roNumberEncrypted?: string }).roNumberEncrypted;
+  const decryptedRoNumber = roNumberEncrypted ? decryptPII(roNumberEncrypted) : '';
+  const roNumber = decryptedRoNumber || ro.roNumber;
+
   return {
     id: ro.id,
-    roNumber: ro.roNumber,
+    roNumber,
     vehicle: {
       vin: decryptPII(ro.vinEncrypted),
       year: ro.year,
@@ -128,29 +136,30 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
     xentryOcrTexts: decryptStringArray(ro.xentryOcrTextsEncrypted),
     repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
     createdAt: ro.createdAt.toISOString(),
+    updatedAt: ro.updatedAt.toISOString(),
     technicianId: ro.technicianId,
     technicianName: undefined,
   };
 }
 
 export function dbToRepairLine(line: DbLine): RepairLine {
+  const descriptionEncrypted = (line as DbLine & { descriptionEncrypted?: string }).descriptionEncrypted;
+  const description =
+    descriptionEncrypted && descriptionEncrypted.trim()
+      ? decryptSensitiveText(descriptionEncrypted)
+      : line.description;
+
   return {
     id: line.id,
     lineNumber: line.lineNumber,
-    description: line.description,
+    description,
     customerConcern: decryptPII(line.customerConcernEncrypted),
     technicianNotes: decryptSensitiveText(line.technicianNotesEncrypted),
     xentryImages: parseImageAttachments(line.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),
-    extractedData: parseJson<ExtractedData>(line.extractedData, {
-      codes: [],
-      faultCodes: [],
-      guidedTests: [],
-      measurements: [],
-      components: [],
-      circuits: [],
-    }),
+    extractedData: decryptJsonObject<ExtractedData>(line.extractedDataEncrypted, emptyExtractedData()),
     warrantyStory: decryptOptionalSensitiveText(line.warrantyStoryEncrypted),
+    isCustomerPay: line.isCustomerPay ?? false,
   };
 }
 
@@ -173,9 +182,12 @@ export interface RepairOrderInput {
   repairLines: RepairLine[];
 }
 
-export function repairOrderToDbFields(input: RepairOrderInput) {
+export function repairOrderToDbFields(
+  input: RepairOrderInput & { serviceAdvisorName?: string }
+) {
   return {
     roNumber: input.roNumber,
+    roNumberEncrypted: encryptPII(input.roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
     year: input.vehicle.year,
     make: input.vehicle.make,
@@ -187,6 +199,9 @@ export function repairOrderToDbFields(input: RepairOrderInput) {
     complaintsEncrypted: encryptComplaintsPayload(input.complaints, input.complaintLabels),
     xentryImageUrls: imageAttachmentsToJson(input.xentryImages),
     xentryOcrTextsEncrypted: encryptStringArray(input.xentryOcrTexts || []),
+    ...(input.serviceAdvisorName
+      ? { serviceAdvisorNameEncrypted: encryptPII(input.serviceAdvisorName) }
+      : {}),
   };
 }
 
@@ -194,11 +209,15 @@ export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
     description: line.description,
+    descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),
     technicianNotesEncrypted: encryptSensitiveText(line.technicianNotes),
     xentryImageUrls: imageAttachmentsToJson(line.xentryImages),
     xentryOcrTextsEncrypted: encryptStringArray(line.xentryOcrTexts || []),
-    extractedData: JSON.stringify(line.extractedData || {}),
-    warrantyStoryEncrypted: encryptOptionalSensitiveText(line.warrantyStory),
+    extractedDataEncrypted: encryptJsonObject(line.extractedData || emptyExtractedData()),
+    warrantyStoryEncrypted: encryptOptionalSensitiveText(
+      line.warrantyStory ? sanitizeForCDK(line.warrantyStory) : line.warrantyStory
+    ),
+    isCustomerPay: line.isCustomerPay ?? false,
   };
 }

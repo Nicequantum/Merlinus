@@ -62,15 +62,12 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  const rateLimited = await checkRateLimit(request, 'auth.logout', RATE_LIMITS.default);
-  if (rateLimited) return rateLimited;
-
-  try {
-    return await performLogout(request);
-  } catch (error) {
-    return handleRouteError(error, 'auth.logout');
-  }
+/** M10: GET logout removed — CSRF via img/link prefetch must not clear sessions. */
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method not allowed. Use POST /api/auth/logout.' },
+    { status: 405, headers: { Allow: 'POST, DELETE' } }
+  );
 }
 
 export async function DELETE(request: Request) {

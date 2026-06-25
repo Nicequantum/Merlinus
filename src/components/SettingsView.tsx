@@ -1,7 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BarChart3, Building2, KeyRound, LogOut, ScrollText, Shield, User, UserPlus, UserRound, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  BarChart3,
+  Building2,
+  Check,
+  KeyRound,
+  LogOut,
+  ScrollText,
+  Shield,
+  User,
+  UserPlus,
+  UserRound,
+  Users,
+} from 'lucide-react';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { api, type TechnicianUser } from '@/lib/api';
@@ -144,42 +158,42 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
   };
 
   return (
-    <div className="px-5 pt-6 pb-10">
-      <button onClick={onBack} className="flex items-center text-[#0a84ff] mb-6">
-        <ArrowLeft size={18} className="mr-1" /> Back
+    <div className="benz-page">
+      <button onClick={onBack} className="benz-nav-back">
+        <ArrowLeft size={18} /> Back
       </button>
 
-      <h2 className="text-2xl font-semibold mb-6">Settings</h2>
+      <h2 className="benz-page-title">Settings</h2>
 
-      <div className="ios-card p-5 mb-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-[#2c2c2e] flex items-center justify-center">
-            <User size={18} className="text-[#0a84ff]" />
+      <div className="benz-card p-5 mb-5">
+        <div className="flex items-center gap-4 mb-5">
+          <div className="benz-avatar text-benz-blue">
+            <User size={20} />
           </div>
           <div>
-            <div className="font-semibold">{session.name}</div>
-            <div className="text-xs text-[#8e8e93] font-mono tracking-wide">{session.d7Number}</div>
-            <div className="text-[10px] text-[#666] capitalize">{session.role}</div>
+            <div className="font-semibold text-base tracking-tight">{session.name}</div>
+            <div className="text-xs text-benz-secondary font-mono tracking-wide mt-0.5">{session.d7Number}</div>
+            <div className="text-xs text-benz-muted capitalize mt-1 font-medium">{session.role}</div>
           </div>
         </div>
-        <div className="flex flex-col items-center gap-2 pt-1">
-          <Building2 size={14} className="text-[#8e8e93]" />
+        <div className="flex flex-col items-center gap-2 pt-2 benz-divider">
+          <Building2 size={14} className="text-benz-muted" />
           <DealershipBranding size="sm" />
         </div>
       </div>
 
-      <div className="ios-card p-5 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <KeyRound size={16} className="text-[#0a84ff]" />
-          <div className="font-semibold text-sm">Change Password</div>
+      <div className="benz-card p-5 mb-5">
+        <div className="flex items-center gap-2.5 mb-4">
+          <KeyRound size={18} className="text-benz-blue" />
+          <div className="font-semibold text-sm tracking-tight">Change Password</div>
         </div>
-        <form onSubmit={handleChangePassword} className="space-y-2">
+        <form onSubmit={handleChangePassword} className="space-y-3">
           <input
             type="password"
             placeholder="Current password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm"
+            className="benz-input"
             required
           />
           <input
@@ -187,28 +201,43 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
             placeholder="New password (min 8 characters)"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm"
+            className="benz-input"
             minLength={8}
             required
           />
-          <button type="submit" disabled={changingPassword} className="primary-btn w-full h-10 text-sm disabled:opacity-60">
-            {changingPassword ? 'UPDATING...' : 'UPDATE PASSWORD'}
+          <button type="submit" disabled={changingPassword} className="primary-btn w-full h-12 text-sm disabled:opacity-50">
+            {changingPassword ? 'Updating…' : 'Update Password'}
           </button>
         </form>
       </div>
 
-      <div className="ios-card p-5 mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Shield size={16} className="text-[#30d158]" />
-          <div className="font-semibold text-sm">Security & Compliance</div>
+      <div className="benz-card p-5 mb-5">
+        <div className="flex items-center gap-2.5 mb-3">
+          <Shield size={18} className="text-benz-green" />
+          <div className="font-semibold text-sm tracking-tight">Security & Compliance</div>
         </div>
-        <ul className="text-xs text-[#8e8e93] space-y-2 leading-relaxed">
-          <li>✓ Grok API key secured server-side — never in browser</li>
-          <li>✓ Customer name, VIN, complaints, OCR text, technician notes, and warranty stories encrypted at rest (AES-256-GCM)</li>
-          <li>✓ Diagnostic images stored privately in Vercel Blob (session-gated access)</li>
-          <li>✓ Session-based technician authentication (12h)</li>
-          <li>✓ Audit-safe warranty prompt — no fabricated data</li>
-          <li>
+        <ul className="text-xs text-benz-secondary space-y-2.5 leading-relaxed">
+          <li className="flex items-start gap-2">
+            <Check size={14} className="text-benz-green shrink-0 mt-0.5" />
+            Grok API key secured server-side — never in browser
+          </li>
+          <li className="flex items-start gap-2">
+            <Check size={14} className="text-benz-green shrink-0 mt-0.5" />
+            Customer PII and repair content encrypted at rest (AES-256-GCM)
+          </li>
+          <li className="flex items-start gap-2">
+            <Check size={14} className="text-benz-green shrink-0 mt-0.5" />
+            Diagnostic images stored privately in Vercel Blob (session-gated access)
+          </li>
+          <li className="flex items-start gap-2">
+            <Check size={14} className="text-benz-green shrink-0 mt-0.5" />
+            Session-based technician authentication (12h)
+          </li>
+          <li className="flex items-start gap-2">
+            <Check size={14} className="text-benz-green shrink-0 mt-0.5" />
+            Audit-safe warranty prompt — no fabricated data
+          </li>
+          <li className="pt-1 text-benz-muted">
             Consent accepted:{' '}
             {session.consentAt ? new Date(session.consentAt).toLocaleDateString() : 'Pending'} (v{CONSENT_VERSION})
           </li>
@@ -216,76 +245,71 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
       </div>
 
       {isAdmin && (
-        <Link
-          href="/admin/usage"
-          className="ios-card p-5 mb-4 w-full flex items-center justify-between text-left"
-        >
-          <div className="flex items-center gap-2">
-            <BarChart3 size={16} className="text-[#0a84ff]" />
+        <Link href="/admin/usage" className="benz-settings-nav mb-4 block no-underline text-inherit">
+          <div className="flex items-center gap-3">
+            <BarChart3 size={18} className="text-benz-blue shrink-0" />
             <div>
               <div className="font-semibold text-sm">Usage</div>
-              <div className="text-[10px] text-[#8e8e93]">Daily AI usage limits & technician analytics</div>
+              <div className="benz-hint mt-0.5">Daily AI usage limits & technician analytics</div>
             </div>
           </div>
-          <span className="text-[#0a84ff] text-xs">OPEN</span>
+          <span className="text-benz-blue text-xs font-semibold">Open</span>
         </Link>
       )}
 
       {isManager && onOpenServiceAdvisors && (
-        <button
-          onClick={onOpenServiceAdvisors}
-          className="ios-card p-5 mb-4 w-full flex items-center justify-between text-left"
-        >
-          <div className="flex items-center gap-2">
-            <UserRound size={16} className="text-[#0a84ff]" />
+        <button onClick={onOpenServiceAdvisors} className="benz-settings-nav mb-4">
+          <div className="flex items-center gap-3">
+            <UserRound size={18} className="text-benz-blue shrink-0" />
             <div>
               <div className="font-semibold text-sm">Service Advisors</div>
-              <div className="text-[10px] text-[#8e8e93]">Advisor Intelligence profiles & complaint patterns</div>
+              <div className="benz-hint mt-0.5">Advisor Intelligence profiles & complaint patterns</div>
             </div>
           </div>
-          <span className="text-[#0a84ff] text-xs">OPEN</span>
+          <span className="text-benz-blue text-xs font-semibold">Open</span>
         </button>
       )}
 
       {isManager && onOpenAuditLogs && (
-        <button
-          onClick={onOpenAuditLogs}
-          className="ios-card p-5 mb-4 w-full flex items-center justify-between text-left"
-        >
-          <div className="flex items-center gap-2">
-            <ScrollText size={16} className="text-[#0a84ff]" />
+        <button onClick={onOpenAuditLogs} className="benz-settings-nav mb-4">
+          <div className="flex items-center gap-3">
+            <ScrollText size={18} className="text-benz-blue shrink-0" />
             <div>
               <div className="font-semibold text-sm">Audit Log</div>
-              <div className="text-[10px] text-[#8e8e93]">View and export dealership activity</div>
+              <div className="benz-hint mt-0.5">View and export dealership activity</div>
             </div>
           </div>
-          <span className="text-[#0a84ff] text-xs">OPEN</span>
+          <span className="text-benz-blue text-xs font-semibold">Open</span>
         </button>
       )}
 
       {isManager && (
-        <div className="ios-card p-5 mb-4">
+        <div className="benz-card p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-[#0a84ff]" />
-              <div className="font-semibold text-sm">Technician Accounts</div>
+            <div className="flex items-center gap-2.5">
+              <Users size={18} className="text-benz-blue" />
+              <div>
+                <div className="font-semibold text-sm tracking-tight">Technician accounts</div>
+                <div className="benz-hint mt-0.5">{visibleUsers.length} active listing{visibleUsers.length === 1 ? '' : 's'}</div>
+              </div>
             </div>
             <button
               onClick={() => setShowCreateForm(!showCreateForm)}
-              className="text-[10px] text-[#0a84ff] flex items-center gap-1"
+              className={`secondary-btn text-xs h-9 px-3 flex items-center gap-1.5 font-medium ${showCreateForm ? 'benz-btn-accent-outline' : ''}`}
             >
-              <UserPlus size={12} /> {showCreateForm ? 'CANCEL' : 'ADD USER'}
+              <UserPlus size={14} /> {showCreateForm ? 'Cancel' : 'Add user'}
             </button>
           </div>
 
           {showCreateForm && (
-            <form onSubmit={handleCreateUser} className="mb-4 space-y-2 border-b border-[#38383a] pb-4">
+            <form onSubmit={handleCreateUser} className="benz-admin-form-panel space-y-3">
+              <div className="benz-section-title mb-1">New account</div>
               <input
                 type="text"
                 placeholder="Full name"
                 value={newUser.name}
                 onChange={(e) => setNewUser((u) => ({ ...u, name: e.target.value }))}
-                className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm"
+                className="benz-input"
                 required
               />
               <input
@@ -296,7 +320,7 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck={false}
-                className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm font-mono tracking-wide uppercase"
+                className="benz-input benz-input-mono uppercase"
                 required
               />
               <input
@@ -304,82 +328,103 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
                 placeholder="Password (min 8 characters)"
                 value={newUser.password}
                 onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))}
-                className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm"
+                className="benz-input"
                 minLength={8}
                 required
               />
               <select
                 value={newUser.role}
                 onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value as 'technician' | 'manager' }))}
-                className="w-full bg-[#1c1c1e] rounded px-3 py-2 text-sm"
+                className="benz-input"
               >
                 <option value="technician">Technician</option>
                 <option value="manager">Manager</option>
               </select>
-              <button type="submit" disabled={creating} className="primary-btn w-full h-10 text-sm disabled:opacity-60">
-                {creating ? 'CREATING...' : 'CREATE ACCOUNT'}
+              <button type="submit" disabled={creating} className="primary-btn w-full h-11 text-sm disabled:opacity-50">
+                {creating ? 'Creating…' : 'Create account'}
               </button>
             </form>
           )}
 
           {usersLoading ? (
-            <div className="text-xs text-[#8e8e93]">Loading accounts...</div>
+            <div className="text-xs text-benz-secondary py-4 text-center">Loading accounts…</div>
           ) : visibleUsers.length === 0 ? (
-            <div className="text-xs text-[#8e8e93]">No accounts found.</div>
+            <BenzEmptyState
+              icon={Users}
+              title="No technician accounts"
+              hint="Add your first technician or manager account to enable multi-user shop access."
+              compact
+            />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {visibleUsers.map((user) => (
-                <div key={user.id} className="bg-[#1c1c1e] rounded px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{user.name}</div>
-                      <div className="text-[10px] text-[#8e8e93]">
-                        {user.d7Number} · {user.role}
-                        {!user.isActive && <span className="text-[#ff3b30] ml-1">(deactivated)</span>}
+                <div
+                  key={user.id}
+                  className={`benz-admin-user-card ${!user.isActive ? 'benz-admin-user-card-inactive' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="benz-avatar text-benz-blue shrink-0 w-10 h-10">
+                        <User size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold tracking-tight truncate">{user.name}</div>
+                        <div className="text-xs text-benz-secondary font-mono mt-0.5">{user.d7Number}</div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <span className="status-pill bg-benz-surface-3 text-benz-silver border border-benz-surface-3 capitalize">
+                            {user.role}
+                          </span>
+                          {!user.isActive && (
+                            <span className="status-pill status-pill-warn">Deactivated</span>
+                          )}
+                          {user.id === session.technicianId && (
+                            <span className="text-xs text-benz-muted">You</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {user.id !== session.technicianId && (
-                      <div className="flex gap-2">
+                      <div className="benz-admin-actions shrink-0">
                         <button
                           onClick={() => {
                             setResetTargetId(resetTargetId === user.id ? null : user.id);
                             setResetPassword('');
                           }}
-                          className="text-[10px] px-2 py-1 rounded text-[#0a84ff]"
+                          className={`benz-admin-action-btn benz-admin-action-btn-accent ${resetTargetId === user.id ? 'bg-benz-accent/10' : ''}`}
                         >
-                          RESET PW
+                          <KeyRound size={12} /> Reset
                         </button>
                         <button
                           onClick={() => toggleUserActive(user)}
-                          className={`text-[10px] px-2 py-1 rounded ${user.isActive ? 'text-[#ff9f0a]' : 'text-[#30d158]'}`}
+                          className={`benz-admin-action-btn ${user.isActive ? 'benz-admin-action-btn-warn' : 'benz-admin-action-btn-accent'}`}
                         >
-                          {user.isActive ? 'DEACTIVATE' : 'REACTIVATE'}
+                          {user.isActive ? 'Deactivate' : 'Reactivate'}
                         </button>
                         <button
                           onClick={() => handleDeleteUser(user)}
                           disabled={deletingUserId === user.id}
-                          className="text-[10px] px-2 py-1 rounded text-[#ff3b30] disabled:opacity-50"
+                          className="benz-admin-action-btn benz-admin-action-btn-danger disabled:opacity-50"
                         >
-                          {deletingUserId === user.id ? 'REMOVING...' : 'REMOVE TECHNICIAN'}
+                          {deletingUserId === user.id ? 'Removing…' : 'Remove'}
                         </button>
                       </div>
                     )}
                   </div>
                   {resetTargetId === user.id && (
-                    <div className="mt-2 flex gap-2">
+                    <div className="benz-admin-reset-panel flex gap-2 items-center">
                       <input
                         type="password"
-                        placeholder="New password"
+                        placeholder="New password (min 8 characters)"
                         value={resetPassword}
                         onChange={(e) => setResetPassword(e.target.value)}
-                        className="flex-1 bg-[#2c2c2e] rounded px-2 py-1 text-xs"
+                        className="benz-input flex-1"
                         minLength={8}
                       />
                       <button
                         onClick={() => handleResetPassword(user.id)}
-                        className="text-[10px] text-[#30d158] px-2"
+                        className="secondary-btn benz-btn-success-outline h-10 px-4 text-xs font-medium shrink-0"
                       >
-                        SAVE
+                        Save
                       </button>
                     </div>
                   )}
@@ -390,9 +435,9 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
         </div>
       )}
 
-      <div className="ios-card p-5 mb-6">
-        <div className="font-semibold mb-1 text-sm">Multi-Technician Access</div>
-        <p className="text-xs text-[#8e8e93] leading-relaxed">
+      <div className="benz-card p-5 mb-6">
+        <div className="font-semibold mb-2 text-sm">Multi-Technician Access</div>
+        <p className="text-xs text-benz-secondary leading-relaxed">
           Each technician signs in with their own account. Repair orders are owned by the creating technician. Service
           managers can view all ROs, manage accounts, reset passwords, and review audit logs.
         </p>
@@ -400,9 +445,9 @@ export function SettingsView({ session, onBack, onLogout, onOpenAuditLogs, onOpe
 
       <button
         onClick={handleLogout}
-        className="w-full secondary-btn h-12 flex items-center justify-center gap-2 text-[#ff9f0a] text-sm font-semibold"
+        className="w-full secondary-btn h-13 flex items-center justify-center gap-2 text-sm font-medium"
       >
-        <LogOut size={16} /> SIGN OUT
+        <LogOut size={18} /> Sign out
       </button>
     </div>
   );

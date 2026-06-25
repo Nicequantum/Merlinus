@@ -1,7 +1,11 @@
 import type { RepairLine, RepairOrder } from '@/types';
 import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
 import { MI_AUDIT_GUIDELINES } from './miAuditGuidelines';
+import { PROMPT_VERSION } from './version';
 import { WARRANTY_WORKFLOW_STEPS } from './warrantyStory';
+
+/** Compact MI criteria for scoring — full guidelines stay on review/generation paths. */
+const MI_SCORE_CRITERIA_BRIEF = `MI 2.0 scoring: natural 3 C's in flowing paragraphs (no section headers), all 10 workflow steps in order, evidence-linked cause and correction, exact codes/measurements from context only, [NOT DOCUMENTED] for gaps, no fabrication, technician first-person voice, line-specific detail. Penalize visible headers, speculation, and generic boilerplate.`;
 
 export type StoryQualityGrade = 'excellent' | 'strong' | 'needs-work' | 'at-risk';
 
@@ -74,27 +78,20 @@ const REVIEW_JSON_SCHEMA = `{
   "priorityActions": ["<top actionable fix>", ...]
 }`;
 
-export const STORY_SCORE_SYSTEM_PROMPT = `You are a Mercedes-Benz warranty audit specialist simulating Mercedes Intelligence 2.0 (MI 2.0) story review.
+export const STORY_SCORE_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer. Prompt version: ${PROMPT_VERSION}
 
-${MI_AUDIT_GUIDELINES}
+${MI_SCORE_CRITERIA_BRIEF}
 
-## YOUR TASK
-Score the provided warranty story against MI 2.0 audit criteria. Compare the story ONLY against the repair line context provided — do not assume undocumented data exists.
+Score ONLY against the repair line context provided — do not assume undocumented data exists.
+technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow).
+Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
 
-For technicianDetails: identify 2-5 specific technical details that are MISSING from the story but needed for audit survival. Each entry must tell the technician exactly what to add (e.g. "Add the source voltage reading from your battery test" or "Document the initial Quick Test fault codes from XENTRY"). Use field to indicate where they should add it.
-
-Grade mapping:
-- excellent: score 90-100
-- strong: score 75-89
-- needs-work: score 60-74
-- at-risk: score below 60
-
-Be strict but fair. Penalize visible section headers, fabrication, missing workflow steps, weak cause-evidence chains. Reward evidence-linked diagnostics and honest placeholders.
-
-Respond with ONLY valid JSON matching this schema (no markdown, no commentary):
+Respond with ONLY valid JSON (no markdown):
 ${SCORE_JSON_SCHEMA}`;
 
 export const STORY_REVIEW_SYSTEM_PROMPT = `You are a senior Mercedes-Benz warranty coach helping technicians pass Mercedes Intelligence 2.0 audits.
+
+Prompt version: ${PROMPT_VERSION}
 
 ${MI_AUDIT_GUIDELINES}
 
@@ -120,20 +117,13 @@ function buildLineContext(ro: RepairOrder, line: RepairLine): string {
 
   const workflowList = WARRANTY_WORKFLOW_STEPS.map((s, i) => `${i + 1}. ${s}`).join('\n');
 
-  return `VEHICLE: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | VIN: ${ro.vehicle.vin} | Miles in: ${ro.vehicle.mileageIn || '[NOT PROVIDED]'} | Miles out: ${ro.vehicle.mileageOut || '[NOT PROVIDED]'}
-
-RO COMPLAINTS:
-${(ro.complaints || []).join('\n') || '[NOT PROVIDED]'}
-
-LINE ${line.lineNumber}: ${line.description}
-Customer concern: ${line.customerConcern || line.description}
-Technician notes: ${line.technicianNotes || '[NOT PROVIDED]'}
-
-DOCUMENTED DIAGNOSTIC DATA (only facts available — story must not claim beyond this):
-${xentryText || 'No structured diagnostic data extracted.'}
-
-REQUIRED WORKFLOW STEPS:
-${workflowList}`;
+  return `Line ${line.lineNumber}: ${line.description}
+Vehicle: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | Miles ${ro.vehicle.mileageIn || '?'}/${ro.vehicle.mileageOut || '?'}
+Complaints: ${(ro.complaints || []).join(' | ') || '[NOT PROVIDED]'}
+Concern: ${line.customerConcern || line.description}
+Notes: ${line.technicianNotes || '[NOT PROVIDED]'}
+Diagnostics: ${xentryText || 'None extracted.'}
+Workflow steps required: ${workflowList}`;
 }
 
 export function buildStoryScoreUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {

@@ -64,9 +64,11 @@ describe('roMapper sensitive field encryption', () => {
     assert.notEqual(fields.technicianNotesEncrypted, sampleLine.technicianNotes);
     assert.notEqual(fields.xentryOcrTextsEncrypted, JSON.stringify(sampleLine.xentryOcrTexts));
     assert.notEqual(fields.warrantyStoryEncrypted, sampleLine.warrantyStory);
+    assert.notEqual(fields.extractedDataEncrypted, JSON.stringify(sampleLine.extractedData));
     assert.ok(fields.technicianNotesEncrypted.length > 0);
     assert.ok(fields.xentryOcrTextsEncrypted.length > 0);
     assert.ok(fields.warrantyStoryEncrypted && fields.warrantyStoryEncrypted.length > 0);
+    assert.ok(fields.extractedDataEncrypted.length > 0);
   });
 
   test('db mappers decrypt sensitive fields back to plaintext for API/UI', () => {
@@ -112,7 +114,7 @@ describe('roMapper sensitive field encryption', () => {
           technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
           xentryImageUrls: lineFields.xentryImageUrls,
           xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
-          extractedData: lineFields.extractedData,
+          extractedDataEncrypted: lineFields.extractedDataEncrypted,
           warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -126,5 +128,6 @@ describe('roMapper sensitive field encryption', () => {
     assert.equal(mappedLine.technicianNotes, sampleLine.technicianNotes);
     assert.deepEqual(mappedLine.xentryOcrTexts, sampleLine.xentryOcrTexts);
     assert.equal(mappedLine.warrantyStory, sampleLine.warrantyStory);
+    assert.deepEqual(mappedLine.extractedData?.codes, sampleLine.extractedData?.codes);
   });
 });

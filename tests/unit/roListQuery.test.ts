@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+import { getStartOfDealershipDay, isRepairOrderActiveToday } from '../../src/lib/dealershipDayBoundary';
+import { buildRepairOrderListWhere, parseRepairOrderListParams } from '../../src/lib/roListQuery';
+
+describe('repair order list query', () => {
+  test('defaults to today scope with pagination limit', () => {
+    const params = parseRepairOrderListParams(new URL('http://localhost/api/repair-orders'));
+    assert.equal(params.scope, 'today');
+    assert.equal(params.limit, 50);
+    assert.equal(params.q, undefined);
+  });
+
+  test('parses previous scope and search query', () => {
+    const params = parseRepairOrderListParams(
+      new URL('http://localhost/api/repair-orders?scope=previous&limit=25&cursor=abc&q=C300')
+    );
+    assert.equal(params.scope, 'previous');
+    assert.equal(params.limit, 25);
+    assert.equal(params.cursor, 'abc');
+    assert.equal(params.q, 'C300');
+  });
+
+  test('today where clause filters updatedAt since dealership midnight', () => {
+    const where = buildRepairOrderListWhere(
+      { role: 'technician', dealershipId: 'd1', technicianId: 't1' },
+      { scope: 'today', limit: 50 }
+    );
+    assert.equal(where.technicianId, 't1');
+    assert.ok(where.updatedAt && 'gte' in where.updatedAt);
+    assert.ok((where.updatedAt as { gte: Date }).gte instanceof Date);
+  });
+
+  test('previous where clause filters before dealership midnight', () => {
+    const where = buildRepairOrderListWhere(
+      { role: 'manager', dealershipId: 'd1', technicianId: 't1' },
+      { scope: 'previous', limit: 25 }
+    );
+    assert.equal(where.dealershipId, 'd1');
+    assert.ok(where.updatedAt && 'lt' in where.updatedAt);
+    assert.ok((where.updatedAt as { lt: Date }).lt instanceof Date);
+  });
+
+  test('search where clause matches RO number and vehicle fields', () => {
+    const where = buildRepairOrderListWhere(
+      { role: 'technician', dealershipId: 'd1', technicianId: 't1' },
+      { scope: 'today', limit: 50, q: 'WDD' }
+    );
+    assert.ok(Array.isArray(where.OR));
+    assert.equal(where.OR?.length, 4);
+  });
+
+  test('isRepairOrderActiveToday respects updatedAt boundary', () => {
+    const start = getStartOfDealershipDay(new Date('2026-06-24T18:00:00.000Z'), 'UTC').toISOString();
+    assert.equal(isRepairOrderActiveToday('2026-06-24T19:00:00.000Z', start), true);
+    assert.equal(isRepairOrderActiveToday('2026-06-23T19:00:00.000Z', start), false);
+  });
+});

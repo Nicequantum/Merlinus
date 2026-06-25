@@ -9,12 +9,21 @@ function serializeContext(context?: LogContext): LogContext | undefined {
   return context;
 }
 
+const LOG_LEVEL = (process.env.LOG_LEVEL?.trim().toLowerCase() || 'info') as LogLevel;
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+
+function shouldLog(level: LogLevel): boolean {
+  return LEVEL_RANK[level] >= LEVEL_RANK[LOG_LEVEL];
+}
+
 function write(level: LogLevel, message: string, context?: LogContext): void {
+  if (!shouldLog(level)) return;
+
   const entry = {
     ts: new Date().toISOString(),
     level,
     msg: message,
-    service: 'benz-tech',
+    service: 'merlin',
     ...serializeContext(context),
   };
 

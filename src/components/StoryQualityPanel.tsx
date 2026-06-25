@@ -22,11 +22,13 @@ interface StoryQualityPanelProps {
 }
 
 interface StoryQualityLoadingProps {
-  mode: 'generating' | 'reviewing';
+  mode: 'generating' | 'scoring' | 'reviewing';
+  statusMessage?: string;
+  progress?: number;
 }
 
 interface StoryQualityStaleProps {
-  onReview?: () => void;
+  onAudit?: () => void;
 }
 
 const GRADE_LABELS: Record<StoryQualityResult['grade'], string> = {
@@ -43,53 +45,59 @@ const FIELD_LABELS: Record<string, string> = {
   workflow: 'Workflow Steps',
 };
 
-function scoreColor(score: number): string {
-  if (score >= 90) return 'text-[#30d158]';
-  if (score >= 75) return 'text-[#0a84ff]';
-  if (score >= 60) return 'text-[#ff9f0a]';
-  return 'text-[#ff3b30]';
+function scoreTier(score: number): 'excellent' | 'strong' | 'needs-work' | 'at-risk' {
+  if (score >= 90) return 'excellent';
+  if (score >= 75) return 'strong';
+  if (score >= 60) return 'needs-work';
+  return 'at-risk';
 }
 
-function scoreRingColor(score: number): string {
-  if (score >= 90) return 'border-[#30d158]/50 bg-[#30d158]/10';
-  if (score >= 75) return 'border-[#0a84ff]/50 bg-[#0a84ff]/10';
-  if (score >= 60) return 'border-[#ff9f0a]/50 bg-[#ff9f0a]/10';
-  return 'border-[#ff3b30]/50 bg-[#ff3b30]/10';
+function scoreRingClass(score: number): string {
+  const tier = scoreTier(score);
+  return `benz-score-${tier}`;
 }
 
-export function StoryQualityLoadingPanel({ mode }: StoryQualityLoadingProps) {
+export function StoryQualityLoadingPanel({ mode, statusMessage, progress = 0 }: StoryQualityLoadingProps) {
+  const title =
+    mode === 'generating' ? 'Generating Story' : mode === 'scoring' ? 'MI Quality Audit' : 'AI Review Coaching';
   const label =
-    mode === 'generating'
-      ? 'Generating story and scoring against MI 2.0…'
-      : 'Reviewing story against MI 2.0 audit criteria…';
+    statusMessage ??
+    (mode === 'generating'
+      ? 'Writing your warranty narrative…'
+      : mode === 'scoring'
+        ? 'Scoring story against MI 2.0 audit criteria…'
+        : 'Generating detailed coaching feedback…');
 
   return (
-    <div className="ios-card p-4 mt-3 border border-[#38383a] flex items-center gap-3">
-      <Loader2 size={20} className="animate-spin text-[#0a84ff] shrink-0" />
-      <div>
-        <div className="text-xs uppercase tracking-widest text-[#8e8e93]">MI 2.0 Quality</div>
-        <p className="text-sm text-[#d1d1d6] mt-0.5">{label}</p>
+    <div className="benz-card p-4">
+      <div className="flex items-center gap-3.5">
+        <Loader2 size={22} className="animate-spin text-benz-blue shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="benz-section-title">{title}</div>
+          <p className="text-sm text-benz-silver mt-1">{label}</p>
+        </div>
       </div>
+      {mode === 'generating' && progress > 0 && (
+        <div className="benz-gen-progress mt-3" aria-hidden>
+          <div className="benz-gen-progress-bar" style={{ width: `${progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }
 
-export function StoryQualityStaleBanner({ onReview }: StoryQualityStaleProps) {
+export function StoryQualityStaleBanner({ onAudit }: StoryQualityStaleProps) {
   return (
-    <div className="ios-card p-4 mt-3 border border-[#ff9f0a]/30 bg-[#ff9f0a]/5 flex items-start gap-3">
-      <AlertTriangle size={18} className="text-[#ff9f0a] shrink-0 mt-0.5" />
+    <div className="benz-card p-4 benz-alert-warn flex items-start gap-3">
+      <AlertTriangle size={20} className="text-benz-amber shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <div className="text-xs uppercase tracking-widest text-[#ff9f0a]">Score Outdated</div>
-        <p className="text-sm text-[#d1d1d6] mt-1 leading-snug">
-          This story was edited after the last score. Run Review with AI to get an accurate MI 2.0 assessment.
+        <div className="text-xs uppercase tracking-widest font-semibold text-benz-amber">Score Outdated</div>
+        <p className="text-sm text-benz-silver mt-1 leading-snug">
+          This story was edited after the last audit. Run Audit Story to refresh the MI quality score.
         </p>
-        {onReview && (
-          <button
-            type="button"
-            onClick={onReview}
-            className="mt-2 text-xs text-[#0a84ff] font-medium"
-          >
-            Review with AI →
+        {onAudit && (
+          <button type="button" onClick={onAudit} className="mt-2.5 text-xs benz-link font-medium">
+            Audit Story →
           </button>
         )}
       </div>
@@ -106,51 +114,57 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
     setShowReviewDetail(!!review);
   }, [panelKey, review]);
 
+  const ringClass = scoreRingClass(quality.score);
+
   return (
-    <div className="ios-card p-4 mt-3 border border-[#38383a]">
+    <div className="benz-card p-4">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-start gap-3 text-left"
+        className="w-full flex items-start gap-3.5 text-left"
       >
         <div
-          className={`shrink-0 w-14 h-14 rounded-2xl border flex flex-col items-center justify-center ${scoreRingColor(quality.score)}`}
+          className={`shrink-0 w-14 h-14 rounded-2xl border flex flex-col items-center justify-center ${ringClass}`}
         >
-          <span className={`text-xl font-bold leading-none ${scoreColor(quality.score)}`}>{quality.score}</span>
-          <span className="text-[9px] text-[#8e8e93] mt-0.5">/ 100</span>
+          <span className="text-xl font-bold leading-none">{quality.score}</span>
+          <span className="text-xs text-benz-secondary mt-0.5">/ 100</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <Shield size={14} className="text-[#0a84ff]" />
-            <span className="text-xs uppercase tracking-widest text-[#8e8e93]">MI 2.0 Quality Score</span>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreRingColor(quality.score)} ${scoreColor(quality.score)}`}>
+            <Shield size={14} className="text-benz-blue" />
+            <span className="benz-section-title">MI 2.0 Quality Score</span>
+            <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${ringClass}`}>
               {GRADE_LABELS[quality.grade]}
             </span>
           </div>
-          <p className="text-sm text-[#d1d1d6] mt-1 leading-snug">{quality.summary}</p>
+          <p className="text-sm text-benz-silver mt-1.5 leading-snug">{quality.summary}</p>
         </div>
-        {expanded ? <ChevronUp size={18} className="text-[#8e8e93] shrink-0" /> : <ChevronDown size={18} className="text-[#8e8e93] shrink-0" />}
+        {expanded ? (
+          <ChevronUp size={18} className="text-benz-secondary shrink-0 mt-1" />
+        ) : (
+          <ChevronDown size={18} className="text-benz-secondary shrink-0 mt-1" />
+        )}
       </button>
 
       {expanded && (
-        <div className="mt-4 space-y-4 border-t border-[#38383a] pt-4">
+        <div className="mt-4 space-y-4 benz-divider pt-4">
           {quality.technicianDetails.length > 0 && (
-            <div className="bg-[#0a84ff]/5 border border-[#0a84ff]/25 rounded-xl p-3">
-              <div className="text-[10px] uppercase tracking-widest text-[#0a84ff] mb-2 flex items-center gap-1.5">
+            <div className="benz-alert-info rounded-xl p-3.5 border">
+              <div className="text-xs uppercase tracking-wider font-semibold text-benz-blue mb-2 flex items-center gap-1.5">
                 <Wrench size={12} /> Add Technician Details
               </div>
-              <p className="text-[10px] text-[#8e8e93] mb-3 leading-snug">
-                MI 2.0 flagged these specific gaps. Add the missing details to your notes or story before submission.
+              <p className="text-xs text-benz-secondary mb-3 leading-snug">
+                MI 4.3 flagged these specific gaps. Add the missing details to your notes or story before submission.
               </p>
               <ul className="space-y-3">
                 {quality.technicianDetails.map((detail, index) => (
                   <li key={`${detail.missing}-${index}`} className="text-xs leading-relaxed">
                     <div className="flex items-start gap-2">
-                      <ClipboardList size={14} className="text-[#0a84ff] shrink-0 mt-0.5" />
+                      <ClipboardList size={14} className="text-benz-blue shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-semibold text-[#ff9f0a]">{detail.missing}</div>
-                        <div className="text-[#d1d1d6] mt-0.5">{detail.prompt}</div>
-                        <div className="text-[9px] text-[#8e8e93] mt-1 uppercase tracking-wide">
+                        <div className="font-semibold text-benz-amber">{detail.missing}</div>
+                        <div className="text-benz-silver mt-0.5">{detail.prompt}</div>
+                        <div className="text-xs text-benz-muted mt-1">
                           Add to: {FIELD_LABELS[detail.field] || detail.field}
                         </div>
                       </div>
@@ -163,12 +177,12 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 
           {quality.strengths.length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-[#30d158] mb-2 flex items-center gap-1.5">
+              <div className="text-xs uppercase tracking-wider font-semibold text-benz-green mb-2 flex items-center gap-1.5">
                 <CheckCircle2 size={12} /> Strengths
               </div>
               <ul className="space-y-1.5">
                 {quality.strengths.map((item) => (
-                  <li key={item} className="text-xs text-[#c7c7cc] leading-relaxed pl-3 border-l-2 border-[#30d158]/40">
+                  <li key={item} className="text-xs text-benz-silver leading-relaxed pl-3 border-l-2 border-benz-green/40">
                     {item}
                   </li>
                 ))}
@@ -178,12 +192,12 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 
           {quality.improvements.length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-[#ff9f0a] mb-2 flex items-center gap-1.5">
+              <div className="text-xs uppercase tracking-wider font-semibold text-benz-amber mb-2 flex items-center gap-1.5">
                 <Target size={12} /> Improve for MI 2.0
               </div>
               <ul className="space-y-1.5">
                 {quality.improvements.map((item) => (
-                  <li key={item} className="text-xs text-[#c7c7cc] leading-relaxed pl-3 border-l-2 border-[#ff9f0a]/40">
+                  <li key={item} className="text-xs text-benz-silver leading-relaxed pl-3 border-l-2 border-benz-amber/40">
                     {item}
                   </li>
                 ))}
@@ -193,12 +207,12 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 
           {quality.auditRisks.length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-[#ff3b30] mb-2 flex items-center gap-1.5">
+              <div className="text-xs uppercase tracking-wider font-semibold text-benz-red mb-2 flex items-center gap-1.5">
                 <AlertTriangle size={12} /> Audit Risks
               </div>
               <ul className="space-y-1.5">
                 {quality.auditRisks.map((item) => (
-                  <li key={item} className="text-xs text-[#ffb4ab] leading-relaxed pl-3 border-l-2 border-[#ff3b30]/40">
+                  <li key={item} className="text-xs text-benz-red/90 leading-relaxed pl-3 border-l-2 border-benz-red/40">
                     {item}
                   </li>
                 ))}
@@ -211,19 +225,19 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
               <button
                 type="button"
                 onClick={() => setShowReviewDetail((v) => !v)}
-                className="text-[10px] uppercase tracking-widest text-[#0a84ff] flex items-center gap-1.5 mb-2"
+                className="text-xs uppercase tracking-wider font-semibold text-benz-blue flex items-center gap-1.5 mb-2"
               >
                 <Sparkles size={12} />
                 AI Review Coaching {showReviewDetail ? '▾' : '▸'}
               </button>
               {showReviewDetail && (
-                <div className="space-y-3 bg-[#1c1c1e] rounded-xl p-3 border border-[#38383a]">
+                <div className="space-y-3 benz-list-row p-3.5">
                   {review.priorityActions.length > 0 && (
                     <div>
-                      <div className="text-[10px] font-semibold text-[#0a84ff] mb-1.5">Priority Actions</div>
+                      <div className="text-xs font-semibold text-benz-blue mb-1.5">Priority actions</div>
                       <ol className="list-decimal list-inside space-y-1">
                         {review.priorityActions.map((action) => (
-                          <li key={action} className="text-xs text-[#d1d1d6] leading-relaxed">
+                          <li key={action} className="text-xs text-benz-silver leading-relaxed">
                             {action}
                           </li>
                         ))}
@@ -248,8 +262,8 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
 function ReviewSection({ title, text }: { title: string; text: string }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold text-[#8e8e93] mb-0.5">{title}</div>
-      <p className="text-xs text-[#c7c7cc] leading-relaxed">{text}</p>
+      <div className="text-xs font-semibold text-benz-secondary mb-0.5">{title}</div>
+      <p className="text-xs text-benz-silver leading-relaxed">{text}</p>
     </div>
   );
 }

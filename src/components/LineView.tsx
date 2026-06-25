@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, FileText, Loader2, RefreshCw, Shield, Sparkles, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { StableInput } from '@/components/StableInput';
@@ -14,29 +14,38 @@ import {
   StoryQualityStaleBanner,
 } from '@/components/StoryQualityPanel';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
+import { BenzEmptyState } from '@/components/BenzEmptyState';
+import { clientLog } from '@/lib/clientLog';
+import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
 import { WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
-import { getSuggestions } from '@/utils/mercedesKb';
+import { useStoryGenerationPhase } from '@/hooks/useStoryGenerationPhase';
 import { copyFormattedStory, exportWarrantyStoryPdf } from '@/utils/pdfExport';
 
 interface LineViewProps {
   ro: RepairOrder;
   line: RepairLine;
+  technicianName?: string;
   isProcessingOCR: boolean;
   ocrProgress: number;
   isGenerating: boolean;
+  isScoring: boolean;
   isReviewing: boolean;
   storyQuality: StoryQualityResult | null;
   storyReview: StoryReviewResult | null;
   storyQualityStale: boolean;
   lastGeneratedStoryText: string | null;
+  cdkSanitizedNotice?: boolean;
+  onClearCdkSanitizedNotice?: () => void;
   onBack: () => void;
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   onAddXentryPhotos: () => void;
   onDeleteXentryImage: (imageId: string) => void;
-  onApplySmartDefaults: () => void;
   onGenerateStory: () => void;
-  onReviewStory: () => void;
+  onScoreStory: (storyText?: string) => void | Promise<void>;
+  onReviewStory: (storyText?: string) => void | Promise<void>;
+  onApplyCustomerPayTemplate: (templateId: string) => void | Promise<void>;
+  onClearCustomerPayMode?: () => void | Promise<void>;
   onAcknowledgeStoryBaseline: (text: string) => void;
 }
 
@@ -45,35 +54,42 @@ function complaintLabel(labels: string[] | undefined, index: number): string {
 }
 
 function charCountColor(len: number): string {
-  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-[#ff3b30]';
-  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-[#ff9f0a]';
-  return 'text-[#8e8e93]';
+  if (len > WARRANTY_STORY_MAX_CHARS) return 'text-benz-red';
+  if (len > WARRANTY_STORY_WARN_CHARS) return 'text-benz-amber';
+  return 'text-benz-muted';
 }
 
 export function LineView({
   ro,
   line,
+  technicianName,
   isProcessingOCR,
   ocrProgress,
   isGenerating,
+  isScoring,
   isReviewing,
   storyQuality,
   storyReview,
   storyQualityStale,
   lastGeneratedStoryText,
+  cdkSanitizedNotice = false,
+  onClearCdkSanitizedNotice,
   onBack,
   onUpdateLine,
   onAddXentryPhotos,
   onDeleteXentryImage,
-  onApplySmartDefaults,
   onGenerateStory,
+  onScoreStory,
   onReviewStory,
+  onApplyCustomerPayTemplate,
+  onClearCustomerPayMode,
   onAcknowledgeStoryBaseline,
 }: LineViewProps) {
+  const isCustomerPayLine = isCustomerPayRepairLine(line);
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
-  const suggestions = getSuggestions(ro);
   const storyLen = line.warrantyStory?.length ?? 0;
+  const generationPhase = useStoryGenerationPhase(isGenerating);
   const advisorName = ro.serviceAdvisor?.displayName || ro.serviceAdvisorName;
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -85,8 +101,7 @@ export function LineView({
   }, [line.id]);
 
   const canSaveAsTemplate = useMemo(() => {
-    if (!lastGeneratedStoryText || !line.warrantyStory?.trim()) return false;
-    return line.warrantyStory.trim() !== lastGeneratedStoryText.trim();
+    return Boolean(lastGeneratedStoryText && line.warrantyStory?.trim());
   }, [lastGeneratedStoryText, line.warrantyStory]);
 
   const defaultTemplateTitle = useMemo(() => {
@@ -95,10 +110,8 @@ export function LineView({
   }, [line.description]);
 
   const handleInsertTemplate = (content: string, _title: string, category: TemplateCategory) => {
-    if (category === 'customer') {
-      onUpdateLine({ warrantyStory: content });
-      return;
-    }
+    // Warranty templates append to the story field — Customer Pay uses onApplyCustomerPayTemplate instead.
+    if (category === 'customer') return;
     const existing = line.warrantyStory?.trim();
     const next = existing ? `${existing}\n\n${content}` : content;
     onUpdateLine({ warrantyStory: next });
@@ -109,39 +122,94 @@ export function LineView({
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
     if (!storyText.trim()) return;
     try {
-      await copyFormattedStory(ro, line, storyText);
+      const { wasModified } = await copyFormattedStory(ro, line, storyText);
+      if (wasModified) {
+        toast.message('Story cleaned for CDK compatibility');
+      }
       toast.success('Story copied — ready to paste into CDK');
     } catch {
       toast.error('Clipboard copy failed');
     }
   };
 
-  const handlePdf = () => {
+  const readStoryText = () => {
+    const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
+    return (storyEl?.value ?? line.warrantyStory ?? '').trim();
+  };
+
+  const handleGenerateStory = () => {
+    console.log('Generate Story clicked');
+    void onGenerateStory();
+  };
+
+  const handleScoreStory = () => {
+    void onScoreStory(readStoryText());
+  };
+
+  const handleReviewStory = () => {
+    void onReviewStory(readStoryText());
+  };
+
+  const handlePdf = async () => {
     const storyEl = document.getElementById(`warranty-story-${line.id}`) as HTMLTextAreaElement | null;
     const storyText = storyEl?.value ?? line.warrantyStory ?? '';
-    if (!storyText.trim()) return;
+    if (!storyText.trim()) {
+      toast.error(isCustomerPayLine ? 'No story to export yet' : 'No warranty story to export');
+      return;
+    }
+
     try {
-      exportWarrantyStoryPdf(ro, line, storyText);
-      toast.success('PDF downloaded');
-    } catch {
-      toast.error('PDF export failed');
+      let auditHash: string | undefined;
+      let promptVersion: string | undefined;
+
+      try {
+        const res = await fetch(`/api/audit-logs/latest?repairLineId=${encodeURIComponent(line.id)}`, {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { hash?: string | null; promptVersion?: string | null };
+          auditHash = data.hash ?? undefined;
+          promptVersion = data.promptVersion ?? undefined;
+        }
+      } catch (err) {
+        clientLog.warn('Could not fetch audit hash for PDF', err);
+      }
+
+      const pdfStartedAt = performance.now();
+      exportWarrantyStoryPdf(ro, line, storyText, auditHash, promptVersion, technicianName);
+      const durationMs = Math.round(performance.now() - pdfStartedAt);
+
+      void fetch('/api/audit-logs/pdf-export', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repairLineId: line.id, repairOrderId: ro.id, durationMs }),
+      }).catch((err) => {
+        clientLog.warn('Could not record PDF export audit log', err);
+      });
+
+      toast.success('PDF downloaded successfully');
+    } catch (err) {
+      clientLog.error('PDF export failed', err);
+      toast.error('PDF export failed — try again');
     }
   };
 
   return (
-    <div className="px-5 pt-4 pb-10">
-      <button onClick={onBack} className="flex items-center text-[#0a84ff] mb-4">
-        <ArrowLeft size={18} className="mr-1" /> Back to RO
+    <div className="benz-page pb-12">
+      <button onClick={onBack} className="benz-nav-back">
+        <ArrowLeft size={18} /> Back to RO
       </button>
 
-      <div className="ios-card p-3 mb-4 text-xs">
-        <div className="font-semibold mb-0.5">
-          {vehicleSummary} {mileageStr ? `• ${mileageStr}` : ''}{' '}
-          {ro.vehicle.vin ? `• VIN ${ro.vehicle.vin.slice(0, 10)}...` : ''}
+      <div className="benz-vehicle-bar benz-vehicle-bar-luxury mb-8">
+        <div className="text-sm font-semibold tracking-tight text-benz-primary">
+          {vehicleSummary}
+          {mileageStr ? ` · ${mileageStr}` : ''}
+          {ro.vehicle.vin ? ` · VIN ${ro.vehicle.vin.slice(0, 10)}…` : ''}
         </div>
-        {ro.vehicle.engine && <div className="text-[#8e8e93]">Engine: {ro.vehicle.engine}</div>}
+        {ro.vehicle.engine && <div className="text-xs text-benz-secondary mt-1">Engine: {ro.vehicle.engine}</div>}
         {ro.complaints && ro.complaints.length > 0 && (
-          <div className="mt-1.5 text-[10px] text-[#8e8e93]">
+          <div className="mt-2 text-xs text-benz-secondary leading-relaxed">
             Complaints:{' '}
             {ro.complaints
               .map((c, i) => `${complaintLabel(ro.complaintLabels, i)}. ${c.slice(0, 42)}${c.length > 42 ? '…' : ''}`)
@@ -150,53 +218,59 @@ export function LineView({
         )}
       </div>
 
-      <div className="mb-5">
-        <div className="text-sm text-[#8e8e93]">LINE {line.lineNumber}</div>
-        <StableInput
-          fieldKey={`${line.id}-description`}
-          value={line.description}
-          onChange={(v) => onUpdateLine({ description: v })}
-          showVoice
-          className="text-xl font-semibold bg-transparent w-full focus:outline-none border-none"
-        />
+      <div className="mb-6">
+        <label className="benz-label mb-2">Line {line.lineNumber} description</label>
+        <div className="benz-line-title-field flex gap-2 items-center min-w-0">
+          <StableInput
+            fieldKey={`${line.id}-description`}
+            value={line.description}
+            onChange={(v) => onUpdateLine({ description: v })}
+            showVoice
+            placeholder="Repair line description"
+            className="benz-line-title-input flex-1 min-w-0"
+          />
+        </div>
       </div>
 
-      <div className="space-y-5">
-        <div>
-          <label className="text-xs uppercase tracking-widest text-[#8e8e93] block mb-1.5">CUSTOMER CONCERN (prefilled from scan)</label>
-          <StableTextarea
-            fieldKey={`${line.id}-concern`}
-            value={line.customerConcern}
-            onChange={(v) => onUpdateLine({ customerConcern: v })}
-            className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-2xl p-3.5 text-sm min-h-[80px]"
-            placeholder="Customer stated..."
-          />
+      <div className="benz-line-flow">
+        <div className="benz-card benz-line-doc-card min-w-0 w-full">
+          <label className="benz-label">Customer concern</label>
+          <p className="benz-hint mb-3">Prefilled from scan — edit to match advisor wording</p>
+          <div className="benz-complaint-field">
+            <StableTextarea
+              fieldKey={`${line.id}-concern`}
+              value={line.customerConcern}
+              onChange={(v) => onUpdateLine({ customerConcern: v })}
+              className="benz-textarea min-h-[80px]"
+              placeholder="Customer stated..."
+            />
+          </div>
+
+          <div className="benz-line-doc-divider" />
+
+          <label className="benz-label">Technician notes & findings</label>
+          <div className="benz-complaint-field">
+            <StableTextarea
+              fieldKey={`${line.id}-notes`}
+              value={line.technicianNotes}
+              onChange={(v) => onUpdateLine({ technicianNotes: v })}
+              className="benz-textarea min-h-[100px]"
+              placeholder="Document actual test results, findings, and repair steps performed..."
+            />
+          </div>
         </div>
 
-        <div>
-          <label className="text-xs uppercase tracking-widest text-[#8e8e93] block mb-1.5">TECHNICIAN NOTES + FINDINGS</label>
-          <StableTextarea
-            fieldKey={`${line.id}-notes`}
-            value={line.technicianNotes}
-            onChange={(v) => onUpdateLine({ technicianNotes: v })}
-            className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-2xl p-3.5 text-sm min-h-[100px]"
-            placeholder="Document actual test results, findings, and repair steps performed..."
-          />
-        </div>
-
-        <div>
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-1.5">DIAGNOSTIC EVIDENCE PHOTOS</div>
+        <div className="benz-card benz-diagnostic-card p-5 min-w-0 w-full">
+          <div className="benz-section-title mb-1">Diagnostic Evidence</div>
+          <p className="benz-hint mb-4">Grok vision + on-device OCR — tap a photo to view or delete</p>
           <button
             onClick={onAddXentryPhotos}
             disabled={isProcessingOCR}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm mb-2 disabled:opacity-60"
+            className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium mb-3 disabled:opacity-50"
           >
             {isProcessingOCR ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {isProcessingOCR ? `ANALYZING PHOTOS... ${ocrProgress}%` : 'ADD XENTRY TESTS / FAULT CODES / GUIDED / WIRING / CONTINUITY'}
+            {isProcessingOCR ? `Analyzing… ${ocrProgress}%` : 'Add diagnostic photos'}
           </button>
-          <p className="text-[10px] text-[#8e8e93] -mt-1 mb-2">
-            Photos analyzed with Grok vision plus on-device OCR. Tap a photo to view or delete.
-          </p>
 
           {line.xentryImages && line.xentryImages.length > 0 && (
             <XentryImageGallery images={line.xentryImages} onDeleteImage={onDeleteXentryImage} />
@@ -204,173 +278,262 @@ export function LineView({
           <ExtractedDataPreview data={line.extractedData} />
         </div>
 
-        <div className="ios-card p-3 mb-1">
-          <div className="flex justify-between items-center mb-1">
-            <div className="text-xs uppercase tracking-widest text-[#8e8e93]">REFERENCE: COMMON ISSUES &amp; TYPICAL SPECS</div>
-            <button onClick={onApplySmartDefaults} className="text-[10px] px-2 py-0.5 bg-[#2c2c2e] rounded text-[#0a84ff]">
-              ADD TO NOTES
-            </button>
-          </div>
-          <div className="text-[10px] text-[#8e8e93] space-y-1">
-            <div className="font-medium text-[#aeaeb2]">{suggestions.bandNote}</div>
-            <div>
-              <span className="text-[#666]">Common issues: </span>
-              {suggestions.issues.join(' • ')}
-            </div>
-            <div>
-              <span className="text-[#666]">Typical specs: </span>
-              {suggestions.tests.map((t) => `${t.label}: ${t.spec}`).join(' • ')}
-            </div>
-          </div>
-          <div className="text-[9px] mt-1 text-[#666]">
-            Reference only — not used as performed work unless you document actual results in notes or OCR.
-          </div>
-        </div>
-
         {advisorName && (
-          <div className="ios-card p-3 mb-2 border border-[#0a84ff]/20">
-            <div className="flex items-center gap-2 text-[#0a84ff] text-xs font-medium">
+          <div className="benz-line-aside border-benz-accent/25 bg-benz-accent/5">
+            <div className="flex items-center gap-2 text-benz-blue text-xs font-semibold">
               <Sparkles size={14} />
-              Advisor Intelligence active
+              Advisor Intelligence Active
             </div>
-            <p className="text-[10px] text-[#8e8e93] mt-1 leading-relaxed">
+            <p className="text-xs text-benz-secondary mt-2 leading-relaxed">
               Story generation will match {advisorName}&apos;s complaint phrasing style for this RO.
             </p>
           </div>
         )}
 
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowTemplateLibrary(true)}
-            disabled={isGenerating || isReviewing}
-            className="secondary-btn w-full h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-60"
-          >
-            <BookOpen size={18} />
-            TEMPLATE LIBRARY
-          </button>
-
-          <div className={`grid gap-2 ${canSaveAsTemplate ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
-            <button
-              onClick={onGenerateStory}
-              disabled={isGenerating || isReviewing}
-              className="primary-btn w-full h-14 text-base flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  GENERATING WITH GROK…
-                </>
-              ) : (
-                'GENERATE WARRANTY STORY'
+        <div className="benz-generate-panel space-y-3 relative z-[5]">
+          {isCustomerPayLine ? (
+            <div className="benz-cp-instant-banner flex items-start gap-3 p-4 rounded-xl border border-benz-green/30 bg-benz-green/8">
+              <Zap size={20} className="text-benz-green shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-semibold text-benz-primary">Customer Pay — instant story</div>
+                <p className="text-xs text-benz-secondary mt-1 leading-relaxed">
+                  Pre-written narrative applied. No AI generation or quality audit required — edit and copy to CDK.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleGenerateStory}
+                disabled={isGenerating || isScoring || isReviewing}
+                className="primary-btn w-full h-13 text-base flex items-center justify-center gap-2.5 disabled:opacity-50 touch-target"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    {generationPhase.message}
+                  </>
+                ) : (
+                  'Generate MI 4.3'
+                )}
+              </button>
+              {isGenerating && (
+                <div className="benz-gen-progress" role="progressbar" aria-valuenow={Math.round(generationPhase.progress)} aria-valuemin={0} aria-valuemax={100}>
+                  <div className="benz-gen-progress-bar" style={{ width: `${generationPhase.progress}%` }} />
+                </div>
               )}
-            </button>
+            </div>
+          )}
 
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowTemplateLibrary(true)}
+              disabled={isGenerating || isScoring || isReviewing}
+              className="benz-tertiary-link disabled:opacity-50"
+            >
+              {isCustomerPayLine ? 'Change Customer Pay template' : 'Browse template library'}
+            </button>
+            {isCustomerPayLine && onClearCustomerPayMode && (
+              <div className="benz-cp-switch-banner w-full">
+                <p className="text-xs text-benz-secondary leading-relaxed">
+                  Need a full warranty narrative with AI quality review?
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void onClearCustomerPayMode()}
+                  disabled={isGenerating || isScoring || isReviewing}
+                  className="secondary-btn benz-btn-accent-outline h-10 w-full mt-2 text-sm font-medium disabled:opacity-50"
+                >
+                  Switch to warranty AI
+                </button>
+              </div>
+            )}
             {canSaveAsTemplate && lastGeneratedStoryText && (
               <button
                 type="button"
                 onClick={() => setShowSaveTemplate(true)}
-                disabled={isGenerating || isReviewing}
-                className="secondary-btn w-full h-14 text-sm flex items-center justify-center gap-2 border-[#30d158]/40 text-[#30d158] disabled:opacity-60"
+                disabled={isGenerating || isScoring || isReviewing}
+                className="benz-tertiary-link text-benz-green disabled:opacity-50"
               >
-                <BookmarkPlus size={18} />
-                SAVE AS NEW TEMPLATE
+                Save as template
               </button>
             )}
           </div>
 
-          <p className="text-[10px] text-[#8e8e93] text-center leading-snug">
-            Generate MI 2.0–ready stories, review with AI, edit, then save to grow your knowledge base.
+          <p className="benz-hint text-center">
+            {isCustomerPayLine
+              ? 'Customer Pay templates skip AI — pick another template or edit the story below.'
+              : 'Generate MI 4.3–ready stories, review with AI, edit, then save to grow your knowledge base.'}
           </p>
+          {isGenerating && !isCustomerPayLine && !line.warrantyStory?.trim() && (
+            <StoryQualityLoadingPanel
+              mode="generating"
+              statusMessage={generationPhase.message}
+              progress={generationPhase.progress}
+            />
+          )}
         </div>
 
+        {!line.warrantyStory?.trim() && (
+          <BenzEmptyState
+            icon={isCustomerPayLine ? Zap : Sparkles}
+            title={isCustomerPayLine ? 'No Customer Pay story yet' : 'No warranty story yet'}
+            hint={
+              isCustomerPayLine
+                ? 'Pick an instant template from the library — no AI wait time.'
+                : 'Generate with Grok or browse templates to start your 3 C\'s narrative.'
+            }
+            actionLabel={isCustomerPayLine ? 'Browse Customer Pay templates' : 'Generate MI 4.3'}
+            onAction={() => (isCustomerPayLine ? setShowTemplateLibrary(true) : handleGenerateStory())}
+            className="benz-story-empty-state"
+          />
+        )}
+
         {line.warrantyStory && (
-          <div className="story-card p-5 mt-2">
-            <div className="flex justify-between items-center mb-3">
-              <div className="text-xs uppercase tracking-[1px] text-[#8e8e93]">WARRANTY STORY — 3 C&apos;s • AUDIT-SAFE</div>
-              <div className={`text-[10px] font-mono ${charCountColor(storyLen)}`}>
+          <div className={`story-card p-5 sm:p-6 min-w-0 w-full ${isCustomerPayLine ? 'story-card-cp' : ''}`}>
+            <div className="flex justify-between items-start gap-3 mb-4 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="benz-section-title tracking-[0.12em]">
+                  {isCustomerPayLine ? 'Customer Pay Story' : "Warranty Story · 3 C's"}
+                </div>
+                {isCustomerPayLine && (
+                  <span className="benz-cp-badge">
+                    <FileText size={12} /> Customer Pay · Instant
+                  </span>
+                )}
+              </div>
+              <div className={`text-xs font-mono font-medium ${charCountColor(storyLen)}`}>
                 {storyLen} / {WARRANTY_STORY_MAX_CHARS}
               </div>
             </div>
             {storyLen > WARRANTY_STORY_MAX_CHARS && (
-              <div className="text-[10px] text-[#ff3b30] mb-2">Exceeds recommended DMS character limit — edit before submission.</div>
+              <div className="text-xs text-benz-red mb-3 bg-benz-red/10 border border-benz-red/20 rounded-lg px-3 py-2">
+                Exceeds recommended DMS character limit — edit before submission.
+              </div>
             )}
-            <StableTextarea
-              id={`warranty-story-${line.id}`}
-              fieldKey={`${line.id}-story`}
-              value={line.warrantyStory}
-              onChange={(v) => onUpdateLine({ warrantyStory: v })}
-              className="w-full bg-[#1c1c1e] border border-[#38383a] rounded p-3 text-[14.5px] leading-relaxed mb-3 min-h-[200px] resize-y"
-              placeholder="Edit warranty story before DMS submission..."
-            />
-            {isGenerating && <StoryQualityLoadingPanel mode="generating" />}
-            {!isGenerating && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
-            {!isGenerating && !isReviewing && storyQuality && (
-              <StoryQualityPanel
-                quality={storyQuality}
-                review={storyReview}
-                panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
+            {cdkSanitizedNotice && (
+              <div className="text-xs text-benz-amber mb-3 bg-benz-amber/10 border border-benz-amber/25 rounded-lg px-3 py-2">
+                Story cleaned for CDK compatibility
+              </div>
+            )}
+            <div className="benz-complaint-field">
+              <StableTextarea
+                id={`warranty-story-${line.id}`}
+                fieldKey={`${line.id}-story`}
+                value={line.warrantyStory}
+                onChange={(v) => {
+                  onClearCdkSanitizedNotice?.();
+                  onUpdateLine({ warrantyStory: v });
+                }}
+                className="benz-textarea text-[15px] leading-relaxed mb-4 min-h-[220px]"
+                placeholder="Edit warranty story before DMS submission..."
               />
-            )}
-            {!isGenerating && !isReviewing && !storyQuality && storyQualityStale && (
-              <StoryQualityStaleBanner onReview={onReviewStory} />
+            </div>
+            {!isCustomerPayLine && (
+              <div className="benz-quality-inset">
+                {isGenerating && (
+                  <StoryQualityLoadingPanel
+                    mode="generating"
+                    statusMessage={generationPhase.message}
+                    progress={generationPhase.progress}
+                  />
+                )}
+                {!isGenerating && isScoring && <StoryQualityLoadingPanel mode="scoring" />}
+                {!isGenerating && !isScoring && isReviewing && <StoryQualityLoadingPanel mode="reviewing" />}
+                {!isGenerating && !isScoring && !isReviewing && storyQuality && (
+                  <StoryQualityPanel
+                    quality={storyQuality}
+                    review={storyReview}
+                    panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
+                  />
+                )}
+                {!isGenerating && !isScoring && !isReviewing && !storyQuality && storyQualityStale && (
+                  <StoryQualityStaleBanner onAudit={handleScoreStory} />
+                )}
+              </div>
             )}
 
-            <div className="flex gap-2 flex-wrap mt-3">
-              <button
-                type="button"
-                onClick={onReviewStory}
-                disabled={isGenerating || isReviewing || !line.warrantyStory?.trim()}
-                className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#0a84ff]/30 text-[#0a84ff] disabled:opacity-60"
-              >
-                {isReviewing ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> REVIEWING…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={16} /> REVIEW WITH AI
-                  </>
-                )}
-              </button>
-              {canSaveAsTemplate && (
-                <button
-                  type="button"
-                  onClick={() => setShowSaveTemplate(true)}
-                  className="flex-1 min-w-[160px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm border-[#30d158]/30 text-[#30d158]"
-                >
-                  <BookmarkPlus size={16} /> SAVE TEMPLATE
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowTemplateLibrary(true)}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
-              >
-                <BookOpen size={16} /> TEMPLATES
-              </button>
+            <div className="mt-4 pt-4 benz-divider space-y-3">
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
+                className="primary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm touch-target"
               >
-                <Copy size={16} /> COPY
+                <Copy size={18} />
+                Copy for CDK
               </button>
-              <button
-                type="button"
-                onClick={handlePdf}
-                className="flex-1 min-w-[120px] secondary-btn h-11 flex items-center justify-center gap-2 text-sm"
-              >
-                <Download size={16} /> PDF
-              </button>
-              <button
-                onClick={onGenerateStory}
-                disabled={isGenerating || isReviewing}
-                className="secondary-btn h-11 px-5 flex items-center gap-2 text-sm disabled:opacity-60"
-              >
-                {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                REGEN
-              </button>
+
+              {!isCustomerPayLine && (
+                <>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleScoreStory}
+                      disabled={isGenerating || isScoring || isReviewing || !(line.warrantyStory?.trim())}
+                      className="secondary-btn benz-btn-accent-outline h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                    >
+                      {isScoring ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" /> Auditing…
+                        </>
+                      ) : (
+                        <>
+                          <Shield size={16} /> Audit Story
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateStory}
+                      disabled={isGenerating || isScoring || isReviewing}
+                      className="secondary-btn h-12 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                    >
+                      {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                      Regenerate
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReviewStory}
+                    disabled={isGenerating || isScoring || isReviewing || !(line.warrantyStory?.trim())}
+                    className="secondary-btn h-11 w-full flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {isReviewing ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" /> Reviewing…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={16} /> Review with AI
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center gap-1 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateLibrary(true)}
+                  className="benz-tertiary-btn"
+                >
+                  <BookOpen size={14} /> Templates
+                </button>
+                {canSaveAsTemplate && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveTemplate(true)}
+                    className="benz-tertiary-btn text-benz-green"
+                  >
+                    <BookmarkPlus size={14} /> Save template
+                  </button>
+                )}
+                <button type="button" onClick={handlePdf} className="benz-tertiary-btn">
+                  <Download size={14} /> Export PDF
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -381,6 +544,8 @@ export function LineView({
         open={showTemplateLibrary}
         onClose={() => setShowTemplateLibrary(false)}
         onInsert={handleInsertTemplate}
+        onApplyCustomerPay={onApplyCustomerPayTemplate}
+        defaultTab={isCustomerPayLine ? 'customer' : 'warranty'}
       />
 
       {lastGeneratedStoryText && (

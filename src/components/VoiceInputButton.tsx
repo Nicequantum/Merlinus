@@ -1,39 +1,99 @@
 'use client';
 
 import { Mic, MicOff } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
+import type { TranscriptMeta } from '@/lib/voice';
 
 interface VoiceInputButtonProps {
   targetRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
-  onTranscript: (value: string) => void;
+  onTranscript: (value: string, meta?: TranscriptMeta) => void;
+  onListeningChange?: (listening: boolean) => void;
   className?: string;
 }
 
-export function VoiceInputButton({ targetRef, onTranscript, className = '' }: VoiceInputButtonProps) {
-  const { isListening, isSupported, toggleListening } = useSpeechRecognition();
+export function VoiceInputButton({
+  targetRef,
+  onTranscript,
+  onListeningChange,
+  className = '',
+}: VoiceInputButtonProps) {
+  const lastErrorRef = useRef<string | null>(null);
+  const {
+    isListening,
+    isSupported,
+    isEnabled,
+    permission,
+    listeningState,
+    errorMessage,
+    toggleListening,
+    refreshPermission,
+    stopListening,
+  } = useVoiceInput();
+
+  useEffect(() => {
+    void refreshPermission();
+    return () => stopListening();
+  }, [refreshPermission, stopListening]);
+
+  useEffect(() => {
+    onListeningChange?.(isListening || listeningState === 'restarting');
+  }, [isListening, listeningState, onListeningChange]);
+
+  useEffect(() => {
+    if (listeningState !== 'error' || !errorMessage) return;
+    if (lastErrorRef.current === errorMessage) return;
+    lastErrorRef.current = errorMessage;
+    toast.error(errorMessage);
+  }, [listeningState, errorMessage]);
+
+  const handleTranscript = useCallback(
+    (value: string, meta?: TranscriptMeta) => {
+      onTranscript(value, meta);
+    },
+    [onTranscript]
+  );
 
   const handleClick = () => {
     const el = targetRef.current;
     if (!el) return;
-    if (!isSupported) {
-      toast.error('Voice input is not supported in this browser');
+
+    if (!isEnabled) {
+      toast.message('Voice input is disabled for this dealership. Type your notes below.');
       return;
     }
-    toggleListening(el, onTranscript);
+    if (!isSupported) {
+      toast.error('Voice input is not supported in this browser. Use Chrome or Edge on your tablet.');
+      return;
+    }
+    if (permission === 'denied') {
+      toast.error('Microphone blocked. Open site settings and allow mic access, then reload.');
+      return;
+    }
+
+    lastErrorRef.current = null;
+    toggleListening(el, handleTranscript);
   };
+
+  if (!isEnabled) return null;
+
+  const micTitle = isListening ? 'Stop voice input' : 'Start voice input';
+  const isActive = isListening || listeningState === 'restarting';
 
   return (
     <button
       type="button"
+      title={micTitle}
+      aria-label={micTitle}
+      aria-pressed={isListening}
       onClick={handleClick}
-      title={isListening ? 'Stop voice input' : 'Voice input'}
-      aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
-      className={`p-2 rounded-xl border border-[#38383a] bg-[#2c2c2e] text-[#0a84ff] active:scale-95 transition-transform ${
-        isListening ? 'ring-2 ring-[#0a84ff] text-[#ff3b30]' : ''
-      } ${className}`}
+      className={`benz-voice-inline-btn touch-target ${isActive ? 'benz-voice-inline-btn-active' : ''} ${listeningState === 'restarting' ? 'benz-voice-inline-btn-restarting' : ''} ${className}`}
     >
-      {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+      <span className="benz-voice-inline-btn-inner">
+        {isActive && <span className="benz-voice-inline-pulse" aria-hidden />}
+        {isActive ? <MicOff size={16} /> : <Mic size={16} />}
+      </span>
     </button>
   );
 }

@@ -18,27 +18,27 @@ export function ExtractedDataPreview({ data }: ExtractedDataPreviewProps) {
   if (!hasContent) return null;
 
   return (
-    <div className="text-[10px] bg-[#1c1c1e] p-2 rounded mb-2">
-      <div className="font-semibold mb-1">Extracted from photos:</div>
+    <div className="benz-extracted-panel mt-3">
+      <div className="benz-section-title mb-2">Extracted from photos</div>
       {extracted.faultCodes.length > 0 && (
-        <div className="space-y-1 mb-1">
+        <div className="space-y-1.5 mb-2">
           {extracted.faultCodes.slice(0, 4).map((fc) => (
-            <div key={fc.code}>
-              <span className="text-[#0a84ff] font-mono">{fc.code}</span>
-              {fc.description ? ` — ${fc.description}` : ''}
-              {fc.status ? <span className="text-[#8e8e93]"> ({fc.status})</span> : null}
+            <div key={fc.code} className="leading-relaxed">
+              <span className="text-benz-blue font-mono font-semibold">{fc.code}</span>
+              {fc.description ? <span className="text-benz-secondary"> — {fc.description}</span> : ''}
+              {fc.status ? <span className="text-benz-muted"> ({fc.status})</span> : null}
             </div>
           ))}
           {extracted.faultCodes.length > 4 && (
-            <div className="text-[#8e8e93]">+{extracted.faultCodes.length - 4} more codes</div>
+            <div className="text-benz-muted">+{extracted.faultCodes.length - 4} more codes</div>
           )}
         </div>
       )}
       {extracted.guidedTests.length > 0 && (
-        <div>Guided: {extracted.guidedTests.slice(0, 2).join(' | ')}</div>
+        <div className="text-benz-secondary">Guided: {extracted.guidedTests.slice(0, 2).join(' | ')}</div>
       )}
       {extracted.measurements.length > 0 && (
-        <div>
+        <div className="text-benz-secondary mt-1">
           Meas: {extracted.measurements[0].label}={extracted.measurements[0].value}
         </div>
       )}

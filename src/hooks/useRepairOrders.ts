@@ -1,8 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { clientLog } from '@/lib/clientLog';
+import { isRepairOrderActiveToday } from '@/lib/dealershipDayBoundary';
+import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { runDiagnosticOCR, runMultiPassOCR } from '@/services/ocr';
 import type {
   AppView,
@@ -13,6 +16,7 @@ import type {
   RepairOrder,
   StoryQualityResult,
   StoryReviewResult,
+  TechnicianSession,
 } from '@/types';
 import {
   emptyExtractedData,
@@ -22,8 +26,10 @@ import {
   parseDiagnosticExtraction,
   rebuildExtractedFromOcrTexts,
 } from '@/utils/diagnosticParser';
-import { getSuggestions } from '@/utils/mercedesKb';
-import { debounce } from '@/lib/debounce';
+
+
+import { useROPersistence } from '@/hooks/repairOrders/useROPersistence';
+import { useROStoryWorkflow } from '@/hooks/repairOrders/useROStoryWorkflow';
 import {
   createManualRepairOrder,
   createNewRepairLine,
@@ -51,13 +57,43 @@ import { extractVmiWarrantyInfo, mergeVehicleWarrantyInfo } from '@/utils/vmiExt
 import { uploadFileAsAttachment, uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
+  session: TechnicianSession | null;
   onOcrStart: (message?: string) => void;
   onOcrFinish: () => void;
   setOcrProgress: (p: number) => void;
   setScanStatusMessage: (message: string) => void;
 }
 
+const PREVIOUS_PAGE_SIZE = 25;
+const SEARCH_PAGE_SIZE = 50;
+
+function mergeRepairOrders(...lists: RepairOrder[][]): RepairOrder[] {
+  const map = new Map<string, RepairOrder>();
+  for (const list of lists) {
+    for (const ro of list) {
+      map.set(ro.id, ro);
+    }
+  }
+  return Array.from(map.values());
+}
+
+function matchesROSearch(ro: RepairOrder, term: string): boolean {
+  const q = term.toLowerCase();
+  return (
+    ro.roNumber.toLowerCase().includes(q) ||
+    (ro.vehicle.make?.toLowerCase().includes(q) ?? false) ||
+    (ro.vehicle.model?.toLowerCase().includes(q) ?? false) ||
+    (ro.vehicle.year?.includes(q) ?? false) ||
+    (ro.vehicle.vin?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+function sortRepairOrdersNewestFirst(orders: RepairOrder[]): RepairOrder[] {
+  return [...orders].sort((a, b) => ((b.updatedAt || b.createdAt || '0') > (a.updatedAt || a.createdAt || '0') ? 1 : -1));
+}
+
 export function useRepairOrders({
+  session,
   onOcrStart,
   onOcrFinish,
   setOcrProgress,
@@ -72,11 +108,25 @@ export function useRepairOrders({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingLineId, setGeneratingLineId] = useState<string | null>(null);
   const [lastGeneratedStoryByLine, setLastGeneratedStoryByLine] = useState<Record<string, string>>({});
+  const [cdkSanitizedByLine, setCdkSanitizedByLine] = useState<Record<string, boolean>>({});
   const [storyQualityByLine, setStoryQualityByLine] = useState<Record<string, StoryQualityResult>>({});
   const [storyReviewByLine, setStoryReviewByLine] = useState<Record<string, StoryReviewResult>>({});
+  const [isScoring, setIsScoring] = useState(false);
+  const [scoringLineId, setScoringLineId] = useState<string | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewingLineId, setReviewingLineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listRetrying, setListRetrying] = useState(false);
+  const [todayStartIso, setTodayStartIso] = useState<string | null>(null);
+  const [previousROs, setPreviousROs] = useState<RepairOrder[]>([]);
+  const [previousExpanded, setPreviousExpanded] = useState(false);
+  const [previousLoading, setPreviousLoading] = useState(false);
+  const [previousLoadingMore, setPreviousLoadingMore] = useState(false);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
+  const [previousHasMore, setPreviousHasMore] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const previousLoadedRef = useRef(false);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const scanCancelledRef = useRef(false);
   const scanInFlightRef = useRef(false);
@@ -85,6 +135,8 @@ export function useRepairOrders({
   const openingROInFlightRef = useRef<string | null>(null);
   const generateStorySeqRef = useRef(0);
   const storyGenerationInFlightRef = useRef(false);
+  const scoreStorySeqRef = useRef(0);
+  const storyScoringInFlightRef = useRef(false);
   const reviewStorySeqRef = useRef(0);
   const storyReviewInFlightRef = useRef(false);
 
@@ -103,14 +155,141 @@ export function useRepairOrders({
   }, []);
 
   const refreshList = useCallback(async () => {
-    const { repairOrders } = await api.listRepairOrders();
-    setAllROs(repairOrders.map(normalizeRepairOrder));
-    setLoading(false);
-  }, [normalizeRepairOrder]);
+    if (!session) {
+      setAllROs([]);
+      setPreviousROs([]);
+      setListError(null);
+      setLoading(false);
+      setListRetrying(false);
+      previousLoadedRef.current = false;
+      setPreviousExpanded(false);
+      return;
+    }
+
+    setListError(null);
+    try {
+      const { repairOrders, todayStart } = await api.listRepairOrders({ scope: 'today' });
+      const normalized = repairOrders.map(normalizeRepairOrder);
+      setAllROs(normalized);
+      if (todayStart) setTodayStartIso(todayStart);
+      setPreviousROs([]);
+      setPreviousCursor(null);
+      setPreviousHasMore(false);
+      previousLoadedRef.current = false;
+      setPreviousExpanded(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setAllROs([]);
+        setListError(null);
+        return;
+      }
+      setListError('Could not load repair orders. Check your connection and try again.');
+      throw error;
+    } finally {
+      setLoading(false);
+      setListRetrying(false);
+    }
+  }, [normalizeRepairOrder, session]);
+
+  /** Lazy-load older repair orders — only when the Previous section is opened. */
+  const loadPreviousPage = useCallback(
+    async (append: boolean) => {
+      if (!session) return;
+      if (append) setPreviousLoadingMore(true);
+      else setPreviousLoading(true);
+
+      try {
+        const { repairOrders, nextCursor, hasMore, todayStart } = await api.listRepairOrders({
+          scope: 'previous',
+          limit: PREVIOUS_PAGE_SIZE,
+          cursor: append ? previousCursor ?? undefined : undefined,
+        });
+        const normalized = repairOrders.map(normalizeRepairOrder);
+        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, normalized) : normalized));
+        setAllROs((prev) => mergeRepairOrders(prev, normalized));
+        setPreviousCursor(nextCursor ?? null);
+        setPreviousHasMore(Boolean(hasMore));
+        if (todayStart) setTodayStartIso(todayStart);
+        previousLoadedRef.current = true;
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 401)) {
+          toast.error('Could not load previous repair orders — try again.');
+        }
+      } finally {
+        setPreviousLoading(false);
+        setPreviousLoadingMore(false);
+      }
+    },
+    [normalizeRepairOrder, previousCursor, session]
+  );
+
+  const togglePreviousExpanded = useCallback(() => {
+    setPreviousExpanded((expanded) => {
+      const next = !expanded;
+      if (next && !previousLoadedRef.current) {
+        void loadPreviousPage(false);
+      }
+      return next;
+    });
+  }, [loadPreviousPage]);
+
+  const loadMorePrevious = useCallback(() => {
+    if (previousLoading || previousLoadingMore || !previousHasMore) return;
+    void loadPreviousPage(true);
+  }, [loadPreviousPage, previousHasMore, previousLoading, previousLoadingMore]);
+
+  const retryListLoad = useCallback(async () => {
+    setListRetrying(true);
+    setLoading(true);
+    try {
+      await refreshList();
+    } catch {
+      toast.error('Still unable to load repair orders — check Wi‑Fi or ask your manager.');
+    }
+  }, [refreshList]);
 
   useEffect(() => {
-    refreshList().catch(() => setLoading(false));
-  }, [refreshList]);
+    if (!session) {
+      setLoading(false);
+      setListError(null);
+      setAllROs([]);
+      setPreviousROs([]);
+      return;
+    }
+
+    setLoading(true);
+    refreshList().catch(() => {
+      toast.error('Could not load repair orders — check your connection');
+    });
+  }, [session, refreshList]);
+
+  // Server search for historical ROs; client filter adds VIN matches from loaded rows.
+  useEffect(() => {
+    const q = searchTerm.trim();
+    if (!session || !q) {
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    const timer = setTimeout(() => {
+      api
+        .listRepairOrders({ q, limit: SEARCH_PAGE_SIZE })
+        .then(({ repairOrders, todayStart }) => {
+          const normalized = repairOrders.map(normalizeRepairOrder);
+          setAllROs((prev) => mergeRepairOrders(prev, normalized));
+          if (todayStart) setTodayStartIso(todayStart);
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof ApiError && error.status === 401)) {
+            clientLog.warn('Repair order search failed', error);
+          }
+        })
+        .finally(() => setSearchLoading(false));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [normalizeRepairOrder, searchTerm, session]);
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
   useEffect(() => {
@@ -127,84 +306,11 @@ export function useRepairOrders({
     }
   }, [view, currentRO, currentLineId]);
 
-  const persistRO = useCallback(
-    async (ro: RepairOrder): Promise<RepairOrder> => {
-      const isNew = !allROs.some((r) => r.id === ro.id) || ro.id.startsWith('ro-');
-      if (isNew && ro.id.startsWith('ro-')) {
-        const { repairOrder } = await api.createRepairOrder(ro);
-        setAllROs((prev) => [repairOrder, ...prev.filter((r) => r.id !== ro.id)]);
-        return repairOrder;
-      }
-      const { repairOrder } = await api.updateRepairOrder(ro.id, ro);
-      setAllROs((prev) => prev.map((r) => (r.id === repairOrder.id ? repairOrder : r)));
-      return repairOrder;
-    },
-    [allROs]
-  );
-
-  const saveROImmediate = useCallback(
-    async (ro: RepairOrder | null) => {
-      if (ro) {
-        try {
-          const persisted = await persistRO(ro);
-          const saved = ensureComplaintIds(
-            ro.complaintIds && ro.complaintIds.length === persisted.complaints.length
-              ? { ...persisted, complaintIds: ro.complaintIds }
-              : persisted
-          );
-          roRef.current = saved;
-          setCurrentRO(saved);
-          setAllROs((prev) => {
-            const idx = prev.findIndex((r) => r.id === saved.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = saved;
-              return copy;
-            }
-            return [saved, ...prev];
-          });
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Failed to save repair order');
-        }
-      } else {
-        roRef.current = null;
-        setCurrentRO(null);
-      }
-    },
-    [persistRO]
-  );
-
-  const debouncedPersistRef = useRef(
-    debounce((ro: RepairOrder) => {
-      void saveROImmediate(ro);
-    }, 450)
-  );
-
-  const flushPendingSave = useCallback(() => {
-    debouncedPersistRef.current.flush();
-  }, []);
-
-  const scheduleSaveRO = useCallback((ro: RepairOrder) => {
-    debouncedPersistRef.current(ro);
-  }, []);
-
-  const applyROUpdate = useCallback(
-    (updater: (ro: RepairOrder) => RepairOrder, options?: { immediate?: boolean }) => {
-      const base = roRef.current;
-      if (!base) return null;
-      const updated = ensureComplaintIds(structuredClone(updater(base)));
-      roRef.current = updated;
-      setCurrentRO(updated);
-      setAllROs((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      if (options?.immediate) {
-        flushPendingSave();
-        void saveROImmediate(updated);
-      } else {
-        scheduleSaveRO(updated);
-      }
-      return updated;
-    },
-    [flushPendingSave, saveROImmediate, scheduleSaveRO]
+  const { flushPendingSave, applyROUpdate, saveROImmediate, persistRO } = useROPersistence(
+    allROs,
+    setAllROs,
+    roRef,
+    setCurrentRO
   );
 
   const navigateView = useCallback(
@@ -228,11 +334,15 @@ export function useRepairOrders({
           setStoryQualityByLine({});
           setStoryReviewByLine({});
           generateStorySeqRef.current += 1;
+          scoreStorySeqRef.current += 1;
           reviewStorySeqRef.current += 1;
           storyGenerationInFlightRef.current = false;
+          storyScoringInFlightRef.current = false;
           storyReviewInFlightRef.current = false;
           setIsGenerating(false);
           setGeneratingLineId(null);
+          setIsScoring(false);
+          setScoringLineId(null);
           setIsReviewing(false);
           setReviewingLineId(null);
           setView('home');
@@ -261,11 +371,15 @@ export function useRepairOrders({
         setStoryQualityByLine({});
         setStoryReviewByLine({});
         generateStorySeqRef.current += 1;
+        scoreStorySeqRef.current += 1;
         reviewStorySeqRef.current += 1;
         storyGenerationInFlightRef.current = false;
+        storyScoringInFlightRef.current = false;
         storyReviewInFlightRef.current = false;
         setIsGenerating(false);
         setGeneratingLineId(null);
+        setIsScoring(false);
+        setScoringLineId(null);
         setIsReviewing(false);
         setReviewingLineId(null);
         setAllROs((prev) => {
@@ -421,7 +535,7 @@ export function useRepairOrders({
         setScanStatusMessage('Starting on-device OCR and AI vision in parallel…');
         const ocrPromise = runClientOcr();
         const grokPromise = api.extractRO(imagePathnames).catch((error) => {
-          console.warn('Server RO extraction failed or timed out', error);
+          clientLog.warn('Server RO extraction failed or timed out', error);
           return null;
         });
 
@@ -473,7 +587,7 @@ export function useRepairOrders({
         setPendingROImages([]);
       } catch (error) {
         if (!isActiveSession()) return;
-        console.error('RO scan error', error);
+        clientLog.error('RO scan error', error);
         toast.error(error instanceof Error ? error.message : 'Scan failed. Try fewer pages or sharper photos.');
         if (!createdSuccessfully) {
           setPendingROImages(images);
@@ -523,7 +637,7 @@ export function useRepairOrders({
           `Added ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total). Tap Process RO when ready.`
         );
       } catch (error) {
-        console.error('Scan file preparation failed', error);
+        clientLog.error('Scan file preparation failed', error);
         toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
       }
     },
@@ -605,9 +719,19 @@ export function useRepairOrders({
 
   const updateLine = useCallback(
     (lineId: string, updates: Partial<RepairLine>) => {
+      let nextUpdates = updates;
+      if (updates.warrantyStory !== undefined) {
+        const { text, wasModified } = sanitizeForCDKWithMeta(updates.warrantyStory);
+        nextUpdates = { ...updates, warrantyStory: text };
+        if (wasModified) {
+          setCdkSanitizedByLine((prev) => ({ ...prev, [lineId]: true }));
+        }
+      }
       applyROUpdate((ro) => ({
         ...ro,
-        repairLines: ro.repairLines.map((line) => (line.id === lineId ? { ...line, ...updates } : line)),
+        repairLines: ro.repairLines.map((line) =>
+          line.id === lineId ? { ...line, ...nextUpdates } : line
+        ),
       }));
     },
     [applyROUpdate]
@@ -779,22 +903,6 @@ export function useRepairOrders({
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);
 
-  const applySmartDefaultsToLine = useCallback(
-    (lineId: string) => {
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
-      if (!line) return;
-      const sugg = getSuggestions(latestRO);
-      let notes = (line.technicianNotes || '').trim();
-      const addBlock = `\n\n[Reference only — not performed unless documented]\n[Smart defaults for ${sugg.bandNote}]\nCommon issues at this mileage: ${sugg.issues.join(' • ')}\nTypical spec references: ${sugg.tests.map((t) => `${t.label}: ${t.spec}${t.note ? ' (' + t.note + ')' : ''}`).join('; ')}`;
-      if (!notes.includes('Smart defaults')) notes = (notes + addBlock).trim();
-      updateLine(lineId, { technicianNotes: notes });
-      toast.success('Reference notes added');
-    },
-    [updateLine]
-  );
-
   const analyzeXentryImage = useCallback(
     async (file: File, attachment: ImageAttachment, onProgress: (p: number) => void) => {
       let extracted: Partial<ExtractedData> = {};
@@ -807,7 +915,7 @@ export function useRepairOrders({
         text = formatExtractionAsOcrText(grokData);
         onProgress(50);
       } catch (err) {
-        console.warn('Grok diagnostic extraction failed, falling back to OCR', err);
+        clientLog.warn('Grok diagnostic extraction failed, falling back to OCR', err);
       }
 
       try {
@@ -818,7 +926,7 @@ export function useRepairOrders({
           text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
         }
       } catch (err) {
-        console.warn('Diagnostic OCR failed for one image', err);
+        clientLog.warn('Diagnostic OCR failed for one image', err);
       }
 
       if (!text.trim()) {
@@ -848,7 +956,7 @@ export function useRepairOrders({
           updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
           updatedOcrTexts = [...updatedOcrTexts, result.text];
         } catch (err) {
-          console.warn('Xentry analysis failed for one image', err);
+          clientLog.warn('Xentry analysis failed for one image', err);
           updatedOcrTexts = [...updatedOcrTexts, '[Analysis failed for this image]'];
         }
       }
@@ -1032,6 +1140,13 @@ export function useRepairOrders({
     setReviewingLineId(null);
   }, []);
 
+  const invalidateScoreRequests = useCallback(() => {
+    scoreStorySeqRef.current += 1;
+    storyScoringInFlightRef.current = false;
+    setIsScoring(false);
+    setScoringLineId(null);
+  }, []);
+
   const clearLineQualityState = useCallback((lineId: string) => {
     setStoryQualityByLine((prev) => {
       if (!prev[lineId]) return prev;
@@ -1047,160 +1162,57 @@ export function useRepairOrders({
     });
   }, []);
 
-  const generateStory = useCallback(
-    async (lineId: string) => {
-      if (storyGenerationInFlightRef.current) return;
-      if (storyReviewInFlightRef.current) {
-        invalidateReviewRequests();
-      }
-      flushPendingSave();
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const roId = latestRO.id;
-      const lineExists = latestRO.repairLines.some((line) => line.id === lineId);
-      if (!lineExists) {
-        toast.error('Repair line not found — refresh the RO and try again');
-        return;
-      }
-
-      clearLineQualityState(lineId);
-      invalidateReviewRequests();
-
-      const seq = ++generateStorySeqRef.current;
-      storyGenerationInFlightRef.current = true;
-      setGeneratingLineId(lineId);
-      setIsGenerating(true);
-      try {
-        const { warrantyStory, quality } = await api.generateStory(roId, lineId);
-        if (seq !== generateStorySeqRef.current) return;
-
-        const activeRO = roRef.current;
-        if (!activeRO || activeRO.id !== roId) {
-          toast.success('Story generated — reopen the repair order to view it');
-          return;
-        }
-
-        if (!activeRO.repairLines.some((l) => l.id === lineId)) {
-          toast.success('Story generated — reopen this line to view it');
-          return;
-        }
-
-        setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));
-        applyROUpdate(
-          (ro) => {
-            if (ro.id !== roId) return ro;
-            return {
-              ...ro,
-              repairLines: ro.repairLines.map((l) => (l.id === lineId ? { ...l, warrantyStory } : l)),
-            };
-          },
-          { immediate: true }
-        );
-
-        if (quality) {
-          const baseline = (quality.scoredAgainstStory ?? warrantyStory).trim();
-          if (baseline === warrantyStory.trim()) {
-            setStoryQualityByLine((prev) => ({ ...prev, [lineId]: { ...quality, scoredAgainstStory: baseline } }));
-          }
-        }
-
-        toast.success(
-          quality
-            ? `Warranty story generated — MI 2.0 score: ${quality.score}/100`
-            : 'Warranty story generated — edit as needed, then save as a template'
-        );
-      } catch (error: unknown) {
-        if (seq === generateStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story generation failed');
-        }
-      } finally {
-        if (seq === generateStorySeqRef.current) {
-          storyGenerationInFlightRef.current = false;
-          setIsGenerating(false);
-          setGeneratingLineId(null);
-        }
-      }
-    },
-    [applyROUpdate, clearLineQualityState, flushPendingSave, invalidateReviewRequests]
-  );
+  const { applyCustomerPayTemplate, clearCustomerPayMode, generateStory, scoreStory, reviewStory } =
+    useROStoryWorkflow(
+      {
+        roRef,
+        generateStorySeqRef,
+        scoreStorySeqRef,
+        reviewStorySeqRef,
+        storyGenerationInFlightRef,
+        storyScoringInFlightRef,
+        storyReviewInFlightRef,
+      },
+      {
+        setIsGenerating,
+        setGeneratingLineId,
+        setIsScoring,
+        setScoringLineId,
+        setIsReviewing,
+        setReviewingLineId,
+        setLastGeneratedStoryByLine,
+        setStoryQualityByLine,
+        setStoryReviewByLine,
+        setCdkSanitizedByLine,
+      },
+      { flushPendingSave, applyROUpdate, clearLineQualityState, invalidateReviewRequests, invalidateScoreRequests }
+    );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {
     setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: text }));
   }, []);
 
-  const reviewStory = useCallback(
-    async (lineId: string) => {
-      if (storyReviewInFlightRef.current) return;
-      if (storyGenerationInFlightRef.current) {
-        toast.error('Wait for story generation to finish before reviewing');
-        return;
-      }
-      flushPendingSave();
-      const latestRO = roRef.current;
-      if (!latestRO) return;
-      const roId = latestRO.id;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
-      const storyText = line?.warrantyStory?.trim();
-      if (!storyText) {
-        toast.error('Write or generate a warranty story before reviewing');
-        return;
-      }
-
-      clearLineQualityState(lineId);
-
-      const seq = ++reviewStorySeqRef.current;
-      storyReviewInFlightRef.current = true;
-      setReviewingLineId(lineId);
-      setIsReviewing(true);
-      try {
-        const { review } = await api.reviewStory(roId, lineId, storyText);
-        if (seq !== reviewStorySeqRef.current) return;
-
-        const activeRO = roRef.current;
-        if (!activeRO || activeRO.id !== roId) {
-          toast.success('Review complete — reopen the repair line to view feedback');
-          return;
-        }
-
-        const activeLine = activeRO.repairLines.find((l) => l.id === lineId);
-        const currentStory = activeLine?.warrantyStory?.trim() ?? '';
-        if (!currentStory || currentStory !== storyText) {
-          // Story changed while review was in flight — discard stale feedback
-          return;
-        }
-
-        if (review.scoredAgainstStory?.trim() !== storyText) {
-          review.scoredAgainstStory = storyText;
-        }
-
-        setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
-        setStoryQualityByLine((prev) => ({ ...prev, [lineId]: review }));
-        toast.success(`MI 2.0 review complete — ${review.score}/100 (${review.grade})`);
-      } catch (error: unknown) {
-        if (seq === reviewStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story review failed');
-        }
-      } finally {
-        if (seq === reviewStorySeqRef.current) {
-          storyReviewInFlightRef.current = false;
-          setIsReviewing(false);
-          setReviewingLineId(null);
-        }
-      }
-    },
-    [clearLineQualityState, flushPendingSave]
-  );
+  const clearCdkSanitizedNotice = useCallback((lineId: string) => {
+    setCdkSanitizedByLine((prev) => {
+      if (!prev[lineId]) return prev;
+      const next = { ...prev };
+      delete next[lineId];
+      return next;
+    });
+  }, []);
 
   const currentLine = currentRO?.repairLines.find((l) => l.id === currentLineId);
   const lastGeneratedStoryForLine =
     currentLineId && lastGeneratedStoryByLine[currentLineId]
       ? lastGeneratedStoryByLine[currentLineId]
       : null;
+  const cdkSanitizedForLine = Boolean(currentLineId && cdkSanitizedByLine[currentLineId]);
 
   const isGeneratingForLine = isGenerating && generatingLineId === currentLineId;
+  const isScoringForLine = isScoring && scoringLineId === currentLineId;
   const isReviewingForLine = isReviewing && reviewingLineId === currentLineId;
   const storyQualityForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return null;
+    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return null;
     const quality = storyQualityByLine[currentLineId];
     if (!quality) return null;
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
@@ -1210,29 +1222,34 @@ export function useRepairOrders({
   })();
 
   const storyReviewForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return null;
+    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return null;
     if (!storyQualityForLine) return null;
     return storyReviewByLine[currentLineId] ?? null;
   })();
 
   const storyQualityStaleForLine = (() => {
-    if (!currentLineId || isGeneratingForLine || isReviewingForLine) return false;
+    if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return false;
     const quality = storyQualityByLine[currentLineId];
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
     if (!quality || !storyText) return false;
     return quality.scoredAgainstStory?.trim() !== storyText;
   })();
 
-  const filteredROs = allROs
-    .filter(
-      (ro) =>
-        ro.roNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ro.vehicle.make && ro.vehicle.make.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (ro.vehicle.model && ro.vehicle.model.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (ro.vehicle.year && ro.vehicle.year.includes(searchTerm)) ||
-        (ro.vehicle.vin && ro.vehicle.vin.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
-    .sort((a, b) => ((b.createdAt || '0') > (a.createdAt || '0') ? 1 : -1));
+  const todayROs = useMemo(() => {
+    const active = todayStartIso
+      ? allROs.filter((ro) => isRepairOrderActiveToday(ro.updatedAt, todayStartIso, ro.createdAt))
+      : allROs;
+    return sortRepairOrdersNewestFirst(active);
+  }, [allROs, todayStartIso]);
+
+  const searchROs = useMemo(() => {
+    const q = searchTerm.trim();
+    if (!q) return [];
+    return sortRepairOrdersNewestFirst(allROs.filter((ro) => matchesROSearch(ro, q)));
+  }, [allROs, searchTerm]);
+
+  /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
+  const filteredROs = searchTerm.trim() ? searchROs : todayROs;
 
   const navigateToLine = useCallback(
     (lineId: string) => {
@@ -1253,6 +1270,9 @@ export function useRepairOrders({
     currentLine,
     allROs,
     loading,
+    listError,
+    listRetrying,
+    retryListLoad,
     refreshList,
     searchTerm,
     setSearchTerm,
@@ -1260,13 +1280,26 @@ export function useRepairOrders({
     setPendingROImages,
     isGenerating,
     isGeneratingForLine,
+    isScoringForLine,
     isReviewingForLine,
     storyQualityForLine,
     storyReviewForLine,
     storyQualityStaleForLine,
     lastGeneratedStoryForLine,
+    cdkSanitizedForLine,
+    clearCdkSanitizedNotice,
     openingROId,
     filteredROs,
+    todayROs,
+    searchROs,
+    searchLoading,
+    previousROs,
+    previousExpanded,
+    togglePreviousExpanded,
+    previousLoading,
+    previousLoadingMore,
+    previousHasMore,
+    loadMorePrevious,
     flushPendingSave,
     navigateToLine,
     deleteRO,
@@ -1287,12 +1320,14 @@ export function useRepairOrders({
     updateRONumber,
     decodeVinForRO,
     addRepairLine,
-    applySmartDefaultsToLine,
     addXentryPhotos,
     addROXentryPhotos,
     deleteLineXentryImage,
     deleteROXentryImage,
+    applyCustomerPayTemplate,
+    clearCustomerPayMode,
     generateStory,
+    scoreStory,
     reviewStory,
     acknowledgeStoryBaseline,
   };

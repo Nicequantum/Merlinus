@@ -1,14 +1,18 @@
 'use client';
 
+import { AppFooter } from '@/components/AppFooter';
 import { AppHeader } from '@/components/AppHeader';
+import { MaintenanceBanner } from '@/components/MaintenanceBanner';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { ConsentModal } from '@/components/ConsentModal';
 import { HomeView } from '@/components/HomeView';
 import { LineView } from '@/components/LineView';
 import { LoginView } from '@/components/LoginView';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { LoadErrorScreen } from '@/components/LoadErrorScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ManagerDashboard } from '@/components/ManagerDashboard';
-import { RepairOrderList } from '@/components/RepairOrderList';
+import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ROView } from '@/components/ROView';
 import { AuditLogView } from '@/components/AuditLogView';
 import { ServiceAdvisorsView } from '@/components/ServiceAdvisorsView';
@@ -22,6 +26,7 @@ export function BenzTechApp() {
   const { session, loading: sessionLoading, login, logout, acceptConsent } = useSession();
   const ocr = useOcrProgress();
   const ro = useRepairOrders({
+    session,
     onOcrStart: ocr.startOcr,
     onOcrFinish: ocr.finishOcr,
     setOcrProgress: ocr.setOcrProgress,
@@ -30,15 +35,26 @@ export function BenzTechApp() {
   const [consentLoading, setConsentLoading] = useState(false);
 
   if (sessionLoading) {
-    return <LoadingScreen label="Starting Benz Tech" sublabel="Verifying your session..." />;
-  }
-
-  if (ro.loading) {
-    return <LoadingScreen label="Loading repair orders" sublabel="Syncing dealership data..." />;
+    return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
   }
 
   if (!session) {
     return <LoginView onLogin={login} />;
+  }
+
+  if (ro.loading && !ro.listError) {
+    return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
+  }
+
+  if (ro.listError) {
+    return (
+      <LoadErrorScreen
+        title="Could not load repair orders"
+        message={ro.listError}
+        onRetry={() => void ro.retryListLoad()}
+        retrying={ro.listRetrying}
+      />
+    );
   }
 
   if (!session.consentAt) {
@@ -61,27 +77,34 @@ export function BenzTechApp() {
   const isManager = session.role === 'manager';
 
   const roListSection = (
-    <>
-      {ro.filteredROs.length > 0 && (
-        <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2 px-1">Previous Repair Orders</div>
-      )}
-      <RepairOrderList
-        repairOrders={ro.filteredROs}
-        openingROId={ro.openingROId}
-        onOpenRO={ro.openRO}
-        onDeleteRO={ro.deleteRO}
-        emptyMessage="No repair orders match your search."
-        emptyHint="Scan a repair order to get started."
-      />
-    </>
+    <RepairOrderHomeLists
+      searchTerm={ro.searchTerm}
+      searchLoading={ro.searchLoading}
+      searchResults={ro.searchROs}
+      todayROs={ro.todayROs}
+      previousROs={ro.previousROs}
+      previousExpanded={ro.previousExpanded}
+      onTogglePrevious={ro.togglePreviousExpanded}
+      previousLoading={ro.previousLoading}
+      previousLoadingMore={ro.previousLoadingMore}
+      previousHasMore={ro.previousHasMore}
+      onLoadMorePrevious={ro.loadMorePrevious}
+      openingROId={ro.openingROId}
+      onOpenRO={ro.openRO}
+      onDeleteRO={ro.deleteRO}
+    />
   );
 
   const openingRoNumber =
     ro.openingROId &&
     (ro.allROs.find((item) => item.id === ro.openingROId)?.roNumber || 'repair order');
 
+  const wideLayout = ro.view === 'home' && isManager;
+
   return (
-    <div className="app-container">
+    <div className={`app-container${wideLayout ? ' benz-app-wide' : ''}`}>
+      <OfflineBanner />
+      <MaintenanceBanner />
       <LoadingOverlay
         visible={!!ro.openingROId}
         message={openingRoNumber ? `Loading ${openingRoNumber}…` : 'Loading repair order…'}
@@ -119,9 +142,18 @@ export function BenzTechApp() {
       {ro.view === 'home' && !isManager && (
         <HomeView
           technicianName={session.name}
-          filteredROs={ro.filteredROs}
           searchTerm={ro.searchTerm}
           onSearchChange={ro.setSearchTerm}
+          searchLoading={ro.searchLoading}
+          searchROs={ro.searchROs}
+          todayROs={ro.todayROs}
+          previousROs={ro.previousROs}
+          previousExpanded={ro.previousExpanded}
+          onTogglePrevious={ro.togglePreviousExpanded}
+          previousLoading={ro.previousLoading}
+          previousLoadingMore={ro.previousLoadingMore}
+          previousHasMore={ro.previousHasMore}
+          onLoadMorePrevious={ro.loadMorePrevious}
           pendingROImages={ro.pendingROImages}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
@@ -164,21 +196,36 @@ export function BenzTechApp() {
         <LineView
           ro={ro.currentRO}
           line={ro.currentLine}
+          technicianName={session.name}
           isProcessingOCR={ocr.isProcessingOCR}
           ocrProgress={ocr.ocrProgress}
           isGenerating={ro.isGeneratingForLine}
+          isScoring={ro.isScoringForLine}
           isReviewing={ro.isReviewingForLine}
           storyQuality={ro.storyQualityForLine}
           storyReview={ro.storyReviewForLine}
           storyQualityStale={ro.storyQualityStaleForLine}
           lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
+          cdkSanitizedNotice={ro.cdkSanitizedForLine}
+          onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
           onBack={() => ro.setView('ro')}
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
           onDeleteXentryImage={(imageId) => void ro.deleteLineXentryImage(ro.currentLine!.id, imageId)}
-          onApplySmartDefaults={() => ro.applySmartDefaultsToLine(ro.currentLine!.id)}
-          onGenerateStory={() => ro.generateStory(ro.currentLine!.id)}
-          onReviewStory={() => ro.reviewStory(ro.currentLine!.id)}
+          onGenerateStory={() => {
+            const lineId = ro.currentLineId;
+            if (!lineId || typeof ro.generateStory !== 'function') {
+              console.error('Generate story unavailable', { lineId, generateStory: ro.generateStory });
+              return;
+            }
+            void ro.generateStory(lineId);
+          }}
+          onScoreStory={(storyText) => void ro.scoreStory(ro.currentLine!.id, storyText)}
+          onReviewStory={(storyText) => void ro.reviewStory(ro.currentLine!.id, storyText)}
+          onApplyCustomerPayTemplate={(templateId) =>
+            ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
+          }
+          onClearCustomerPayMode={() => ro.clearCustomerPayMode(ro.currentLine!.id)}
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
         />
       )}
@@ -200,6 +247,8 @@ export function BenzTechApp() {
       {ro.view === 'advisors' && isManager && (
         <ServiceAdvisorsView onBack={() => ro.setView('home')} />
       )}
+
+      <AppFooter />
     </div>
   );
 }

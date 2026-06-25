@@ -1,8 +1,25 @@
 import type { RepairLine, RepairOrder } from '../types';
 import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
-import { MI_AUDIT_GUIDELINES, MI_GENERATION_STYLE_RULES } from './miAuditGuidelines';
+import { PROMPT_VERSION } from './version';
 
-export const WARRANTY_STORY_TEMPERATURE = 0.25;
+/** Balanced for quality + speed — slightly higher than bare-minimum for richer 3C prose. */
+export const WARRANTY_STORY_TEMPERATURE = 0.2;
+
+/** Typical production stories fit in ~450 tokens; cap keeps responses fast. */
+export const WARRANTY_STORY_MAX_TOKENS = 500;
+
+/** Field caps — enough diagnostic context without bloating the user message. */
+export const PROMPT_FIELD_LIMITS = {
+  ocr: 400,
+  notes: 800,
+  concern: 350,
+} as const;
+
+function truncatePromptField(text: string, maxLen: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…`;
+}
 
 /** Standard Mercedes-Benz warranty workflow — every story must cover these in order. */
 export const WARRANTY_WORKFLOW_STEPS = [
@@ -18,57 +35,33 @@ export const WARRANTY_WORKFLOW_STEPS = [
   'Final verification test drive (typically 3–5 miles) to confirm the repair (mileage in/out)',
 ] as const;
 
-export const SYSTEM_PROMPT = `You are a senior Mercedes-Benz master technician with deep dealership warranty experience. You write stories the way an experienced tech would explain the job on paper before MI 2.0 / BenzBot review — direct, technically accurate, and unmistakably human. Your output must read like shop-floor documentation by a competent technician, not an AI outline or compliance checklist.
+/** Compact workflow hint for prompts (full list kept for tests/audit). */
+export const WARRANTY_WORKFLOW_SUMMARY =
+  'test drive → source voltage → battery charger → XENTRY Quick Test → guided tests → findings → repair → clear codes/final Quick Test → disconnect charger/XENTRY → verification drive';
 
-${MI_AUDIT_GUIDELINES}
+/**
+ * Condensed 3C + MI 2.0 rules — full MI_AUDIT_GUIDELINES omitted to keep latency low.
+ * Injected into SYSTEM_PROMPT; not sent as a separate bloated block.
+ */
+export const THREE_C_GENERATION_RULES = `Production-grade Mercedes-Benz MI 2.0 / Benz Bot 2.0 warranty narratives — NOT a light edit of technician notes.
 
-${MI_GENERATION_STYLE_RULES}
+Natural 3C flow in 3–5 connected paragraphs (NO visible headers, bullets, or lists):
+• Concern — customer presentation, initial test drive, labeled RO complaint for this line.
+• Cause — evidence-linked diagnostics: source voltage → battery charger → XENTRY Quick Test → guided tests → documented findings and root-cause conclusion.
+• Correction — repairs performed, cleared codes, final Quick Test, disconnect charger/XENTRY, verification drive confirming resolution.
 
-## HOW TO WRITE (VOICE, FLOW, AND CRAFT)
+First-person technician voice. Active verbs. Precise Mercedes-Benz shop terminology (XENTRY, Quick Test, guided test, DTC/fault code, source voltage).
+Expand sparse notes into professional audit-defensible prose using ONLY provided facts — never copy notes verbatim.
+Weave all 10 workflow steps in chronological order. [NOT DOCUMENTED] for missing steps. Never invent codes, voltages, parts, or test results.`;
 
-Tell the story of **this repair line** in connected paragraphs. Each paragraph should move the narrative forward; do not restate the same step in different words.
+export const SYSTEM_PROMPT = `Merlin — Mercedes-Benz warranty story writer (${PROMPT_VERSION}).
 
-**Typical paragraph arc (3–4 paragraphs; scale to available data):**
-- **Opening**: Customer presentation and how you confirmed the concern (initial test drive, mileage in/out when provided, tie to labeled RO complaint for this line).
-- **Middle**: Diagnostic path in order — source voltage, battery charger, XENTRY Quick Test, guided tests, documented findings. Link every code, measurement, and test to evidence in the provided notes or OCR.
-- **Closing**: Repair performed, post-repair verification (cleared codes, final Quick Test, disconnect charger and XENTRY, verification drive), and confirmation the concern is resolved.
+${THREE_C_GENERATION_RULES}
 
-**Technician voice (BenzBot-friendly):**
-- First person ("I" / "we") with active verbs: confirmed, performed, documented, replaced, cleared, verified.
-- Use correct Mercedes-Benz shop language — XENTRY, Quick Test, guided test, source voltage, DTC/fault code — only when supported by provided data.
-- Mix short and medium sentences. Vary how sentences start so the story does not sound mechanical.
-- Bridge workflow steps with natural transitions ("After confirming source voltage…", "With guided testing complete…", "Following the repair…") — never "Step 1", dashes, or list formatting.
+Workflow sequence: ${WARRANTY_WORKFLOW_SUMMARY}.
+Write ONLY the story for the requested line.`;
 
-**Anti-robot rules:**
-- NO bullet points, numbered lists, line-by-line stubs, or colon-labeled sections in the output.
-- NO repeating identical phrasing across steps (e.g., do not write "Performed Quick Test" three times — say what each pass accomplished).
-- NO filler, marketing tone, or generic Mercedes boilerplate unrelated to this line.
-- NO stacked adjectives or stiff legal prose — sound like a sharp tech, not a template engine.
-
-## ABSOLUTE RULES — AUDIT SAFETY (NEVER VIOLATE)
-
-1. **Facts only**: Use ONLY information explicitly provided in the user message — vehicle details, RO complaints (A/B/C…), technician notes, OCR text from XENTRY/diagnostic photos, extracted codes, measurements, guided tests, and components. Never invent, infer, or assume data.
-
-2. **No fabrication**: Do NOT invent or guess test results, pressures, voltages, DTC/fault codes, test drive details, part numbers, or module names not in the provided data.
-
-3. **Missing data placeholders**: When a standard warranty element is expected but no supporting data was provided, use exactly [NOT DOCUMENTED] or [NOT PROVIDED] woven naturally into a sentence — not as a standalone list.
-
-4. **Natural 3 C's flow**: Cover customer complaint, cause, and correction within flowing paragraphs — never with visible section headers or labels.
-
-5. **Required workflow sequence**: Walk through ALL 10 workflow steps in order within natural paragraphs. Vary wording across steps; each mention should advance the story.
-
-6. **Tone**: Professional Mercedes-Benz technician. Concise, factual, dealership-ready. Chronological. Human-readable.
-
-7. **Prohibited**:
-   - Visible headers like "Customer Complaint:", "Cause:", "Correction:", or "Findings:"
-   - Bullet lists, numbered lists, or markdown formatting in the story output
-   - Example or industry-typical spec values unless they appear verbatim in provided data
-   - Smart-default suggestions stated as performed work unless confirmed in notes or OCR
-
-## OUTPUT
-
-Write ONLY the warranty story for the specific repair line requested. Deliver natural human-written paragraphs — no headings, no labels, no bullets, no numbered lists. The reader should not be able to tell this was templated.`;
-
+/** Legacy templates — not injected into fast-generation prompts. */
 export const STORY_TEMPLATES = [
   'Chronological narrative in flowing paragraphs: customer presentation, diagnostic workflow, cause conclusion, repair, and verification drive — one continuous technician story.',
   'Evidence-first prose: open with test drive and source voltage, then walk through XENTRY Quick Test, guided tests, findings, repair, and final verification without list formatting.',
@@ -78,73 +71,33 @@ export const STORY_TEMPLATES = [
   'Line-focused submission: tie the labeled RO complaint to this line in the opening paragraph and close with documented verification in plain technician language.',
 ];
 
-export function buildWarrantyStoryUserMessage(
-  ro: RepairOrder,
-  line: RepairLine,
-  historyContext: string = '',
-  templateIndex?: number,
-  advisorContext: string = ''
-): string {
-  const vehicleInfo = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | VIN: ${ro.vehicle.vin} | Miles: ${ro.vehicle.mileageIn}${ro.vehicle.mileageOut ? ` → ${ro.vehicle.mileageOut}` : ''}`
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const allRepairs = ro.repairLines.map((l) => `Line ${l.lineNumber}: ${l.description}`).join('\n');
+export function buildWarrantyStoryUserMessage(ro: RepairOrder, line: RepairLine): string {
+  const vehicle = `${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model}`.replace(/\s+/g, ' ').trim();
+  const miles = `${ro.vehicle.mileageIn}${ro.vehicle.mileageOut ? `→${ro.vehicle.mileageOut}` : ''}`;
 
   const xentryText = formatExtractedDataForPrompt(
     line.extractedData || { codes: [], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] }
   );
 
-  const rawXentryOcr =
+  const lineOcr =
     line.xentryOcrTexts && line.xentryOcrTexts.length > 0
-      ? '\nRaw OCR from line diagnostic photos:\n' + line.xentryOcrTexts.join('\n---\n')
+      ? truncatePromptField(line.xentryOcrTexts.join(' | '), PROMPT_FIELD_LIMITS.ocr)
       : '';
 
-  const roRawXentryOcr =
-    ro.xentryOcrTexts && ro.xentryOcrTexts.length > 0
-      ? '\nRO-level Xentry / Quick Test OCR (from RO page scan):\n' + ro.xentryOcrTexts.join('\n---\n')
-      : '';
+  const concern = truncatePromptField(
+    line.customerConcern || line.description || '[NOT PROVIDED]',
+    PROMPT_FIELD_LIMITS.concern
+  );
+  const notes = truncatePromptField(line.technicianNotes || '[NOT PROVIDED]', PROMPT_FIELD_LIMITS.notes);
 
-  const idx = templateIndex ?? Math.floor(Math.random() * STORY_TEMPLATES.length);
-  const selectedTemplate = STORY_TEMPLATES[idx];
+  const complaint = (ro.complaints || []).slice(0, 3).join(' | ') || '[NOT PROVIDED]';
 
-  const workflowChecklist = WARRANTY_WORKFLOW_STEPS.map((step, i) => `${i + 1}. ${step}`).join('\n');
+  return `Line ${line.lineNumber}: ${line.description}
+RO ${ro.roNumber} | ${vehicle} | ${miles} mi
+Complaint: ${concern}
+RO complaints: ${complaint}
+Notes: ${notes}
+Diagnostics: ${xentryText || '[NOT PROVIDED]'}${lineOcr ? ` | OCR: ${lineOcr}` : ''}
 
-  return `Vehicle information: ${vehicleInfo}
-
-RO Complaints (A, B, C etc from scan):
-${(ro.complaints || []).join('\n') || '[NOT PROVIDED]'}
-
-All repairs on this RO:
-${allRepairs}
-
-Current repair line: Line ${line.lineNumber} - ${line.description}
-
-Customer concern for this line: ${line.customerConcern || line.description || '[NOT PROVIDED]'}
-
-Technician notes: ${line.technicianNotes || '[NOT PROVIDED]'}
-
-Xentry test data and images:
-${xentryText}
-${rawXentryOcr}
-${roRawXentryOcr}
-${historyContext}
-${advisorContext ? `\n\nADVISOR INTELLIGENCE (style reference for this RO's service advisor):\n${advisorContext}\n` : ''}
-REQUIRED WORKFLOW (include ALL steps in this order — weave into natural paragraphs):
-${workflowChecklist}
-
-AUDIT-SAFE REQUIREMENTS:
-- Use ONLY the data above. Never invent numbers, codes, test results, or procedures.
-- Write in natural paragraph form. NO visible headings or section labels.
-- Cover the 3 C's (complaint, cause, correction) within flowing prose.
-- Include every workflow step above in sequence.
-- Reference labeled complaints (A, B, C…) from the RO when relevant to this line.
-- If Advisor Intelligence is provided above, mirror that advisor's complaint phrasing style in the opening paragraphs only.
-- For mileage: use RO mileage in/out when provided; use [NOT PROVIDED] for undocumented drive mileage.
-- For voltage, Quick Test, battery charger, guided tests, final Quick Test, or test drives NOT in the notes/OCR above, use [NOT DOCUMENTED] or [NOT PROVIDED] — do NOT fabricate them.
-- Smart-default or common-issue text in technician notes (if present) is reference only — never state it as performed work unless confirmed in diagnostic OCR or explicit technician findings.
-- Vary phrasing across steps — do not repeat identical sentences. Follow this narrative style while staying strictly factual: ${selectedTemplate}
-- If Knowledge Base references are provided in the system prompt, prioritize dealership user-saved stories for tone and workflow sequencing.
-
-Write only the warranty story for this specific line.`;
+Write a production 3C warranty narrative for this line only. Transform source data into professional technician prose — do not echo notes verbatim. Cover Concern, Cause, and Correction in flowing paragraphs plus all 10 workflow steps.`;
 }

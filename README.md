@@ -1,204 +1,353 @@
-# Benz Tech — Dealership Warranty Documentation Platform
+# Merlin — Mercedes-Benz Warranty Story Generator
 
-Benz Tech helps authorized Mercedes-Benz dealership service teams create audit-safe warranty stories from repair order data, XENTRY diagnostic evidence, and technician notes. Built for Fixed Operations leadership who need visibility, accountability, and controlled AI assistance — not another clipboard app.
+**Secure AI-Powered Warranty Documentation Platform for Mercedes-Benz Dealerships**
+
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![Security](https://img.shields.io/badge/Security-Enterprise_Grade-22c55e?style=for-the-badge)](https://github.com/Nicequantum/viti-ai-clone)
+
+Merlin is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
+
+**Version:** 3.0.1 · **Prompt version:** 2.1.0 · **Status:** **Production Ready** — cleared for multi-dealership rollout after sign-off
+
+---
+
+## Production Readiness Status
+
+| Area | Status | Notes |
+|------|--------|-------|
+| **Audit trail** | ✅ Ready | SHA-256 hash chain + `promptVersion` on every AI entry |
+| **Voice input** | ✅ Ready | Noise monitoring, push-to-talk, auto-restart, adaptive confidence |
+| **AI story generation** | ✅ Ready | Centralized prompts v2.1.0, rate limits, daily caps |
+| **PDF export** | ✅ Ready | Branded headers, structured content, audit hash in footer |
+| **Security** | ✅ Ready | AES-256-GCM PII, CSP headers, route auth, input sanitization |
+| **Operations** | ✅ Ready | Maintenance mode, offline banner, health/status endpoints, error boundaries |
+| **Validation** | ✅ Ready | `npm run validate:env` + `npm run validate:pre-rollout` |
+| **Documentation** | ✅ Ready | 13 rollout documents in [`docs/`](./docs/) — [full index](./docs/README.md) |
+| **Production sign-off** | ✅ Ready | [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) — required before each deployment |
+| **Dealership config** | ⚠️ Per site | Set `DEALERSHIP_DISPLAY_NAME`, secrets, and doc placeholders before go-live |
+| **Screenshots** | ⚠️ Optional | Add `docs/images/*.png` before printing Technician Quick Start |
+| **KV rate limiting** | ⚠️ Recommended | Configure `KV_REST_*` for distributed limits in serverless |
+
+**Go-live gate:** `npm run validate:pre-rollout` with **0 critical failures** + [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) signed off + [Go-Live Checklist](./docs/Go-Live-Checklist.md) completed.
+
+---
+
+## Documentation — start here
+
+> **Dealership leadership:** Start with the [**Master Rollout Document**](./docs/Master-Rollout-Document.md) — readable in under 10 minutes.
+
+All rollout and go-live materials live in [`docs/`](./docs/). See the [**Documentation Library index**](./docs/README.md) for role-based navigation.
+
+### By audience
+
+| Audience | Primary document |
+|----------|------------------|
+| **GM / Fixed Ops Director** | [**Master Rollout Document**](./docs/Master-Rollout-Document.md) |
+| **Service Manager** | [Master Rollout Document](./docs/Master-Rollout-Document.md) → [Rollout Checklist](./docs/Rollout-Checklist.md) |
+| **Dealership IT** | [Admin Setup Guide](./docs/Admin-Setup-Guide.md) |
+| **Trainer** | [Training Outline](./docs/Training-Outline.md) |
+| **Technician** | [Bay Reference Card](./docs/Bay-Reference-Card.md) (laminate) + [Quick Start](./docs/Technician-Quick-Start.md) |
+
+### Complete document library
+
+| # | Document | Audience |
+|---|----------|----------|
+| 1 | [Master Rollout Document](./docs/Master-Rollout-Document.md) | Leadership |
+| 2 | [Go-Live Summary](./docs/Go-Live-Summary.md) | GM, Fixed Ops |
+| 3 | [Admin Setup Guide](./docs/Admin-Setup-Guide.md) | IT, Service Manager |
+| 4 | [Rollout Checklist](./docs/Rollout-Checklist.md) | All rollout roles |
+| 5 | [Go-Live Checklist](./docs/Go-Live-Checklist.md) | IT, SM, FO — final go/no-go |
+| 6 | [Training Outline](./docs/Training-Outline.md) | Trainers |
+| 7 | [Go-Live Email Template](./docs/Go-Live-Email-Template.md) | Service Manager |
+| 8 | [Technician Quick Start](./docs/Technician-Quick-Start.md) | Technicians |
+| 9 | [Bay Reference Card](./docs/Bay-Reference-Card.md) (+ [Front](./docs/Bay-Reference-Card-Front.md) / [Back](./docs/Bay-Reference-Card-Back.md)) | Technicians — laminate |
+| 10 | [Support Playbook](./docs/Support-Playbook.md) | IT, Service Manager |
+
+### Rollout sequence
+
+1. Leadership approves via [Master Rollout Document](./docs/Master-Rollout-Document.md)
+2. IT provisions per [Admin Setup Guide](./docs/Admin-Setup-Guide.md) → passes `npm run validate:pre-rollout`
+3. Service manager completes [Rollout Checklist](./docs/Rollout-Checklist.md) Phase 1
+4. Final [Go-Live Checklist](./docs/Go-Live-Checklist.md) 24–48 hours before launch
+5. Go-live: training + [Bay Reference Cards](./docs/Bay-Reference-Card.md) at every tablet
+6. Post-launch: [Support Playbook](./docs/Support-Playbook.md) + 30/60/90-day metrics from Master doc
+
+---
 
 ## Who This Is For
 
-| Role | What you get |
-|------|----------------|
-| **Technician** | Scan ROs, capture diagnostics, generate draft warranty stories, export to clipboard/PDF |
-| **Service Manager** | Dealership-wide RO visibility, user administration, audit log with hash-chain integrity, CSV export |
-| **Fixed Ops Director** | Pilot-ready platform with encrypted PII, session controls, structured logging, and health monitoring |
+| Role | Primary Benefit |
+|------|-----------------|
+| **Technicians** | Fast voice input and professional story generation |
+| **Service Managers** | Full visibility and audit oversight |
+| **Fixed Ops Directors & Groups** | Secure, compliant, and scalable warranty system |
 
-## UI Stability (v2.3+)
+---
 
-The dealership UI uses several patterns to keep text editing reliable during voice input and rapid typing:
+## Key Features
 
-| Feature | Purpose |
-|---------|---------|
-| **StableTextarea / StableInput** | Local draft state while a field is focused — prevents parent re-renders from resetting deleted or in-progress text |
-| **VoiceInputButton** | Web SpeechRecognition with interim results and cursor preservation on complaints, notes, and warranty story fields |
-| **Debounced RO saves** | Editable fields update optimistically in memory; PostgreSQL writes are debounced (~450ms) to reduce lag and race conditions |
-| **Sonner toasts** | User-friendly notifications instead of blocking browser dialogs |
-| **ErrorBoundary** | Graceful retry UI if a view throws an unexpected error |
-| **Image compression** | Photos are resized/compressed client-side before Vercel Blob upload |
+- Voice-first input designed for busy service bays
+- **Customer Pay templates** — 12+ instant pre-written stories (no AI, no quality audit)
+- Grok AI for high-quality, policy-aligned warranty stories
+- AES-256-GCM encryption of sensitive data at rest
+- Immutable SHA-256 hash-chained audit trail
+- Professional branded PDF generation
+- Client-side image compression with private blob storage
+- Role-based access control with instant session revocation
+- Stable UI built for tablet and desktop use in dealerships
+
+---
 
 ## Architecture Overview
 
+```mermaid
+flowchart LR
+    subgraph Client["Technician Device"]
+        A[Voice + Form Capture]
+        B[OCR + Image Compression]
+        A --> B
+    end
+
+    subgraph Platform["Merlin — Next.js 15 API"]
+        C[JWT Auth + Session Revocation]
+        D[AES-256-GCM Encryption]
+        E[Grok AI Generation]
+        F[Hash-Chained Audit Log]
+        C --> D --> E --> F
+    end
+
+    subgraph External["External Services"]
+        G[(PostgreSQL)]
+        H[Vercel Blob]
+        I[xAI Grok API]
+    end
+
+    B -->|HTTPS| C
+    D --> G
+    E --> I
+    C --> H
+    E --> J[Branded PDF]
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Browser (React 19 + Next.js 15)                          │
-│  • Tesseract OCR preprocessing (client-side)                │
-│  • No API keys in browser                                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTPS + httpOnly session cookie
-┌──────────────────────────▼──────────────────────────────────┐
-│  Next.js API Routes                                         │
-│  • JWT sessions with server-side version revocation         │
-│  • Zod validation + rate limiting (Vercel KV)               │
-│  • Structured JSON logging                                  │
-└─────┬──────────┬────────────┬────────────┬──────────────────┘
-      │          │            │            │
-      ▼          ▼            ▼            ▼
- PostgreSQL  Vercel Blob   xAI Grok    NHTSA vPIC
- (Prisma)    (private)     (server)    (VIN decode)
+
+**Design principles:** API keys never leave the server; sensitive fields are encrypted before database write; every AI generation and export is audit-logged; sessions revoke instantly on password change or deactivation.
+
+---
+
+## How It Works
+
+1. Technician logs in and opens a repair order
+2. Captures symptoms and repair details using voice or form
+3. Data is transmitted over HTTPS; sensitive fields are encrypted server-side before storage
+4. **Warranty lines:** Grok AI generates a professional narrative from a sanitized prompt (with MI 2.0 quality review)
+5. **Customer Pay lines:** Pick an instant template from the library — pre-written story applied with no AI call
+6. All warranty AI actions are recorded in a tamper-evident audit log; Customer Pay uses a lightweight `customerPayTemplateApplied` entry
+7. Technician reviews and exports a branded PDF ready for submission
+
+### Customer Pay vs Warranty
+
+| | Customer Pay | Warranty (AI) |
+|---|--------------|-----------------|
+| **Story source** | Pre-written template (`src/prompts/templates/customerPayTemplates.ts`) | Grok AI generation |
+| **Quality audit** | Skipped (non-warranty work) | MI 2.0 review optional |
+| **Audit action** | `customerPayTemplateApplied` (no Merlin `promptVersion`) | `story.generate` / `story.review` with `promptVersion` |
+| **UI** | Green “Customer Pay · Instant” badge | Generate + Review with AI |
+
+---
+
+## Security & Compliance
+
+| Control | Implementation |
+|---------|----------------|
+| **Encryption at rest** | AES-256-GCM on customer name, VIN, complaints, technician notes, OCR text, diagnostic data, and warranty stories |
+| **Audit integrity** | Append-only SHA-256 hash chain per dealership |
+| **Session security** | JWT with server-side revocation on password change, deactivation, or logout |
+| **Image access** | Private Vercel Blob storage; session-gated `/api/images` proxy |
+| **AI safety** | Prompts use `[NOT DOCUMENTED]` / `[NOT PROVIDED]` — no fabricated test data |
+| **Rate limiting** | Per-IP limits on all routes; Grok routes capped at 20/min + 50 AI calls/technician/day |
+| **CSP & headers** | Content-Security-Policy, HSTS, frame denial, microphone policy for shop-floor voice |
+| **Request limits** | Bounded JSON bodies (1–2 MB) with Zod validation and sanitization on all POST routes |
+| **Maintenance mode** | `MERLIN_MAINTENANCE_MODE=true` blocks AI routes with technician-friendly banner |
+
+> **Production requirement:** A signed Data Processing Agreement with xAI is required before processing real customer or vehicle data.
+
+---
+
+## Voice Input (Shop-Floor Tablets)
+
+Merlin uses the browser **Web Speech API** for hands-free warranty story entry on rugged tablets in noisy service bays. Voice is optional — **manual typing is always available** on every field.
+
+### How technicians use it
+
+| Mode | Action |
+|------|--------|
+| **Tap to toggle** (default) | Tap the mic once to start, tap again to stop |
+| **Push-to-talk** | Tap the hand/toggle button to switch modes, then **hold** the mic while speaking |
+
+While listening, a panel shows **bay noise level**, **recognition confidence** (when Chrome exposes it), and a live preview that distinguishes **final** vs *interim* text.
+
+### Noise robustness
+
+- A parallel microphone stream requests **auto gain control**, **noise suppression**, and **echo cancellation** where the browser supports them
+- **Adaptive confidence threshold** lowers as background noise rises so usable dictation is not rejected on loud shop floors
+- **Auto-restart** recovers from brief silence, network blips, and recognizer `onend` events (capped to prevent runaway loops)
+- **Listening timeout** (45s default, configurable via `VOICE_LISTENING_TIMEOUT_MS`) ends a stuck session with a one-tap **Retry** button
+
+### Browser requirements
+
+| Requirement | Detail |
+|-------------|--------|
+| **Browser** | Chrome or Edge (Chromium Web Speech API) |
+| **Microphone** | Allow mic permission for the dealership site |
+| **Network** | Cloud speech recognition requires connectivity |
+| **Fallback** | Unsupported browsers show “Voice unavailable — type below.” |
+
+### Dealership configuration
+
+Edit `DEFAULT_VOICE_INPUT_SETTINGS` in `src/lib/voice/voiceSettings.ts` (re-exported as `VOICE_INPUT_SETTINGS` from `src/lib/constants.ts`):
+
+- `listeningTimeoutMs`, `maxAutoRestarts`, `silenceRestartDelayMs`
+- `baseConfidenceThreshold` / `minConfidenceThreshold` / `noiseAdjustmentFactor`
+- `pushToTalkDefault`, `enabled` (master switch)
+- Audio constraints: `autoGainControl`, `noiseSuppression`, `echoCancellation`
+
+### Architecture
+
+```
+StableTextarea / StableInput
+        └── VoiceInputButton (UI + animations)
+                └── useVoiceInput (React hook)
+                        └── VoiceInputService (src/lib/voice/)
+                                ├── Web Speech API (continuous + interim)
+                                ├── NoiseMonitor (Web Audio RMS)
+                                └── Adaptive confidence + error recovery
 ```
 
-### Security controls
+---
 
-- **Encrypted at rest (AES-256-GCM):** customer name, VIN, RO complaints, per-line customer concerns
-- **Private diagnostic images:** stored in Vercel Blob; served only through session-gated `/api/images` proxy
-- **Session revocation:** password change, manager reset, deactivation, and logout increment `sessionVersion` — stale cookies stop working immediately
-- **Audit hash chain:** each log entry is SHA-256 linked to the prior entry per dealership (tamper-evident, not tamper-proof)
-- **Audit-safe AI prompts:** warranty stories use `[NOT DOCUMENTED]` / `[NOT PROVIDED]` instead of fabricated test data
+## Common Failure Modes & Troubleshooting
 
-## Quick Start (Development)
+| Issue | Symptom | Recommended Fix |
+|-------|---------|-----------------|
+| **Grok Timeout** | Long loading or timeout error | Shorten input and click **Regenerate** |
+| **Voice Input Not Working** | Mic button does nothing or stops mid-sentence | Allow mic in Chrome/Edge; switch to push-to-talk; check bay Wi‑Fi; use **Retry** or type manually |
+| **PDF Generation Failed** | "Failed to generate PDF" | Complete all required fields first, then regenerate |
+| **Frequent Logouts** | Unexpected session expiry | Verify device clock; clear browser cache |
+| **Audit Chain Warning** | Integrity error in audit log | Stop use; notify Service Manager and IT immediately |
 
-### 1. Clone and install
+---
+
+## Deployment
+
+### Local development
 
 ```bash
-git clone https://github.com/Nicequantum/Benz-Tech-v2.git
-cd Benz-Tech-v2
-git checkout v2.3-dealership
+git clone https://github.com/Nicequantum/viti-ai-clone.git
+cd viti-ai-clone
 npm install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `SESSION_SECRET` | Yes | `openssl rand -base64 32` |
-| `ENCRYPTION_KEY` | Yes | `openssl rand -hex 32` (64 hex chars) |
-| `GROK_API_KEY` | For AI | xAI key — server-side only |
-| `BLOB_READ_WRITE_TOKEN` | For uploads | Vercel Blob private storage |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Vercel KV for distributed rate limiting |
-| `ADMIN_SEED_PASSWORD` | For seed | Manager password for `npm run db:seed` — **never commit** |
-
-### 3. Database setup (migrations)
-
-**Fresh database:**
-
-```bash
+cp .env.example .env.local
 npm run db:migrate:deploy
-ADMIN_SEED_PASSWORD="your-secure-password" npm run db:seed
-```
-
-**Existing database created with `db push`:**
-
-```bash
-npx prisma migrate resolve --applied 20250607120000_init
-npm run db:migrate:deploy
-```
-
-> Use `npm run db:migrate` during development to create new migrations. Do not use `prisma db push` in production.
-
-### 4. Run locally
-
-```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) after configuring environment variables.
 
-**Seed accounts** (from `npm run db:seed`):
+### Environment variables
 
-| Email | Password | Role |
-|-------|----------|------|
-| `admin@dealership.com` | Value of `ADMIN_SEED_PASSWORD` at seed time | Manager |
-| `tech@dealership.com` | Value of `TECH_SEED_PASSWORD` or `changeme123` | Technician |
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Session signing key (`openssl rand -base64 32`) |
+| `ENCRYPTION_KEY` | Yes | AES-256-GCM key — 64 hex chars (`openssl rand -hex 32`) |
+| `GROK_API_KEY` | For AI | xAI API key (server-side only) |
+| `BLOB_READ_WRITE_TOKEN` | For uploads | Private diagnostic image storage |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Distributed rate limiting |
+| `MERLIN_MAINTENANCE_MODE` | Optional | `true` pauses AI routes during maintenance |
+| `ADMIN_SEED_PASSWORD` | For seed | Initial manager password — never commit |
 
-Set `ADMIN_SEED_PASSWORD` in your environment before seeding. The login screen warns if default seed passwords are still active.
+Build-time validation runs automatically via `npm run validate:env` (also part of `npm run build`).
 
-## Production Deployment (Vercel)
+### Pre-rollout validation (dealership IT)
 
-1. Connect the repo and select branch `v2.3-dealership`
-2. Add a **PostgreSQL** database (Vercel Postgres, Neon, or Supabase)
-3. Set all environment variables from `.env.example`
-4. Build command: `npm run build` (runs `prisma generate` automatically)
-5. Deploy, then run migrations against production:
-
-```bash
-npx prisma migrate deploy
-```
-
-6. Seed once (or provision accounts manually):
+Run the full validation suite **after build, before go-live** — and again after any production config change.
 
 ```bash
-npm run db:seed
+# Local / staging (uses .env.local + in-process health checks)
+npm run validate:pre-rollout
+
+# Against a deployed instance (adds live /api/health probe)
+MERLIN_BASE_URL=https://your-dealership-url.example npm run validate:pre-rollout
 ```
 
-7. Verify health: `GET /api/health` should return `"status": "ok"` or `"degraded"` (missing optional keys)
+| When to run | Who |
+|-------------|-----|
+| After `npm run build` succeeds on the release candidate | Dealership IT / deploy engineer |
+| After setting Vercel environment variables | Dealership IT |
+| After database migration on production | Dealership IT |
+| Before handing tablets to technicians | Service manager + IT sign-off |
 
-## Pre-Production Checklist
+The script prints **green ✔ pass**, **yellow ⚠ warn**, and **red ✖ fail** for each check and exits with code **1** if any critical check fails. It validates:
 
-Complete this list before going live with real customer data:
+- Environment variables, maintenance mode off, build metadata
+- Database, encryption, audit chain, prompt version
+- PDF generation, voice configuration, prompt assembly, rate limits
+- CSP headers, Grok route rate limiting, route authentication
+- Health checks (in-process; optional live `/api/health` via `MERLIN_BASE_URL`)
 
-- [ ] **Environment configured** — `DATABASE_URL`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `ADMIN_SEED_PASSWORD` set on host
-- [ ] **Database migrated** — `npm run db:migrate:deploy` completed without errors
-- [ ] **Accounts provisioned** — `ADMIN_SEED_PASSWORD="…" npm run db:seed` run once; all seed passwords rotated via Settings
-- [ ] **Health check green** — `GET /api/health` returns `"status": "ok"` (configure `GROK_API_KEY` and `BLOB_READ_WRITE_TOKEN` for scanning)
-- [ ] **Audit chain valid** — Audit Log shows hash-chain integrity **VALID**
-- [ ] **xAI DPA executed** — business account and data processing agreement finalized before production PII
-- [ ] **CI passing** — GitHub Actions workflow green on `v2.3-dealership`
+**Manual steps still required after the script passes:** shop-floor tablet voice/mic test, end-to-end story generation with a real RO, and PDF download on a tablet.
 
-## API Endpoints
+### Production (Vercel + PostgreSQL)
 
-| Endpoint | Auth | Description |
-|----------|------|-------------|
-| `GET /api/health` | Public | Service health and live dependency probes |
-| `GET /api/auth/security-status` | Public | Detects if default seed passwords are still in use |
-| `GET /api/dashboard/summary` | Session | Manager/tech dashboard metrics |
-| `GET /api/audit-logs/summary` | Manager | Audit stats + chain verification |
-| `GET /api/audit-logs` | Manager | Filtered log list or CSV export |
+1. Connect repo, deploy branch `main`
+2. Set all variables from `.env.example` in Vercel project settings
+3. Confirm `npm run build` succeeds (runs env validation + `prisma migrate deploy`)
+4. Run `npm run db:reencrypt` if upgrading an existing database
+5. Verify health and status endpoints:
 
-## Current Limitations
+```bash
+curl -s https://your-dealership-url/api/health | jq '.status, .services'
+curl -s https://your-dealership-url/api/status | jq '.version, .buildCommit, .maintenance'
+```
 
-> **Do not process real customer data until the pending xAI business account and Data Processing Agreement (DPA) are finalized.**
-
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| **Pending xAI DPA** | RO text, VINs, diagnostic images, and OCR content are sent to xAI Grok for extraction and warranty story generation. Without a signed DPA, this is not approved for production customer data. | Complete xAI business onboarding and execute DPA before processing live customer data. |
-| **Partial encryption** | OCR text, technician notes, and warranty stories remain plaintext in PostgreSQL. | Encrypt additional fields in a future release; restrict DB access; enable backups with encryption at rest. |
-| **Hash chain scope** | Audit log chain verifies append-only integrity per dealership, but a privileged DBA could rewrite the full table. | Pair with CSV exports, least-privilege DB access, and off-site backup retention. |
-| **Human review required** | AI-generated warranty stories are drafts only. | Technicians and managers must verify every story before Mercedes-Benz warranty submission. |
-| **Rate limiting fallback** | Without Vercel KV, rate limits are per-instance only on multi-node deployments. | Configure `KV_REST_API_URL` and `KV_REST_API_TOKEN` in production. |
+6. Confirm UI footer shows version, commit hash, and build date on a signed-in tablet
 
 ### Pre-production checklist
 
-- [ ] xAI business account active and DPA executed
-- [ ] All seed/default passwords rotated
-- [ ] `npm run db:migrate:deploy` run against production database
-- [ ] `GET /api/health` returns `"status": "ok"` (or acceptable `"degraded"` with documented gaps)
-- [ ] `npm test` passes in CI/staging
+**Infrastructure**
+- [ ] Pre-rollout validation passes (`npm run validate:pre-rollout`)
+- [ ] `DATABASE_URL`, `SESSION_SECRET`, `ENCRYPTION_KEY` set and validated (`npm run validate:env`)
+- [ ] `GROK_API_KEY` configured server-side (no `NEXT_PUBLIC_*` xAI keys)
+- [ ] `KV_REST_API_URL` + `KV_REST_API_TOKEN` set for distributed rate limiting
+- [ ] `BLOB_READ_WRITE_TOKEN` set for diagnostic image uploads
+- [ ] Database migrations applied without errors (`npm run db:migrate:deploy`)
+- [ ] Legacy data re-encrypted (`npm run db:reencrypt`) if upgrading
 
-## Project Structure
+**Security & compliance**
+- [ ] Seed/default passwords rotated via Settings
+- [ ] Audit log hash-chain integrity shows **VALID**
+- [ ] xAI Data Processing Agreement executed
+- [ ] CSP/security headers verified (no console CSP violations on login + line view)
+- [ ] Microphone permission tested on shop-floor tablet (Chrome/Edge)
 
-```
-prisma/migrations/     # Versioned schema migrations (use migrate deploy)
-src/app/api/           # REST API routes
-src/components/        # UI views + StableTextarea, VoiceInputButton, ErrorBoundary
-src/lib/               # Auth, encryption, audit chain, logging
-src/prompts/           # Audit-safe AI prompt templates
-src/services/          # Client-side OCR (Tesseract.js)
-```
+**Operational readiness**
+- [ ] `GET /api/health` returns `"status": "ok"` or acceptable `"degraded"` with documented warnings
+- [ ] `services.database`, `services.grok`, `services.voice` reported in health payload
+- [ ] Story generation + PDF export tested end-to-end on tablet viewport
+- [ ] Offline banner appears when Wi‑Fi disabled; manual typing still works
+- [ ] `MERLIN_MAINTENANCE_MODE` tested — banner shows, AI routes return 503
+- [ ] CI unit tests passing on `main` (`npm test`)
+- [ ] Error boundary tested (force a client error — recovery UI appears)
 
-## Scripts
+**Rollout**
+- [ ] Service manager briefed on audit log and usage dashboard
+- [ ] Technicians briefed on voice push-to-talk and manual fallback
+- [ ] IT contact documented for health endpoint monitoring
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Local development server |
-| `npm run build` | Production build |
-| `npm run db:migrate` | Create/apply migrations (dev) |
-| `npm run db:migrate:deploy` | Apply migrations (production) |
-| `npm run db:seed` | Seed dealership and initial accounts |
-| `npm test` | Run unit + integration tests |
-| `npm run test:integration` | Run integration tests only |
+---
 
-## License
+**Repository:** [github.com/Nicequantum/viti-ai-clone](https://github.com/Nicequantum/viti-ai-clone)
 
-Proprietary — for authorized Mercedes-Benz dealership use.
+Built for Mercedes-Benz dealerships that demand both speed and full accountability.
+
+**License:** Proprietary — authorized Mercedes-Benz dealership use only.

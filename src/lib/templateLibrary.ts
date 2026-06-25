@@ -1,3 +1,9 @@
+import {
+  decryptOptionalSensitiveText,
+  decryptSensitiveText,
+  encryptOptionalSensitiveText,
+  encryptSensitiveText,
+} from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { getKnowledgeBaseOriginal, listLoadedKnowledgeBaseOriginals } from '@/data/knowledgeBaseOriginals';
 import {
@@ -6,6 +12,8 @@ import {
   toTemplateContent,
   type StoryTemplateSeed,
 } from '@/lib/storyTemplateSeed';
+import { CUSTOMER_PAY_TEMPLATES } from '@/prompts/templates/customerPayTemplates';
+import { templateRowIsCustomerPay } from '@/prompts/templates/customerPayTemplates';
 import type { RepairLine, RepairOrder, StoryTemplate, TemplateCategory } from '@/types';
 
 export const GLOBAL_DEALERSHIP_ID = '__global__';
@@ -20,6 +28,32 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
     return { templates: templateCount, knowledgeBase: kbCount };
   }
 
+  for (const cp of CUSTOMER_PAY_TEMPLATES) {
+    await prisma.template.upsert({
+      where: {
+        dealershipId_title: { dealershipId: GLOBAL_DEALERSHIP_ID, title: cp.title },
+      },
+      update: {
+        category: 'customer',
+        contentEncrypted: encryptSensitiveText(cp.preWrittenStory),
+        description: cp.description,
+        isCustomerPay: true,
+        templateType: 'CustomerPay',
+        source: 'seed',
+      },
+      create: {
+        title: cp.title,
+        category: 'customer',
+        contentEncrypted: encryptSensitiveText(cp.preWrittenStory),
+        description: cp.description,
+        isCustomerPay: true,
+        templateType: 'CustomerPay',
+        source: 'seed',
+        dealershipId: GLOBAL_DEALERSHIP_ID,
+      },
+    });
+  }
+
   for (const seed of STORY_TEMPLATE_SEEDS) {
     const content = toTemplateContent(seed);
     const kb = toKnowledgeBaseFields(seed);
@@ -29,11 +63,19 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
       where: {
         dealershipId_title: { dealershipId: GLOBAL_DEALERSHIP_ID, title: seed.title },
       },
-      update: { category: seed.category, content, source: 'seed' },
+      update: {
+        category: seed.category,
+        contentEncrypted: encryptSensitiveText(content),
+        isCustomerPay: false,
+        templateType: 'Warranty',
+        source: 'seed',
+      },
       create: {
         title: seed.title,
         category: seed.category,
-        content,
+        contentEncrypted: encryptSensitiveText(content),
+        isCustomerPay: false,
+        templateType: 'Warranty',
         source: 'seed',
         dealershipId: GLOBAL_DEALERSHIP_ID,
       },
@@ -45,16 +87,19 @@ export async function seedTemplateLibraryIfEmpty(): Promise<{ templates: number;
       },
       update: {
         category: kb.category,
-        cleanTemplate: kb.cleanTemplate,
+        cleanTemplateEncrypted: encryptSensitiveText(kb.cleanTemplate),
         tags: kb.tags,
         source: 'seed',
-        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
+        ...(userOriginal ? { fullOriginalTextEncrypted: encryptSensitiveText(userOriginal) } : {}),
       },
       create: {
-        ...kb,
+        title: kb.title,
+        category: kb.category,
+        fullOriginalTextEncrypted: encryptSensitiveText(userOriginal ?? ''),
+        cleanTemplateEncrypted: encryptSensitiveText(kb.cleanTemplate),
+        tags: kb.tags,
         source: 'seed',
         dealershipId: GLOBAL_DEALERSHIP_ID,
-        ...(userOriginal ? { fullOriginalText: userOriginal } : {}),
       },
     });
   }
@@ -70,6 +115,9 @@ export interface TemplateRecord {
   title: string;
   category: TemplateCategory;
   content: string;
+  isCustomerPay: boolean;
+  templateType: 'Warranty' | 'CustomerPay';
+  description: string | null;
   source: string;
   dealershipId: string;
   useCount: number;
@@ -96,7 +144,10 @@ export function mapTemplate(row: {
   id: string;
   title: string;
   category: string;
-  content: string;
+  contentEncrypted: string;
+  isCustomerPay?: boolean;
+  templateType?: string;
+  description?: string | null;
   source: string;
   dealershipId: string;
   useCount: number;
@@ -104,11 +155,19 @@ export function mapTemplate(row: {
   createdAt: Date;
   updatedAt: Date;
 }): TemplateRecord {
+  const isCustomerPay = templateRowIsCustomerPay({
+    isCustomerPay: row.isCustomerPay ?? false,
+    templateType: row.templateType ?? 'Warranty',
+    category: row.category,
+  });
   return {
     id: row.id,
     title: row.title,
     category: row.category as TemplateCategory,
-    content: row.content,
+    content: decryptSensitiveText(row.contentEncrypted),
+    isCustomerPay,
+    templateType: isCustomerPay ? 'CustomerPay' : 'Warranty',
+    description: row.description ?? null,
     source: row.source,
     dealershipId: row.dealershipId,
     useCount: row.useCount,
@@ -122,9 +181,9 @@ export function mapKnowledgeBase(row: {
   id: string;
   title: string;
   category: string;
-  generatedText: string | null;
-  fullOriginalText: string;
-  cleanTemplate: string;
+  generatedTextEncrypted: string | null;
+  fullOriginalTextEncrypted: string;
+  cleanTemplateEncrypted: string;
   tags: string;
   source: string;
   dealershipId: string;
@@ -142,9 +201,11 @@ export function mapKnowledgeBase(row: {
     id: row.id,
     title: row.title,
     category: row.category as TemplateCategory,
-    generatedText: row.generatedText,
-    fullOriginalText: row.fullOriginalText,
-    cleanTemplate: row.cleanTemplate,
+    generatedText: row.generatedTextEncrypted
+      ? decryptOptionalSensitiveText(row.generatedTextEncrypted) ?? null
+      : null,
+    fullOriginalText: decryptSensitiveText(row.fullOriginalTextEncrypted),
+    cleanTemplate: decryptSensitiveText(row.cleanTemplateEncrypted),
     tags,
     source: row.source,
     dealershipId: row.dealershipId,
@@ -222,6 +283,8 @@ export function selectRelevantKnowledgeEntries(
     entry.fullOriginalText.trim().length > 0 || entry.cleanTemplate.trim().length > 0;
 
   const scored = [...entries]
+    // M4: never surface Customer Pay entries in warranty AI knowledge selection.
+    .filter((entry) => entry.category !== 'customer')
     .filter(hasUsableContent)
     .map((entry) => ({ entry, score: scoreKnowledgeEntry(entry, haystack, line.description) }))
     .filter((item) => item.score > 0)
@@ -234,11 +297,24 @@ export function selectRelevantKnowledgeEntries(
   return [...dealershipUser, ...remainder].slice(0, limit).map((item) => item.entry);
 }
 
-export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): string {
+function truncateKbField(text: string, maxLen: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…`;
+}
+
+export function formatKnowledgeBaseForPrompt(
+  entries: KnowledgeBaseRecord[],
+  options?: { maxEntryChars?: number }
+): string {
   if (entries.length === 0) return '';
 
+  const maxEntryChars = options?.maxEntryChars;
+  const clip = (text: string) =>
+    maxEntryChars ? truncateKbField(text, maxEntryChars) : text.trim();
+
   const blocks = entries.map((entry, index) => {
-    const approvedStory = entry.fullOriginalText.trim() || entry.cleanTemplate.trim();
+    const approvedStory = clip(entry.fullOriginalText.trim() || entry.cleanTemplate.trim());
     const lines = [
       `### Reference ${index + 1}: ${entry.title} (${entry.category}, ${entry.source})`,
       `Tags: ${entry.tags.join(', ')}`,
@@ -251,11 +327,11 @@ export function formatKnowledgeBaseForPrompt(entries: KnowledgeBaseRecord[]): st
       lines.push(
         '',
         'GROK DRAFT BEFORE TECHNICIAN EDITS (shows what was refined — prefer final story phrasing, learn from edits):',
-        entry.generatedText
+        clip(entry.generatedText)
       );
     }
 
-    lines.push('', 'CLEAN INSERT TEMPLATE:', entry.cleanTemplate);
+    lines.push('', 'CLEAN INSERT TEMPLATE:', clip(entry.cleanTemplate));
     return lines.join('\n');
   });
 
@@ -284,6 +360,11 @@ export function getSeedPreview(): StoryTemplateSeed[] {
 /** Customer Pay templates insert exact saved text — never through AI. */
 export function getTemplateInsertText(template: StoryTemplate): string {
   return template.content;
+}
+
+/** H14: UI instant-apply path requires explicit isCustomerPay on the template row. */
+export function isCustomerPayStoryTemplate(template: StoryTemplate): boolean {
+  return template.isCustomerPay === true;
 }
 
 export { listLoadedKnowledgeBaseOriginals };

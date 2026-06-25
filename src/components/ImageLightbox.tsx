@@ -25,7 +25,7 @@ export function ImageLightbox({ image, onClose, onDelete }: ImageLightboxProps) 
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 backdrop-blur-sm p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -34,7 +34,7 @@ export function ImageLightbox({ image, onClose, onDelete }: ImageLightboxProps) 
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 z-[101] flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"
+        className="absolute top-4 right-4 z-[101] flex h-11 w-11 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white transition-colors touch-target"
         aria-label="Close image"
       >
         <X size={22} />
@@ -47,7 +47,7 @@ export function ImageLightbox({ image, onClose, onDelete }: ImageLightboxProps) 
             e.stopPropagation();
             onDelete();
           }}
-          className="absolute top-4 left-4 z-[101] flex h-11 items-center gap-2 rounded-full bg-[#ff453a]/90 px-4 text-sm font-medium text-white"
+          className="absolute top-4 left-4 z-[101] flex h-11 items-center gap-2 rounded-full benz-danger-btn px-4 text-sm touch-target border-none"
           aria-label="Delete image"
         >
           <Trash2 size={18} />
@@ -58,11 +58,11 @@ export function ImageLightbox({ image, onClose, onDelete }: ImageLightboxProps) 
       <img
         src={image.url}
         alt={image.name}
-        className="max-h-[85vh] max-w-full rounded-lg object-contain shadow-2xl"
+        className="max-h-[85vh] max-w-full rounded-benz-lg object-contain shadow-benz-lg"
         onClick={(e) => e.stopPropagation()}
       />
 
-      <div className="absolute bottom-5 left-1/2 max-w-[90vw] -translate-x-1/2 truncate rounded-full bg-black/60 px-4 py-2 text-xs text-white">
+      <div className="absolute bottom-5 left-1/2 max-w-[90vw] -translate-x-1/2 truncate rounded-full bg-benz-surface/80 border border-benz-surface-3 px-4 py-2 text-xs text-benz-silver">
         {image.name}
       </div>
     </div>

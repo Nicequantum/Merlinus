@@ -1,14 +1,23 @@
 import { Settings } from 'lucide-react';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { RepairOrderList } from '@/components/RepairOrderList';
+import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ScanROSection } from '@/components/ScanROSection';
 import type { PendingImage, RepairOrder } from '../types';
 
 interface HomeViewProps {
   technicianName?: string;
-  filteredROs: RepairOrder[];
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  searchLoading: boolean;
+  searchROs: RepairOrder[];
+  todayROs: RepairOrder[];
+  previousROs: RepairOrder[];
+  previousExpanded: boolean;
+  onTogglePrevious: () => void;
+  previousLoading: boolean;
+  previousLoadingMore: boolean;
+  previousHasMore: boolean;
+  onLoadMorePrevious: () => void;
   pendingROImages: PendingImage[];
   isProcessingOCR: boolean;
   ocrProgress: number;
@@ -27,9 +36,18 @@ interface HomeViewProps {
 
 export function HomeView({
   technicianName,
-  filteredROs,
   searchTerm,
   onSearchChange,
+  searchLoading,
+  searchROs,
+  todayROs,
+  previousROs,
+  previousExpanded,
+  onTogglePrevious,
+  previousLoading,
+  previousLoadingMore,
+  previousHasMore,
+  onLoadMorePrevious,
   pendingROImages,
   isProcessingOCR,
   ocrProgress,
@@ -46,22 +64,22 @@ export function HomeView({
   onOpenSettings,
 }: HomeViewProps) {
   return (
-    <div className="relative min-h-dvh px-4 pt-2 pb-8">
+    <div className="relative min-h-dvh benz-page-compact">
       <button
         onClick={onOpenSettings}
-        className="absolute top-4 right-4 p-2 text-[#8e8e93] z-10 touch-target"
+        className="absolute top-4 right-4 benz-icon-btn z-10 touch-target"
         aria-label="Settings"
       >
         <Settings size={22} />
       </button>
 
-      <div className="pt-12">
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#0a84ff] to-[#0066cc] flex items-center justify-center mb-3 p-1">
-            <img src="/icon-512.png" alt="Benz Tech - Mercedes-Benz" className="w-full h-full rounded-2xl" />
+      <div className="pt-10">
+        <div className="text-center mb-8">
+          <div className="benz-logo-ring w-[4.5rem] h-[4.5rem] mx-auto mb-4">
+            <img src="/icon-512.png" alt="Merlin - Mercedes-Benz" className="w-full h-full rounded-[18px]" />
           </div>
           <DealershipBranding size="lg" className="mb-2" />
-          <p className="text-[#8e8e93] text-sm text-center">{technicianName || 'Technician'}</p>
+          <p className="text-benz-secondary text-sm">{technicianName || 'Technician'}</p>
         </div>
 
         <ScanROSection
@@ -75,30 +93,34 @@ export function HomeView({
           onClearPendingScan={onClearPendingScan}
           onCancelScan={onCancelScan}
           onCreateManualRO={onCreateManualRO}
-          scanButtonLabel="SCAN RO"
+          scanButtonLabel="Scan RO"
         />
 
-        <div className="mb-3">
+        <div className="mb-4">
           <input
             type="text"
-            placeholder="Search past ROs (number, model, VIN)..."
+            placeholder="Search past ROs (number, model, VIN)…"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-[#1c1c1e] border border-[#38383a] rounded-xl px-4 py-2.5 text-sm placeholder-[#8e8e93]"
+            className="benz-search"
           />
         </div>
 
-        {filteredROs.length > 0 && (
-          <div className="text-xs uppercase tracking-widest text-[#8e8e93] mb-2 px-1">Previous Repair Orders</div>
-        )}
-
-        <RepairOrderList
-          repairOrders={filteredROs}
+        <RepairOrderHomeLists
+          searchTerm={searchTerm}
+          searchLoading={searchLoading}
+          searchResults={searchROs}
+          todayROs={todayROs}
+          previousROs={previousROs}
+          previousExpanded={previousExpanded}
+          onTogglePrevious={onTogglePrevious}
+          previousLoading={previousLoading}
+          previousLoadingMore={previousLoadingMore}
+          previousHasMore={previousHasMore}
+          onLoadMorePrevious={onLoadMorePrevious}
           openingROId={openingROId}
           onOpenRO={onOpenRO}
           onDeleteRO={onDeleteRO}
-          emptyMessage="No repair orders yet."
-          emptyHint="Tap Scan RO to capture or upload repair order pages."
         />
       </div>
     </div>

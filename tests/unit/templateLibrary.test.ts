@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { KNOWLEDGE_BASE_ORIGINALS } from '@/data/knowledgeBaseOriginals';
 import { STORY_TEMPLATE_SEEDS } from '@/lib/storyTemplateSeed';
+import { CUSTOMER_PAY_TEMPLATES } from '@/prompts/templates/customerPayTemplates';
 import {
   formatKnowledgeBaseForPrompt,
   selectRelevantKnowledgeEntries,
@@ -19,6 +20,23 @@ function kbFromSeed(title: string, fullOriginalText: string, source = 'seed'): K
     fullOriginalText,
     cleanTemplate: seed.complaint,
     tags: seed.tags,
+    source,
+    dealershipId: source === 'user' ? 'dealer-1' : '__global__',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function kbFromCustomerPay(title: string, fullOriginalText = '', source = 'seed'): KnowledgeBaseRecord {
+  const cp = CUSTOMER_PAY_TEMPLATES.find((t) => t.title === title)!;
+  return {
+    id: `kb-${title}`,
+    title: cp.title,
+    category: 'customer',
+    generatedText: null,
+    fullOriginalText,
+    cleanTemplate: cp.preWrittenStory,
+    tags: [cp.title.toLowerCase(), 'customer'],
     source,
     dealershipId: source === 'user' ? 'dealer-1' : '__global__',
     createdAt: new Date().toISOString(),
@@ -52,12 +70,11 @@ const baseLine: RepairLine = {
 };
 
 describe('story template seed data', () => {
-  it('includes 3 customer pay and 22 warranty templates', () => {
-    const customer = STORY_TEMPLATE_SEEDS.filter((s) => s.category === 'customer');
+  it('includes 22 warranty seed templates (customer pay lives in customerPayTemplates.ts)', () => {
     const warranty = STORY_TEMPLATE_SEEDS.filter((s) => s.category === 'warranty');
-    assert.equal(customer.length, 3);
+    assert.equal(STORY_TEMPLATE_SEEDS.every((s) => s.category === 'warranty'), true);
     assert.equal(warranty.length, 22);
-    assert.equal(STORY_TEMPLATE_SEEDS.length, 25);
+    assert.equal(STORY_TEMPLATE_SEEDS.length, 22);
   });
 
   it('uses unique titles', () => {
@@ -77,7 +94,7 @@ describe('knowledge base selection', () => {
   it('ranks blind spot template for matching line description', () => {
     const entries = [
       kbFromSeed('Blind Spot Assist Warning', KNOWLEDGE_BASE_ORIGINALS['Blind Spot Assist Warning']!),
-      kbFromSeed('B Service', ''),
+      kbFromCustomerPay('Front Brake Job'),
       kbFromSeed('Cylinder Head Failure', ''),
     ];
     const selected = selectRelevantKnowledgeEntries(baseRo, baseLine, entries, 'dealer-1', 2);
@@ -96,22 +113,16 @@ describe('knowledge base selection', () => {
   it('selects seed templates via cleanTemplate when fullOriginalText is empty', () => {
     const entries = [
       kbFromSeed('Blind Spot Assist Warning', ''),
-      kbFromSeed('B Service', ''),
+      kbFromCustomerPay('Front Brake Job'),
     ];
     const selected = selectRelevantKnowledgeEntries(baseRo, baseLine, entries, 'dealer-1', 3);
     assert.equal(selected[0]?.title, 'Blind Spot Assist Warning');
   });
 
   it('falls back to cleanTemplate in prompt when fullOriginalText is empty', () => {
-    const seed = STORY_TEMPLATE_SEEDS.find((s) => s.title === 'B Service')!;
-    const prompt = formatKnowledgeBaseForPrompt([
-      {
-        ...kbFromSeed('B Service', ''),
-        cleanTemplate: seed.complaint,
-      },
-    ]);
-    assert.match(prompt, /B Service/);
-    assert.ok(prompt.includes(seed.complaint));
+    const prompt = formatKnowledgeBaseForPrompt([kbFromCustomerPay('Front Brake Job')]);
+    assert.match(prompt, /Front Brake Job/);
+    assert.ok(prompt.includes('Performed'));
   });
 });
 

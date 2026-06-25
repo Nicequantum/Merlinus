@@ -22,36 +22,8 @@ Correction:
 ${entry.correction}`;
 }
 
+/** Warranty-only seeds — Customer Pay templates live in `src/prompts/templates/customerPayTemplates.ts`. */
 export const STORY_TEMPLATE_SEEDS: StoryTemplateSeed[] = [
-  // ─── Customer Pay ───────────────────────────────────────────────────────────
-  {
-    title: 'B Service',
-    category: 'customer',
-    tags: ['maintenance', 'service-b', 'customer-pay', 'oil', 'inspection'],
-    complaint: 'Customer requests scheduled Mercedes-Benz Service B maintenance per maintenance booklet and vehicle mileage interval.',
-    cause: 'Vehicle due for Service B interval. Maintenance inspection identified normal wear items per Mercedes-Benz maintenance standards. No customer-pay faults requiring additional diagnosis at this time.',
-    correction:
-      'Performed Service B per Mercedes-Benz maintenance booklet: replaced engine oil and filter, reset service indicator, completed maintenance inspection per workshop manual, checked and topped fluids as required, inspected brakes/tires/belts/hoses/lights/wipers, verified tire pressures, and road tested vehicle. Returned vehicle to customer with service documentation and next service due recommendation.',
-  },
-  {
-    title: 'A Service',
-    category: 'customer',
-    tags: ['maintenance', 'service-a', 'customer-pay', 'oil', 'inspection'],
-    complaint: 'Customer requests scheduled Mercedes-Benz Service A maintenance per maintenance booklet.',
-    cause: 'Vehicle due for Service A interval. Routine maintenance inspection completed with no additional customer-pay faults identified.',
-    correction:
-      'Performed Service A per Mercedes-Benz maintenance booklet: replaced engine oil and filter, reset service indicator, completed maintenance inspection, checked fluids and tire pressures, inspected brakes and tires, and verified proper operation on road test. Vehicle returned to customer.',
-  },
-  {
-    title: 'Lube, Oil & Filter Service',
-    category: 'customer',
-    tags: ['maintenance', 'lof', 'customer-pay', 'oil', 'filter'],
-    complaint: 'Customer requests lube, oil, and filter service.',
-    cause: 'Routine oil change interval reached. No drivability or warning concerns reported by customer.',
-    correction:
-      'Performed lube, oil, and filter service: drained engine oil, replaced oil filter, installed approved engine oil to specification, checked and topped fluids as needed, reset service reminder if applicable, and verified no leaks. Road tested — no issues noted.',
-  },
-
   // ─── Warranty Claims ────────────────────────────────────────────────────────
   {
     title: 'Blind Spot Assist Warning',

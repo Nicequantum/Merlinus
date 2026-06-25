@@ -2,6 +2,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { toast } from 'sonner';
+import { clientLog } from '@/lib/clientLog';
 
 interface Props {
   children: ReactNode;
@@ -20,23 +21,37 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('BenzTech error boundary:', error, info);
+    clientLog.error('Merlin error boundary', { error, info });
     toast.error('An unexpected error occurred. You can try again.');
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="app-container px-5 py-10 text-center">
-          <div className="ios-card p-6">
-            <div className="text-lg font-semibold mb-2">Something went wrong</div>
-            <p className="text-sm text-[#8e8e93] mb-4">{this.state.message}</p>
-            <button
-              onClick={() => this.setState({ hasError: false, message: '' })}
-              className="primary-btn px-6 h-11 text-sm"
-            >
-              Try again
-            </button>
+        <div className="app-container benz-page py-10 text-center">
+          <div className="benz-card-elevated p-7">
+            <div className="text-lg font-semibold mb-2 tracking-tight">Merlin hit a snag</div>
+            <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
+              Something unexpected happened on this screen. Your typed notes are still on the repair order.
+            </p>
+            <p className="text-xs text-benz-muted mb-5">{this.state.message}</p>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => this.setState({ hasError: false, message: '' })}
+                className="primary-btn px-6 h-11 text-sm touch-target"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+                className="secondary-btn h-11 text-sm touch-target"
+              >
+                Go to home
+              </button>
+            </div>
           </div>
         </div>
       );

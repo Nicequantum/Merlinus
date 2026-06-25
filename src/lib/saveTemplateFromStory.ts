@@ -1,3 +1,7 @@
+import {
+  encryptOptionalSensitiveText,
+  encryptSensitiveText,
+} from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { buildTemplateTags } from '@/lib/templateTags';
 import { GLOBAL_DEALERSHIP_ID, mapKnowledgeBase, mapTemplate } from '@/lib/templateLibrary';
@@ -29,21 +33,28 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
     },
     update: {
       category: input.category,
-      content: input.finalText,
+      contentEncrypted: encryptSensitiveText(input.finalText),
+      isCustomerPay: input.category === 'customer',
+      templateType: input.category === 'customer' ? 'CustomerPay' : 'Warranty',
       source: 'user',
       updatedAt: now,
     },
     create: {
       title: input.title,
       category: input.category,
-      content: input.finalText,
+      contentEncrypted: encryptSensitiveText(input.finalText),
+      isCustomerPay: input.category === 'customer',
+      templateType: input.category === 'customer' ? 'CustomerPay' : 'Warranty',
       source: 'user',
       dealershipId: input.dealershipId,
       createdById: input.createdById,
     },
   });
 
-  const knowledgeBase = await prisma.knowledgeBase.upsert({
+  // M4: Customer Pay templates live in the template table only — not the warranty KB.
+  let knowledgeBase = null;
+  if (input.category !== 'customer') {
+  knowledgeBase = await prisma.knowledgeBase.upsert({
     where: {
       dealershipId_title: {
         dealershipId: input.dealershipId,
@@ -52,9 +63,9 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
     },
     update: {
       category: input.category,
-      generatedText: input.generatedText,
-      fullOriginalText: input.finalText,
-      cleanTemplate: input.finalText,
+      generatedTextEncrypted: encryptOptionalSensitiveText(input.generatedText),
+      fullOriginalTextEncrypted: encryptSensitiveText(input.finalText),
+      cleanTemplateEncrypted: encryptSensitiveText(input.finalText),
       tags: tagsJson,
       source: 'user',
       updatedAt: now,
@@ -62,18 +73,19 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
     create: {
       title: input.title,
       category: input.category,
-      generatedText: input.generatedText,
-      fullOriginalText: input.finalText,
-      cleanTemplate: input.finalText,
+      generatedTextEncrypted: encryptOptionalSensitiveText(input.generatedText),
+      fullOriginalTextEncrypted: encryptSensitiveText(input.finalText),
+      cleanTemplateEncrypted: encryptSensitiveText(input.finalText),
       tags: tagsJson,
       source: 'user',
       dealershipId: input.dealershipId,
     },
   });
+  }
 
   return {
     template: mapTemplate(template),
-    knowledgeBase: mapKnowledgeBase(knowledgeBase),
+    knowledgeBase: knowledgeBase ? mapKnowledgeBase(knowledgeBase) : null,
     tags,
   };
 }

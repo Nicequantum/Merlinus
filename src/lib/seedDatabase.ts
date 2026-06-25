@@ -24,7 +24,8 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
   const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
   const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
   const managerPassword = requireEnv('ADMIN_SEED_PASSWORD', 8);
-  const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || 'changeme123';
+  // H11: no hardcoded default technician password in source — require explicit env.
+  const techPassword = requireEnv('TECH_SEED_PASSWORD', 8);
 
   const dealership = await prisma.dealership.upsert({
     where: { id: 'seed-dealership' },
@@ -52,6 +53,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         role: 'manager',
         isAdmin: true,
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
       },
     });
@@ -63,6 +65,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         role: 'manager',
         isAdmin: true,
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(managerD7),
       },
@@ -91,6 +94,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         passwordHash: techPasswordHash,
         role: 'technician',
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
       },
     });
@@ -101,8 +105,11 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
         passwordHash: techPasswordHash,
         role: 'technician',
         isActive: true,
+        deletedAt: null,
         dealershipId: dealership.id,
         email: internalEmailForD7(techD7),
+        consentAt: new Date(),
+        consentVersion: '2026-06-07-v1',
       },
       create: {
         d7Number: techD7,
