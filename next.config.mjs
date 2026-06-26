@@ -48,7 +48,7 @@ const nextConfig = {
 
 export default withSentryConfig(nextConfig, {
   org: "clarityauto",
-  project: "clarity-auto",
+  project: "clarityauto",
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   widenClientFileUpload: true,
