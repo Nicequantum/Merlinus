@@ -24,7 +24,7 @@ const nextConfig = {
     return config;
   },
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'sonner', '@sentry/nextjs'],
     serverActions: {
       bodySizeLimit: '10mb',
     },

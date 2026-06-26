@@ -1,26 +1,55 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { AppFooter } from '@/components/AppFooter';
 import { AppHeader } from '@/components/AppHeader';
 import { MaintenanceBanner } from '@/components/MaintenanceBanner';
-import { OfflineBanner } from '@/components/OfflineBanner';
 import { ConsentModal } from '@/components/ConsentModal';
 import { HomeView } from '@/components/HomeView';
-import { LineView } from '@/components/LineView';
 import { LoginView } from '@/components/LoginView';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { LoadErrorScreen } from '@/components/LoadErrorScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ROView } from '@/components/ROView';
-import { AuditLogView } from '@/components/AuditLogView';
-import { ServiceAdvisorsView } from '@/components/ServiceAdvisorsView';
 import { SettingsView } from '@/components/SettingsView';
+import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
 import { useState } from 'react';
+import { toast } from 'sonner';
+
+const ManagerDashboard = dynamic(
+  () => import('@/components/ManagerDashboard').then((m) => m.ManagerDashboard),
+  { loading: () => <LoadingScreen label="Loading manager dashboard" /> }
+);
+
+const AuditLogView = dynamic(
+  () => import('@/components/AuditLogView').then((m) => m.AuditLogView),
+  {
+    loading: () => (
+      <LoadingScreen label="Loading audit logs" sublabel="Fetching dealership activity…" />
+    ),
+  }
+);
+
+const ServiceAdvisorsView = dynamic(
+  () => import('@/components/ServiceAdvisorsView').then((m) => m.ServiceAdvisorsView),
+  { loading: () => <LoadingScreen label="Loading service advisors" /> }
+);
+
+const LineView = dynamic(
+  () => import('@/components/LineView').then((m) => m.LineView),
+  { loading: () => <LoadingScreen label="Loading repair line" sublabel="Preparing warranty tools…" /> }
+);
+
+function runAction(label: string, action: () => void | Promise<void>): void {
+  void Promise.resolve(action()).catch((error: unknown) => {
+    console.error(`[Merlin] ${label} failed`, error);
+    toast.error(error instanceof Error ? error.message : `${label} failed`);
+  });
+}
 
 export function BenzTechApp() {
   const { session, loading: sessionLoading, login, logout, acceptConsent } = useSession();
@@ -51,7 +80,7 @@ export function BenzTechApp() {
       <LoadErrorScreen
         title="Could not load repair orders"
         message={ro.listError}
-        onRetry={() => void ro.retryListLoad()}
+        onRetry={() => runAction('Retry loading repair orders', () => ro.retryListLoad())}
         retrying={ro.listRetrying}
       />
     );
@@ -65,6 +94,9 @@ export function BenzTechApp() {
           setConsentLoading(true);
           try {
             await acceptConsent();
+          } catch (error: unknown) {
+            console.error('[Merlin] Consent acceptance failed', error);
+            toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
           } finally {
             setConsentLoading(false);
           }
@@ -103,7 +135,6 @@ export function BenzTechApp() {
 
   return (
     <div className={`app-container${wideLayout ? ' benz-app-wide' : ''}`}>
-      <OfflineBanner />
       <MaintenanceBanner />
       <LoadingOverlay
         visible={!!ro.openingROId}
@@ -115,6 +146,7 @@ export function BenzTechApp() {
       )}
 
       {ro.view === 'home' && isManager && (
+        <ViewErrorBoundary viewName="the manager dashboard">
         <ManagerDashboard
           session={session}
           searchTerm={ro.searchTerm}
@@ -137,6 +169,7 @@ export function BenzTechApp() {
         >
           {roListSection}
         </ManagerDashboard>
+        </ViewErrorBoundary>
       )}
 
       {ro.view === 'home' && !isManager && (
@@ -172,6 +205,7 @@ export function BenzTechApp() {
       )}
 
       {ro.view === 'ro' && ro.currentRO && (
+        <ViewErrorBoundary viewName="the repair order">
         <ROView
           ro={ro.currentRO}
           isProcessingOCR={ocr.isProcessingOCR}
@@ -185,14 +219,20 @@ export function BenzTechApp() {
           onRemoveComplaint={ro.removeComplaint}
           onDecodeVin={ro.decodeVinForRO}
           onAddROXentryPhotos={ro.addROXentryPhotos}
-          onDeleteROXentryImage={(imageId) => void ro.deleteROXentryImage(imageId)}
+          onDeleteROXentryImage={(imageId) =>
+            runAction('Delete Xentry photo', () => ro.deleteROXentryImage(imageId))
+          }
           onAddRepairLine={ro.addRepairLine}
           onOpenLine={ro.navigateToLine}
-          onDeleteRO={() => ro.deleteRO(ro.currentRO!.id)}
+          onDeleteRO={() =>
+            runAction('Delete repair order', () => ro.deleteRO(ro.currentRO!.id))
+          }
         />
+        </ViewErrorBoundary>
       )}
 
       {ro.view === 'line' && ro.currentRO && ro.currentLine && (
+        <ViewErrorBoundary viewName="the repair line">
         <LineView
           ro={ro.currentRO}
           line={ro.currentLine}
@@ -211,23 +251,37 @@ export function BenzTechApp() {
           onBack={() => ro.setView('ro')}
           onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
           onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
-          onDeleteXentryImage={(imageId) => void ro.deleteLineXentryImage(ro.currentLine!.id, imageId)}
+          onDeleteXentryImage={(imageId) =>
+            runAction('Delete diagnostic photo', () =>
+              ro.deleteLineXentryImage(ro.currentLine!.id, imageId)
+            )
+          }
           onGenerateStory={() => {
             const lineId = ro.currentLineId;
             if (!lineId || typeof ro.generateStory !== 'function') {
               console.error('Generate story unavailable', { lineId, generateStory: ro.generateStory });
+              toast.error('Story generation is unavailable — refresh and try again');
               return;
             }
-            void ro.generateStory(lineId);
+            runAction('Generate warranty story', () => ro.generateStory(lineId));
           }}
-          onScoreStory={(storyText) => void ro.scoreStory(ro.currentLine!.id, storyText)}
-          onReviewStory={(storyText) => void ro.reviewStory(ro.currentLine!.id, storyText)}
-          onApplyCustomerPayTemplate={(templateId) =>
-            ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
+          onScoreStory={(storyText) =>
+            runAction('Audit warranty story', () => ro.scoreStory(ro.currentLine!.id, storyText))
           }
-          onClearCustomerPayMode={() => ro.clearCustomerPayMode(ro.currentLine!.id)}
+          onReviewStory={(storyText) =>
+            runAction('Review warranty story', () => ro.reviewStory(ro.currentLine!.id, storyText))
+          }
+          onApplyCustomerPayTemplate={(templateId) =>
+            runAction('Apply Customer Pay template', () =>
+              ro.applyCustomerPayTemplate(ro.currentLine!.id, templateId)
+            )
+          }
+          onClearCustomerPayMode={() =>
+            runAction('Clear Customer Pay mode', () => ro.clearCustomerPayMode(ro.currentLine!.id))
+          }
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
         />
+        </ViewErrorBoundary>
       )}
 
       {ro.view === 'settings' && (
@@ -241,11 +295,15 @@ export function BenzTechApp() {
       )}
 
       {ro.view === 'audit' && (
-        <AuditLogView session={session} onBack={() => ro.setView(isManager ? 'home' : 'settings')} />
+        <ViewErrorBoundary viewName="audit logs">
+          <AuditLogView session={session} onBack={() => ro.setView(isManager ? 'home' : 'settings')} />
+        </ViewErrorBoundary>
       )}
 
       {ro.view === 'advisors' && isManager && (
-        <ServiceAdvisorsView onBack={() => ro.setView('home')} />
+        <ViewErrorBoundary viewName="service advisors">
+          <ServiceAdvisorsView onBack={() => ro.setView('home')} />
+        </ViewErrorBoundary>
       )}
 
       <AppFooter />

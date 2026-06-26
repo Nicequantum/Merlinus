@@ -1,5 +1,6 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
 export default function Error({
@@ -10,11 +11,12 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[merlin] route error:', error);
+    console.error('[Merlin] route error:', error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (
-    <div className="app-container benz-page py-10 text-center min-h-dvh flex items-center justify-center px-6">
+    <div className="app-container benz-page py-10 text-center min-h-dvh flex items-center justify-center px-6" role="alert">
       <div className="benz-card-elevated p-7 max-w-md w-full">
         <div className="text-lg font-semibold mb-2 tracking-tight">Merlin hit a snag</div>
         <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
@@ -22,6 +24,9 @@ export default function Error({
           home screen.
         </p>
         <p className="text-xs text-benz-muted mb-5">If this keeps happening, notify your service manager.</p>
+        {error.digest && (
+          <p className="text-xs text-benz-muted mb-4">Reference: {error.digest}</p>
+        )}
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
           <button type="button" onClick={reset} className="primary-btn px-6 h-11 text-sm touch-target">
             Try again

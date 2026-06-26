@@ -6,7 +6,7 @@ import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { getRecentTemplateRefs, recordRecentTemplate, type RecentTemplateRef } from '@/lib/recentTemplates';
-import { getTemplateInsertText, isCustomerPayStoryTemplate } from '@/lib/templateLibrary';
+import { getTemplateInsertText, isCustomerPayStoryTemplate } from '@/lib/templateLibraryClient';
 import type { StoryTemplate, TemplateCategory } from '@/types';
 
 interface TemplateLibraryModalProps {

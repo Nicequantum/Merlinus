@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
+import { AppProviders } from '@/components/AppProviders';
 import './globals.css';
 
 const inter = Inter({
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className={inter.className}>
-        {children}
+        <AppProviders>{children}</AppProviders>
         <Toaster
           position="top-center"
           toastOptions={{

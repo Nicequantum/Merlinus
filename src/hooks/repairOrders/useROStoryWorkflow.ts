@@ -2,9 +2,45 @@
 
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import type { RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
+import { OFFLINE_ERROR } from '@/lib/errors';
+import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
+
+function getLatestRoAndLine(
+  roRef: React.MutableRefObject<RepairOrder | null>,
+  lineId: string
+): { ro: RepairOrder | null; line: RepairLine | undefined } {
+  const ro = roRef.current;
+  const line = ro?.repairLines.find((l) => l.id === lineId);
+  return { ro, line };
+}
+
+function isNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message === 'failed to fetch' || message === 'networkerror when attempting to fetch resource') {
+      return true;
+    }
+    if (error.name === 'NetworkError') return true;
+  }
+  return false;
+}
+
+function getStoryWorkflowErrorMessage(error: unknown, fallback: string): string {
+  if (isNetworkError(error)) return OFFLINE_ERROR;
+  if (error instanceof ApiError || error instanceof Error) return error.message;
+  return fallback;
+}
+
+/** True when the on-screen warranty story no longer matches the text the async workflow used. */
+function isWarrantyStoryStale(ro: RepairOrder, lineId: string, expectedStoryText: string): boolean {
+  const line = ro.repairLines.find((l) => l.id === lineId);
+  const currentStory = line?.warrantyStory?.trim() ?? '';
+  const expectedStory = expectedStoryText.trim();
+  return !currentStory || currentStory !== expectedStory;
+}
 
 interface StoryWorkflowRefs {
   roRef: React.MutableRefObject<RepairOrder | null>;
@@ -47,10 +83,9 @@ export function useROStoryWorkflow(
   const applyCustomerPayTemplate = useCallback(
     async (lineId: string, templateId: string) => {
       await deps.flushPendingSave();
-      const latestRO = refs.roRef.current;
+      const { ro: latestRO, line } = getLatestRoAndLine(refs.roRef, lineId);
       if (!latestRO) return;
       const roId = latestRO.id;
-      const line = latestRO.repairLines.find((l) => l.id === lineId);
       if (!line) {
         toast.error('Repair line not found — refresh the RO and try again');
         return;
@@ -77,7 +112,7 @@ export function useROStoryWorkflow(
           toast.success(`"${result.templateTitle}" applied — Customer Pay instant story`);
         }
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : 'Failed to apply Customer Pay template');
+        toast.error(getStoryWorkflowErrorMessage(error, 'Failed to apply Customer Pay template'));
       }
     },
     [deps, refs.roRef]
@@ -86,7 +121,7 @@ export function useROStoryWorkflow(
   const clearCustomerPayMode = useCallback(
     async (lineId: string) => {
       await deps.flushPendingSave();
-      const latestRO = refs.roRef.current;
+      const { ro: latestRO } = getLatestRoAndLine(refs.roRef, lineId);
       if (!latestRO) return;
       try {
         await api.clearCustomerPayMode(latestRO.id, lineId);
@@ -101,7 +136,7 @@ export function useROStoryWorkflow(
         );
         toast.success('Customer Pay mode cleared — warranty AI generation is available');
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : 'Failed to clear Customer Pay mode');
+        toast.error(getStoryWorkflowErrorMessage(error, 'Failed to clear Customer Pay mode'));
       }
     },
     [deps, refs.roRef]
@@ -128,13 +163,12 @@ export function useROStoryWorkflow(
         // Never block generation on a stuck save queue (was causing multi-minute waits).
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
-        const latestRO = refs.roRef.current;
+        const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (!latestRO) {
           toast.error('Repair order not loaded — go back and reopen the line');
           return;
         }
 
-        const targetLine = latestRO.repairLines.find((line) => line.id === lineId);
         if (!targetLine) {
           toast.error('Repair line not found — refresh the RO and try again');
           return;
@@ -176,7 +210,8 @@ export function useROStoryWorkflow(
         toast.success('Warranty story generated — tap Audit Story when ready for MI scoring');
       } catch (error: unknown) {
         if (seq === refs.generateStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story generation failed');
+          console.error('[Merlin] Generate warranty story failed', error);
+          toast.error(getStoryWorkflowErrorMessage(error, 'Story generation failed'));
         }
       } finally {
         if (seq === refs.generateStorySeqRef.current && refs.storyGenerationInFlightRef.current) {
@@ -210,8 +245,7 @@ export function useROStoryWorkflow(
         // Lock + loading before flush so the first click always gets feedback (was multi-click bug).
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
-        const latestRO = refs.roRef.current;
-        const targetLine = latestRO?.repairLines.find((l) => l.id === lineId);
+        const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (isCustomerPayRepairLine(targetLine)) {
           toast.message('Customer Pay stories skip AI audit — edit the text if needed.');
           return;
@@ -242,10 +276,7 @@ export function useROStoryWorkflow(
           toast.success('Audit complete — reopen the repair line to view the score');
           return;
         }
-
-        const activeLine = activeRO.repairLines.find((l) => l.id === lineId);
-        const currentStory = activeLine?.warrantyStory?.trim() ?? '';
-        if (!currentStory || currentStory !== storyText) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
 
         const baseline = (quality.scoredAgainstStory ?? storyText).trim();
         setters.setStoryQualityByLine((prev) => ({
@@ -255,7 +286,8 @@ export function useROStoryWorkflow(
         toast.success(`MI audit score: ${quality.score}/100 (${quality.grade})`);
       } catch (error: unknown) {
         if (seq === refs.scoreStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story audit failed');
+          console.error('[Merlin] Audit warranty story failed', error);
+          toast.error(getStoryWorkflowErrorMessage(error, 'Story audit failed'));
         }
       } finally {
         if (seq === refs.scoreStorySeqRef.current) {
@@ -293,8 +325,7 @@ export function useROStoryWorkflow(
       try {
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
-        const latestRO = refs.roRef.current;
-        const targetLine = latestRO?.repairLines.find((l) => l.id === lineId);
+        const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (isCustomerPayRepairLine(targetLine)) {
           toast.message('Customer Pay stories skip AI review — edit the text if needed.');
           return;
@@ -318,10 +349,7 @@ export function useROStoryWorkflow(
           toast.success('Review complete — reopen the repair line to view feedback');
           return;
         }
-
-        const activeLine = activeRO.repairLines.find((l) => l.id === lineId);
-        const currentStory = activeLine?.warrantyStory?.trim() ?? '';
-        if (!currentStory || currentStory !== storyText) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
 
         if (review.scoredAgainstStory?.trim() !== storyText) {
           review.scoredAgainstStory = storyText;
@@ -332,7 +360,8 @@ export function useROStoryWorkflow(
         toast.success(`MI 4.3 review complete — ${review.score}/100 (${review.grade})`);
       } catch (error: unknown) {
         if (seq === refs.reviewStorySeqRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Story review failed');
+          console.error('[Merlin] Review warranty story failed', error);
+          toast.error(getStoryWorkflowErrorMessage(error, 'Story review failed'));
         }
       } finally {
         if (seq === refs.reviewStorySeqRef.current) {

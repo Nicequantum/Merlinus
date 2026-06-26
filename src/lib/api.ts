@@ -17,6 +17,12 @@ import type {
   UsageAnalytics,
 } from '@/types';
 import {
+  isNetworkFailure,
+  networkRetryDelayMs,
+  NETWORK_RETRY_MAX_ATTEMPTS,
+  sleep,
+} from '@/lib/networkErrors';
+import {
   DIAGNOSTIC_EXTRACT_CLIENT_MS,
   RO_EXTRACT_CLIENT_MS,
   STORY_GENERATE_CLIENT_MS,
@@ -43,31 +49,56 @@ export class ApiError extends Error {
   }
 }
 
+async function fetchWithNetworkRetry(
+  path: string,
+  init: RequestInit,
+  timeoutMs?: number
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= NETWORK_RETRY_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer =
+      timeoutMs && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+
+    try {
+      return await fetch(path, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(`Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s`, 408);
+      }
+
+      lastError = error;
+      if (!isNetworkFailure(error) || attempt === NETWORK_RETRY_MAX_ATTEMPTS) {
+        throw error;
+      }
+
+      await sleep(networkRetryDelayMs(attempt));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  throw lastError;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
   const { timeoutMs, ...fetchOptions } = options || {};
-  const controller = new AbortController();
-  const timer =
-    timeoutMs && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
-
-  let res: Response;
-  try {
-    res = await fetch(path, {
+  const res = await fetchWithNetworkRetry(
+    path,
+    {
       ...fetchOptions,
-      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...fetchOptions.headers,
       },
       credentials: 'include',
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiError(`Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s`, 408);
-    }
-    throw error;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+    },
+    timeoutMs
+  );
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -78,7 +109,7 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
 }
 
 async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetchWithNetworkRetry(path, {
     method: 'POST',
     body: formData,
     credentials: 'include',

@@ -7,6 +7,6 @@ export const clientLog = {
     if (isDev) console.warn(message, context ?? '');
   },
   error: (message: string, context?: unknown) => {
-    if (isDev) console.error(message, context ?? '');
+    console.error(message, context ?? '');
   },
 };

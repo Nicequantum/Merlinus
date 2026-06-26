@@ -13,7 +13,8 @@ import {
   type RepairOrderInput,
 } from '@/lib/roMapper';
 import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
-import { apiError, FORBIDDEN_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, handleRouteError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { createRepairOrderSchema, parseRequestBody } from '@/lib/validation';
@@ -152,10 +153,20 @@ export async function POST(request: Request) {
         }
       }
 
-      const forbiddenPathname = await findForbiddenImagePathname(
-        session,
-        collectRepairOrderImagePathnames(input)
-      );
+      let forbiddenPathname: string | null;
+      try {
+        forbiddenPathname = await findForbiddenImagePathname(
+          session,
+          collectRepairOrderImagePathnames(input)
+        );
+      } catch (error) {
+        logger.error('ros.create.image_access_failed', {
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+        return apiError('Unable to verify image attachments.', 500);
+      }
       if (forbiddenPathname) {
         return apiError(FORBIDDEN_ERROR, 403);
       }
@@ -163,73 +174,97 @@ export async function POST(request: Request) {
       const extractionSource: AdvisorExtractionSource =
         data.advisorExtractionSource || (data.fromExtraction ? 'grok' : 'manual');
 
-      const { created, advisorCapture } = await prisma.$transaction(async (tx) => {
-        const ro = await tx.repairOrder.create({
-          data: {
-            ...repairOrderToDbFields(input),
-            technicianId: session.technicianId,
-            dealershipId: session.dealershipId,
-            repairLines: {
-              create: input.repairLines.map((line) => repairLineToDbFields(line)),
-            },
-          },
-          include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
-        });
-
-        const capture = data.serviceAdvisorName
-          ? await captureAdvisorIntelligence(
-              {
-                dealershipId: session.dealershipId,
-                repairOrderId: ro.id,
-                serviceAdvisorName: data.serviceAdvisorName,
-                complaints: input.complaints,
-                complaintLabels: input.complaintLabels,
-                vehicle: {
-                  make: input.vehicle.make,
-                  model: input.vehicle.model,
-                },
-                extractionSource,
+      let created;
+      let advisorCapture;
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          const ro = await tx.repairOrder.create({
+            data: {
+              ...repairOrderToDbFields(input),
+              technicianId: session.technicianId,
+              dealershipId: session.dealershipId,
+              repairLines: {
+                create: input.repairLines.map((line) => repairLineToDbFields(line)),
               },
-              tx
-            )
-          : null;
+            },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
+          });
 
-        const createdRo = await tx.repairOrder.findUniqueOrThrow({
-          where: { id: ro.id },
-          include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
+          const capture = data.serviceAdvisorName
+            ? await captureAdvisorIntelligence(
+                {
+                  dealershipId: session.dealershipId,
+                  repairOrderId: ro.id,
+                  serviceAdvisorName: data.serviceAdvisorName,
+                  complaints: input.complaints,
+                  complaintLabels: input.complaintLabels,
+                  vehicle: {
+                    make: input.vehicle.make,
+                    model: input.vehicle.model,
+                  },
+                  extractionSource,
+                },
+                tx
+              )
+            : null;
+
+          const createdRo = await tx.repairOrder.findUniqueOrThrow({
+            where: { id: ro.id },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true } } },
+          });
+
+          return { created: createdRo, advisorCapture: capture };
         });
-
-        return { created: createdRo, advisorCapture: capture };
-      });
-
-      if (advisorCapture?.serviceAdvisor) {
-        await writeAuditLog({
-          action: 'advisor.capture',
-          dealershipId: session.dealershipId,
+        created = result.created;
+        advisorCapture = result.advisorCapture;
+      } catch (error) {
+        logger.error('ros.create.transaction_failed', {
           technicianId: session.technicianId,
-          entityType: 'serviceAdvisor',
-          entityId: advisorCapture.serviceAdvisor.id,
-          metadata: {
-            repairOrderId: created.id,
-            roNumber: created.roNumber,
-            observationCount: input.complaints.length,
-            isNewAdvisor: advisorCapture.serviceAdvisor.isNew,
-          },
-          ipAddress: getRequestIp(request),
+          dealershipId: session.dealershipId,
+          roNumber: input.roNumber,
+          error: error instanceof Error ? error.message : 'unknown',
         });
+        return handleRouteError(error, 'ros.create');
       }
 
-      await writeAuditLog({
-        action: 'ro.create',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairOrder',
-        entityId: created.id,
-        metadata: { roNumber: created.roNumber },
-        ipAddress: getRequestIp(request),
-      });
+      try {
+        if (advisorCapture?.serviceAdvisor) {
+          await writeAuditLog({
+            action: 'advisor.capture',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'serviceAdvisor',
+            entityId: advisorCapture.serviceAdvisor.id,
+            metadata: {
+              repairOrderId: created.id,
+              roNumber: created.roNumber,
+              observationCount: input.complaints.length,
+              isNewAdvisor: advisorCapture.serviceAdvisor.isNew,
+            },
+            ipAddress: getRequestIp(request),
+          });
+        }
 
-      return { repairOrder: dbToRepairOrder(created) };
+        await writeAuditLog({
+          action: 'ro.create',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'repairOrder',
+          entityId: created.id,
+          metadata: { roNumber: created.roNumber },
+          ipAddress: getRequestIp(request),
+        });
+
+        return { repairOrder: dbToRepairOrder(created) };
+      } catch (error) {
+        logger.error('ros.create.post_create_failed', {
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+          repairOrderId: created.id,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
+        return handleRouteError(error, 'ros.create');
+      }
     },
     { rateLimitKey: 'ros.create' }
   );
