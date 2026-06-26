@@ -46,4 +46,9 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig);
+export default withSentryConfig(nextConfig, {
+  org: 'clarityauto',
+  project: 'clarity-auto',
+  silent: true,
+  hideSourceMaps: true,
+});
