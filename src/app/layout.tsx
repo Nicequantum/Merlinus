@@ -20,17 +20,20 @@ export const metadata: Metadata = {
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
+    // iOS home screen — icon-512.png; include one entry without `sizes` for Safari.
     apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-      { url: '/apple-touch-icon-precomposed.png', sizes: '180x180', type: 'image/png' },
-      { url: '/icon-167.png', sizes: '167x167', type: 'image/png' },
-      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '180x180', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'Merlin',
+  },
+  other: {
+    'apple-mobile-web-app-capable': 'yes',
   },
 };
 
