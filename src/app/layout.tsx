@@ -20,10 +20,10 @@ export const metadata: Metadata = {
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    // iOS home screen — icon-512.png; include one entry without `sizes` for Safari.
+    // Home screen / PWA only — Mercedes emblem PNGs (never logo.svg).
     apple: [
       { url: '/icon-512.png', type: 'image/png' },
-      { url: '/icon-512.png', sizes: '180x180', type: 'image/png' },
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
   },
