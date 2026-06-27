@@ -1,7 +1,21 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, BookmarkPlus, Camera, Copy, Download, FileText, Loader2, RefreshCw, Shield, Sparkles, Zap } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  BookmarkPlus,
+  Camera,
+  Copy,
+  Download,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Save,
+  Shield,
+  Sparkles,
+  Zap,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { StableInput } from '@/components/StableInput';
@@ -15,6 +29,8 @@ import {
 } from '@/components/StoryQualityPanel';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
+import { TechnicianCertificationSection } from '@/components/TechnicianCertificationSection';
+import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
@@ -34,6 +50,8 @@ interface LineViewProps {
   storyQuality: StoryQualityResult | null;
   storyReview: StoryReviewResult | null;
   storyQualityStale: boolean;
+  storyCertification: StoryCertificationRecord | null;
+  isCertifyingStory: boolean;
   lastGeneratedStoryText: string | null;
   cdkSanitizedNotice?: boolean;
   onClearCdkSanitizedNotice?: () => void;
@@ -47,6 +65,7 @@ interface LineViewProps {
   onApplyCustomerPayTemplate: (templateId: string) => void | Promise<void>;
   onClearCustomerPayMode?: () => void | Promise<void>;
   onAcknowledgeStoryBaseline: (text: string) => void;
+  onCertifyAndSaveStory: (storyText: string, certifiedByName: string) => void | Promise<void>;
 }
 
 function complaintLabel(labels: string[] | undefined, index: number): string {
@@ -71,6 +90,8 @@ export function LineView({
   storyQuality,
   storyReview,
   storyQualityStale,
+  storyCertification,
+  isCertifyingStory,
   lastGeneratedStoryText,
   cdkSanitizedNotice = false,
   onClearCdkSanitizedNotice,
@@ -84,6 +105,7 @@ export function LineView({
   onApplyCustomerPayTemplate,
   onClearCustomerPayMode,
   onAcknowledgeStoryBaseline,
+  onCertifyAndSaveStory,
 }: LineViewProps) {
   const isCustomerPayLine = isCustomerPayRepairLine(line);
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
@@ -94,11 +116,38 @@ export function LineView({
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [libraryRefreshKey, setLibraryRefreshKey] = useState(0);
+  const [certificationChecked, setCertificationChecked] = useState(false);
+  const [certificationName, setCertificationName] = useState('');
+
+  const showCertificationSection = !isCustomerPayLine && Boolean(storyQuality);
+  const isStoryCertified = Boolean(storyCertification);
+  const isCertificationComplete =
+    certificationChecked && certificationName.trim().length >= 2;
+  const hasCompletedAuditForCurrentStory = Boolean(storyQuality) || storyQualityStale;
+  const certificationActionsLocked =
+    !isCustomerPayLine &&
+    Boolean(lastGeneratedStoryText) &&
+    hasCompletedAuditForCurrentStory &&
+    !isStoryCertified;
 
   useEffect(() => {
     setShowSaveTemplate(false);
     setShowTemplateLibrary(false);
+    setCertificationChecked(false);
+    setCertificationName('');
   }, [line.id]);
+
+  useEffect(() => {
+    setCertificationChecked(false);
+    setCertificationName('');
+  }, [storyQuality?.scoredAgainstStory, storyQuality?.score]);
+
+  useEffect(() => {
+    if (storyCertification) {
+      setCertificationChecked(true);
+      setCertificationName(storyCertification.certifiedByName);
+    }
+  }, [storyCertification]);
 
   const canSaveAsTemplate = useMemo(() => {
     return Boolean(lastGeneratedStoryText && line.warrantyStory?.trim());
@@ -148,6 +197,11 @@ export function LineView({
 
   const handleReviewStory = () => {
     void onReviewStory(readStoryText());
+  };
+
+  const handleCertifyAndSave = () => {
+    if (!isCertificationComplete || isStoryCertified) return;
+    void onCertifyAndSaveStory(readStoryText(), certificationName.trim());
   };
 
   const handlePdf = async () => {
@@ -455,15 +509,50 @@ export function LineView({
               </div>
             )}
 
+            {showCertificationSection && (
+              <TechnicianCertificationSection
+                lineId={line.id}
+                checked={certificationChecked}
+                certifiedName={certificationName}
+                onCheckedChange={setCertificationChecked}
+                onNameChange={setCertificationName}
+                isComplete={isCertificationComplete}
+                isSaved={isStoryCertified}
+              />
+            )}
+
             <div className="mt-4 pt-4 benz-divider space-y-3">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="primary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm touch-target"
-              >
-                <Copy size={18} />
-                Copy for CDK
-              </button>
+              <div className={`grid gap-2.5 ${showCertificationSection ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  disabled={certificationActionsLocked}
+                  className="primary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm touch-target disabled:opacity-50"
+                >
+                  <Copy size={18} />
+                  Copy for CDK
+                </button>
+                {showCertificationSection && (
+                  <button
+                    type="button"
+                    onClick={handleCertifyAndSave}
+                    disabled={
+                      !isCertificationComplete || isCertifyingStory || isStoryCertified
+                    }
+                    className="secondary-btn benz-btn-accent-outline h-13 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                  >
+                    {isCertifyingStory ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" /> Saving…
+                      </>
+                    ) : (
+                      <>
+                        <Save size={18} /> Save
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
 
               {!isCustomerPayLine && (
                 <>

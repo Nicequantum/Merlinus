@@ -6,6 +6,7 @@ import {
   extractLetterLabeledComplaintsWithLabels,
   extractServiceAdvisorFromText,
   isPlausibleComplaintText,
+  mergeMultiPassOcrExtractions,
   mergeROExtractions,
   normalizeComplaintForDisplay,
   parseStructuredROText,
@@ -575,5 +576,33 @@ B. CHECK ENGINE LIGHT ON`);
     const merged = mergeROExtractions(grokParsed, ocrParsed, COLLAPSED_OCR_LINE);
     assert.equal(merged.serviceAdvisorName, 'Maria Lopez');
     assert.equal(extractServiceAdvisorFromText('Service Advisor: JORDAN REYES'), 'JORDAN REYES');
+  });
+
+  test('mergeMultiPassOcrExtractions favors VIN agreed on by two passes', () => {
+    const sharedVin = 'W1KZF8DB5LA123456';
+    const passA = parseStructuredROText(
+      `RO Number: 452891\nVIN: ${sharedVin}\nMileage In: 42150\nCustomer Name: JOHN SMITH`
+    );
+    const passB = parseStructuredROText(
+      `RO# 452891\nVehicle VIN ${sharedVin}\nOdometer: 42150\nCustomer: JOHN SMITH`
+    );
+    const passC = parseStructuredROText(
+      'RO Number: 452891\nVIN: W1KZF8DB5LA999999\nMileage In: 42150\nCustomer Name: JOHN SMITH'
+    );
+
+    const merged = mergeMultiPassOcrExtractions([passA, passB, passC]);
+    assert.equal(merged.roNumber, '452891');
+    assert.equal(merged.vehicle.vin, sharedVin);
+    assert.equal(merged.vehicle.mileageIn, '42150');
+    assert.equal(merged.customerName, 'JOHN SMITH');
+  });
+
+  test('mergeMultiPassOcrExtractions rejects lone hallucinated VIN when passes disagree', () => {
+    const passA = parseStructuredROText('RO Number: 452891\nVIN: W1KZF8DB5LA123456');
+    const passB = parseStructuredROText('RO Number: 452891\nVIN: W1KZF8DB5LA654321');
+
+    const merged = mergeMultiPassOcrExtractions([passA, passB]);
+    assert.equal(merged.roNumber, '452891');
+    assert.equal(merged.vehicle.vin, '');
   });
 });

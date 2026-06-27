@@ -120,13 +120,19 @@ export function useROPersistence(
   }, []);
 
   const applyROUpdate = useCallback(
-    (updater: (ro: RepairOrder) => RepairOrder, options?: { immediate?: boolean }) => {
+    (
+      updater: (ro: RepairOrder) => RepairOrder,
+      options?: { immediate?: boolean; skipPersist?: boolean }
+    ) => {
       const base = roRef.current;
       if (!base) return null;
       const updated = ensureComplaintIds(structuredClone(updater(base)));
       roRef.current = updated;
       setCurrentRO(updated);
       setAllROs((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      if (options?.skipPersist) {
+        return updated;
+      }
       if (options?.immediate) {
         debouncedPersistRef.current.cancel();
         void saveROImmediate(updated);

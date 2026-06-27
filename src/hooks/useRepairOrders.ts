@@ -31,7 +31,11 @@ import { useROList } from '@/hooks/repairOrders/useROList';
 import { useROPersistence } from '@/hooks/repairOrders/useROPersistence';
 import { useROScan } from '@/hooks/repairOrders/useROScan';
 import { useROSearch } from '@/hooks/repairOrders/useROSearch';
-import { useROStoryWorkflow } from '@/hooks/repairOrders/useROStoryWorkflow';
+import {
+  useROStoryWorkflow,
+  type StoryCertificationRecord,
+} from '@/hooks/repairOrders/useROStoryWorkflow';
+import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import {
   createManualRepairOrder,
   createNewRepairLine,
@@ -63,6 +67,10 @@ export function useRepairOrders({
   const [cdkSanitizedByLine, setCdkSanitizedByLine] = useState<Record<string, boolean>>({});
   const [storyQualityByLine, setStoryQualityByLine] = useState<Record<string, StoryQualityResult>>({});
   const [storyReviewByLine, setStoryReviewByLine] = useState<Record<string, StoryReviewResult>>({});
+  const [storyCertificationByLine, setStoryCertificationByLine] = useState<
+    Record<string, StoryCertificationRecord>
+  >({});
+  const [isCertifyingStory, setIsCertifyingStory] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
   const [scoringLineId, setScoringLineId] = useState<string | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -70,6 +78,7 @@ export function useRepairOrders({
   const [openingROId, setOpeningROId] = useState<string | null>(null);
   const roRef = useRef<RepairOrder | null>(null);
   const openingROInFlightRef = useRef<string | null>(null);
+  const scanInFlightRef = useRef(false);
   const generateStorySeqRef = useRef(0);
   const storyGenerationInFlightRef = useRef(false);
   const scoreStorySeqRef = useRef(0);
@@ -108,9 +117,15 @@ export function useRepairOrders({
     cancelPendingSave();
   }, [cancelPendingSave, flushPendingSave]);
 
-  const openScanResultView = useCallback(() => {
-    setView('ro');
-  }, []);
+  const openScanResultView = useCallback(
+    (repairOrder: RepairOrder) => {
+      const normalized = ensureComplaintIds(repairOrder);
+      roRef.current = normalized;
+      setCurrentRO(normalized);
+      setView('ro');
+    },
+    [roRef]
+  );
 
   const navigateView = useCallback(
     (next: AppView) => {
@@ -141,6 +156,7 @@ export function useRepairOrders({
     setCurrentRO,
     prepareForScan,
     openScanResultView,
+    scanInFlightRef,
     onOcrStart,
     onOcrFinish,
     setOcrProgress,
@@ -154,6 +170,7 @@ export function useRepairOrders({
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
   useEffect(() => {
+    if (scanInFlightRef.current) return;
     if (view === 'ro' && !currentRO) {
       setView('home');
       return;
@@ -278,6 +295,24 @@ export function useRepairOrders({
     }
   }, [navigateView]);
 
+  const isStoryCertificationPending = useCallback(
+    (lineId: string, line?: RepairLine): boolean => {
+      const targetLine = line ?? roRef.current?.repairLines.find((l) => l.id === lineId);
+      if (!targetLine || isCustomerPayRepairLine(targetLine)) return false;
+      if (!lastGeneratedStoryByLine[lineId]) return false;
+
+      const quality = storyQualityByLine[lineId];
+      if (!quality) return false;
+
+      const storyText = targetLine.warrantyStory?.trim() ?? '';
+      if (!storyText || quality.scoredAgainstStory?.trim() !== storyText) return false;
+
+      const certification = storyCertificationByLine[lineId];
+      return !certification || certification.storyText !== storyText;
+    },
+    [lastGeneratedStoryByLine, roRef, storyCertificationByLine, storyQualityByLine]
+  );
+
   const updateLine = useCallback(
     (lineId: string, updates: Partial<RepairLine>) => {
       let nextUpdates = updates;
@@ -288,14 +323,21 @@ export function useRepairOrders({
           setCdkSanitizedByLine((prev) => ({ ...prev, [lineId]: true }));
         }
       }
-      applyROUpdate((ro) => ({
-        ...ro,
-        repairLines: ro.repairLines.map((line) =>
-          line.id === lineId ? { ...line, ...nextUpdates } : line
-        ),
-      }));
+
+      const skipPersist =
+        updates.warrantyStory !== undefined && isStoryCertificationPending(lineId);
+
+      applyROUpdate(
+        (ro) => ({
+          ...ro,
+          repairLines: ro.repairLines.map((line) =>
+            line.id === lineId ? { ...line, ...nextUpdates } : line
+          ),
+        }),
+        skipPersist ? { skipPersist: true } : undefined
+      );
     },
-    [applyROUpdate]
+    [applyROUpdate, isStoryCertificationPending]
   );
 
   const updateVehicle = useCallback(
@@ -622,6 +664,15 @@ export function useRepairOrders({
     });
   }, []);
 
+  const clearLineCertification = useCallback((lineId: string) => {
+    setStoryCertificationByLine((prev) => {
+      if (!prev[lineId]) return prev;
+      const next = { ...prev };
+      delete next[lineId];
+      return next;
+    });
+  }, []);
+
   const { applyCustomerPayTemplate, clearCustomerPayMode, generateStory, scoreStory, reviewStory } =
     useROStoryWorkflow(
       {
@@ -644,9 +695,72 @@ export function useRepairOrders({
         setStoryQualityByLine,
         setStoryReviewByLine,
         setCdkSanitizedByLine,
+        setStoryCertificationByLine,
       },
-      { flushPendingSave, applyROUpdate, clearLineQualityState, invalidateReviewRequests, invalidateScoreRequests }
+      {
+        flushPendingSave,
+        applyROUpdate,
+        clearLineQualityState,
+        clearLineCertification,
+        invalidateReviewRequests,
+        invalidateScoreRequests,
+      }
     );
+
+  const certifyAndSaveStory = useCallback(
+    async (lineId: string, warrantyStory: string, certifiedByName: string) => {
+      await flushPendingSave();
+      const latestRO = roRef.current;
+      if (!latestRO) {
+        toast.error('Repair order not loaded — go back and reopen the line');
+        return;
+      }
+
+      const line = latestRO.repairLines.find((l) => l.id === lineId);
+      if (!line) {
+        toast.error('Repair line not found — refresh the RO and try again');
+        return;
+      }
+      if (isCustomerPayRepairLine(line)) {
+        toast.error('Customer Pay stories do not require certification');
+        return;
+      }
+
+      setIsCertifyingStory(true);
+      try {
+        const result = await api.certifyStory(
+          latestRO.id,
+          lineId,
+          warrantyStory,
+          certifiedByName.trim()
+        );
+        const certifiedStory = result.warrantyStory.trim();
+        setStoryCertificationByLine((prev) => ({
+          ...prev,
+          [lineId]: {
+            certifiedByName: result.certifiedByName,
+            certifiedAt: result.certifiedAt,
+            storyText: certifiedStory,
+          },
+        }));
+        applyROUpdate(
+          (ro) => ({
+            ...ro,
+            repairLines: ro.repairLines.map((l) =>
+              l.id === lineId ? { ...l, warrantyStory: result.warrantyStory } : l
+            ),
+          }),
+          { immediate: true }
+        );
+        toast.success('Story certified and saved');
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : 'Failed to certify and save story');
+      } finally {
+        setIsCertifyingStory(false);
+      }
+    },
+    [applyROUpdate, flushPendingSave, roRef]
+  );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {
     setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: text }));
@@ -695,6 +809,16 @@ export function useRepairOrders({
     return quality.scoredAgainstStory?.trim() !== storyText;
   })();
 
+  const storyCertificationForLine = (() => {
+    if (!currentLineId) return null;
+    const certification = storyCertificationByLine[currentLineId];
+    const storyText = currentLine?.warrantyStory?.trim() ?? '';
+    if (!certification || !storyText || certification.storyText !== storyText) return null;
+    return certification;
+  })();
+
+
+
   /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
   const filteredROs = searchTerm.trim() ? searchROs : todayROs;
 
@@ -732,6 +856,8 @@ export function useRepairOrders({
     storyQualityForLine,
     storyReviewForLine,
     storyQualityStaleForLine,
+    storyCertificationForLine,
+    isCertifyingStory,
     lastGeneratedStoryForLine,
     cdkSanitizedForLine,
     clearCdkSanitizedNotice,
@@ -776,6 +902,7 @@ export function useRepairOrders({
     generateStory,
     scoreStory,
     reviewStory,
+    certifyAndSaveStory,
     acknowledgeStoryBaseline,
   };
 }

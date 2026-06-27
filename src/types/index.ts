@@ -334,6 +334,7 @@ export const AUDIT_ACTIONS = [
   'story.generate',
   'story.review',
   'story.edit',
+  'story.certify',
   'story.pdf_export',
   'user.create',
   'user.deactivate',

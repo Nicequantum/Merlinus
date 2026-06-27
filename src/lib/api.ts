@@ -251,6 +251,16 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 120_000 }
     ),
 
+  certifyStory: (roId: string, lineId: string, warrantyStory: string, certifiedByName: string) =>
+    apiFetch<{ warrantyStory: string; certifiedAt: string; certifiedByName: string }>(
+      `/api/repair-orders/${roId}/lines/${lineId}/certify-story`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ warrantyStory, certifiedByName }),
+        timeoutMs: 30_000,
+      }
+    ),
+
   /** Customer Pay — instant pre-written story; bypasses Grok and quality audit. */
   applyCustomerPayTemplate: (roId: string, lineId: string, templateId: string) =>
     apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true; idempotent?: boolean; cdkSanitized?: boolean }>(

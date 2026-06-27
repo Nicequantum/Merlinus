@@ -156,6 +156,13 @@ export const reviewStorySchema = z.object({
   warrantyStory: safeText(5000),
 });
 
+export const certifyStorySchema = z.object({
+  warrantyStory: safeText(5000),
+  certifiedByName: safeText(100).refine((value) => value.trim().length >= 2, {
+    message: 'Technician full name is required',
+  }),
+});
+
 export const saveTemplateFromStorySchema = z.object({
   title: safeText(120),
   category: z.enum(['customer', 'warranty']),

@@ -245,6 +245,8 @@ export function BenzTechApp() {
           storyQuality={ro.storyQualityForLine}
           storyReview={ro.storyReviewForLine}
           storyQualityStale={ro.storyQualityStaleForLine}
+          storyCertification={ro.storyCertificationForLine}
+          isCertifyingStory={ro.isCertifyingStory}
           lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
           cdkSanitizedNotice={ro.cdkSanitizedForLine}
           onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
@@ -280,6 +282,11 @@ export function BenzTechApp() {
             runAction('Clear Customer Pay mode', () => ro.clearCustomerPayMode(ro.currentLine!.id))
           }
           onAcknowledgeStoryBaseline={(text) => ro.acknowledgeStoryBaseline(ro.currentLine!.id, text)}
+          onCertifyAndSaveStory={(storyText, certifiedByName) =>
+            runAction('Certify and save story', () =>
+              ro.certifyAndSaveStory(ro.currentLine!.id, storyText, certifiedByName)
+            )
+          }
         />
         </ViewErrorBoundary>
       )}

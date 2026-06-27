@@ -23,6 +23,7 @@ export type AuditAction =
   | 'story.generate'
   | 'story.review'
   | 'story.edit'
+  | 'story.certify'
   | 'story.pdf_export'
   | 'user.create'
   | 'user.deactivate'
@@ -54,6 +55,7 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.password_change',
   'story.generate',
   'story.review',
+  'story.certify',
   'customerPayTemplateApplied',
 ]);
 
@@ -62,6 +64,7 @@ export const STORY_PROMPT_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'story.generate',
   'story.review',
   'story.edit',
+  'story.certify',
   'story.pdf_export',
 ]);
 

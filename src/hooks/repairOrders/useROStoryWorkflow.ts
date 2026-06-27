@@ -52,6 +52,12 @@ interface StoryWorkflowRefs {
   storyReviewInFlightRef: React.MutableRefObject<boolean>;
 }
 
+export interface StoryCertificationRecord {
+  certifiedByName: string;
+  certifiedAt: string;
+  storyText: string;
+}
+
 interface StoryWorkflowSetters {
   setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>;
   setGeneratingLineId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -63,6 +69,7 @@ interface StoryWorkflowSetters {
   setStoryQualityByLine: React.Dispatch<React.SetStateAction<Record<string, StoryQualityResult>>>;
   setStoryReviewByLine: React.Dispatch<React.SetStateAction<Record<string, StoryReviewResult>>>;
   setCdkSanitizedByLine: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setStoryCertificationByLine: React.Dispatch<React.SetStateAction<Record<string, StoryCertificationRecord>>>;
 }
 
 /** M21: story generation, review, and Customer Pay template workflow. */
@@ -76,6 +83,7 @@ export function useROStoryWorkflow(
       options?: { immediate?: boolean }
     ) => RepairOrder | null;
     clearLineQualityState: (lineId: string) => void;
+    clearLineCertification: (lineId: string) => void;
     invalidateReviewRequests: () => void;
     invalidateScoreRequests: () => void;
   }
@@ -92,6 +100,7 @@ export function useROStoryWorkflow(
       }
 
       deps.clearLineQualityState(lineId);
+      deps.clearLineCertification(lineId);
       deps.invalidateReviewRequests();
 
       try {
@@ -179,6 +188,7 @@ export function useROStoryWorkflow(
         }
 
         deps.clearLineQualityState(lineId);
+        deps.clearLineCertification(lineId);
         deps.invalidateReviewRequests();
         deps.invalidateScoreRequests();
         const { warrantyStory, cdkSanitized } = await api.generateStory(latestRO.id, lineId);
@@ -279,6 +289,12 @@ export function useROStoryWorkflow(
         if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
 
         const baseline = (quality.scoredAgainstStory ?? storyText).trim();
+        setters.setStoryCertificationByLine((prev) => {
+          if (!prev[lineId]) return prev;
+          const next = { ...prev };
+          delete next[lineId];
+          return next;
+        });
         setters.setStoryQualityByLine((prev) => ({
           ...prev,
           [lineId]: { ...quality, scoredAgainstStory: baseline },
@@ -316,6 +332,7 @@ export function useROStoryWorkflow(
       }
 
       deps.clearLineQualityState(lineId);
+      deps.clearLineCertification(lineId);
       const seq = ++refs.reviewStorySeqRef.current;
       refs.storyReviewInFlightRef.current = true;
       setters.setReviewingLineId(lineId);
@@ -355,6 +372,12 @@ export function useROStoryWorkflow(
           review.scoredAgainstStory = storyText;
         }
 
+        setters.setStoryCertificationByLine((prev) => {
+          if (!prev[lineId]) return prev;
+          const next = { ...prev };
+          delete next[lineId];
+          return next;
+        });
         setters.setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
         setters.setStoryQualityByLine((prev) => ({ ...prev, [lineId]: review }));
         toast.success(`MI 4.3 review complete — ${review.score}/100 (${review.grade})`);

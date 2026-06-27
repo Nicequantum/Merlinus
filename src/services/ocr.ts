@@ -380,23 +380,55 @@ export function mergeOcrTextPasses(...passes: string[]): string {
   return [...primaryLines, ...extras].join('\n');
 }
 
-/** Accuracy-first OCR: B&W full + fast + faded + sparse column + original image passes. */
+export type OcrPassMode = 'color' | 'grayscale' | 'enhanced';
+
+export interface OcrPassResult {
+  mode: OcrPassMode;
+  text: string;
+}
+
+export interface MultiPassOcrResult {
+  passes: OcrPassResult[];
+  mergedText: string;
+}
+
+/**
+ * Three-pass RO OCR: color → high-contrast B&W → enhanced contrast.
+ * Each pass uses different preprocessing to resist glare, faded paper, and OCR hallucinations.
+ */
 export async function runMultiPassOCR(
   file: File,
   onProgress?: (p: number) => void
-): Promise<string> {
-  const full = await preprocessImageForOCR(file, 'full');
-  const fast = await preprocessImageForOCR(file, 'fast');
-  const faded = await preprocessFaded(file);
+): Promise<MultiPassOcrResult> {
+  const highContrast = await preprocessFast(file);
+  const enhanced = await preprocessFaded(file);
 
-  const pass1 = await runOCR(full, onProgress ? (p) => onProgress(Math.round(p * 0.2)) : undefined, '6');
-  const pass2 = await runOCR(fast, onProgress ? (p) => onProgress(20 + Math.round(p * 0.15)) : undefined, '6');
-  const pass3 = await runOCR(faded, onProgress ? (p) => onProgress(35 + Math.round(p * 0.15)) : undefined, '6');
-  const pass4 = await runOCR(full, onProgress ? (p) => onProgress(50 + Math.round(p * 0.15)) : undefined, '4');
-  const pass5 = await runOCR(file, onProgress ? (p) => onProgress(65 + Math.round(p * 0.15)) : undefined, '6');
-  const pass6 = await runOCR(full, onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined, '11');
+  const pass1 = await runOCR(
+    file,
+    onProgress ? (p) => onProgress(Math.round(p * 0.34)) : undefined,
+    '6'
+  );
+  const pass2 = await runOCR(
+    highContrast,
+    onProgress ? (p) => onProgress(34 + Math.round(p * 0.33)) : undefined,
+    '6'
+  );
+  const pass3 = await runOCR(
+    enhanced,
+    onProgress ? (p) => onProgress(67 + Math.round(p * 0.33)) : undefined,
+    '6'
+  );
 
-  return mergeOcrTextPasses(pass1, pass2, pass3, pass4, pass5, pass6);
+  const passes: OcrPassResult[] = [
+    { mode: 'color', text: pass1 },
+    { mode: 'grayscale', text: pass2 },
+    { mode: 'enhanced', text: pass3 },
+  ];
+
+  return {
+    passes,
+    mergedText: mergeOcrTextPasses(pass1, pass2, pass3),
+  };
 }
 
 /** Optimized for XENTRY / UI screenshots — preserves tones, tries multiple page layouts. */

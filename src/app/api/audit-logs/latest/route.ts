@@ -2,7 +2,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 
-const WARRANTY_STORY_ACTIONS = ['story.generate', 'story.review', 'story.edit'] as const;
+const WARRANTY_STORY_ACTIONS = ['story.generate', 'story.review', 'story.edit', 'story.certify'] as const;
 const CUSTOMER_PAY_STORY_ACTIONS = [
   'customerPayTemplateApplied',
   'customerPayStory.edit',

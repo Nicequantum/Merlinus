@@ -1251,6 +1251,113 @@ function mergeVehicleFields(primary: VehicleInfo, supplement: VehicleInfo): Vehi
   };
 }
 
+function normalizeConsensusVin(vin?: string): string {
+  const cleaned = (vin || '').replace(/[^A-HJ-NPR-Z0-9]/gi, '').toUpperCase();
+  return cleaned.length === 17 ? cleaned : '';
+}
+
+function pickConsensusScalar(values: string[], minAgreement = 2): string {
+  const normalized = values.map((v) => v.trim()).filter(Boolean);
+  if (normalized.length === 0) return '';
+
+  const counts = new Map<string, { count: number; original: string }>();
+  for (const value of normalized) {
+    const key = value.toLowerCase();
+    const entry = counts.get(key);
+    if (entry) entry.count += 1;
+    else counts.set(key, { count: 1, original: value });
+  }
+
+  let best = '';
+  let bestCount = 0;
+  for (const { count, original } of counts.values()) {
+    if (count > bestCount) {
+      bestCount = count;
+      best = original;
+    }
+  }
+
+  return bestCount >= minAgreement ? best : normalized.sort((a, b) => b.length - a.length)[0] || '';
+}
+
+function pickConsensusVin(values: string[]): string {
+  const vins = values.map(normalizeConsensusVin).filter(Boolean);
+  if (vins.length === 0) return '';
+
+  const counts = new Map<string, number>();
+  for (const vin of vins) counts.set(vin, (counts.get(vin) || 0) + 1);
+
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (ranked[0][1] >= 2) return ranked[0][0];
+  if (ranked.length === 1) return ranked[0][0];
+  return '';
+}
+
+function pickConsensusMileage(values: string[]): string {
+  const digits = values
+    .map((v) => v.replace(/[^0-9]/g, ''))
+    .filter((v) => v.length >= 3 && v.length <= 7);
+  if (digits.length === 0) return '';
+
+  const counts = new Map<string, number>();
+  for (const value of digits) counts.set(value, (counts.get(value) || 0) + 1);
+
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (ranked[0][1] >= 2) return ranked[0][0];
+  return digits[0] || '';
+}
+
+/**
+ * Cross-validate structured fields across OCR passes.
+ * Favors values agreed on by 2+ passes to resist single-pass hallucinations.
+ */
+export function mergeMultiPassOcrExtractions(
+  extractions: StructuredROExtraction[],
+  rawTexts: string[] = []
+): StructuredROExtraction {
+  const valid = extractions.filter(Boolean);
+  if (valid.length === 0) {
+    return {
+      vehicle: { vin: '', year: '', make: '', model: '', engine: '', mileageIn: '', mileageOut: '' },
+      complaints: [],
+      customerName: '',
+      roNumber: '',
+    };
+  }
+  if (valid.length === 1) return valid[0];
+
+  let merged = valid[0];
+  for (let i = 1; i < valid.length; i++) {
+    merged = mergeROExtractions(merged, valid[i], rawTexts[i] || '');
+  }
+
+  const consensusRo = pickConsensusScalar(valid.map((e) => e.roNumber || ''));
+  const consensusCustomer = pickConsensusScalar(
+    valid.map((e) => e.customerName || '').filter((name) => name.length > 2)
+  );
+  const consensusVin = pickConsensusVin(valid.map((e) => e.vehicle?.vin || ''));
+  const consensusMileage = pickConsensusMileage(valid.map((e) => e.vehicle?.mileageIn || ''));
+  const consensusYear = pickConsensusScalar(valid.map((e) => e.vehicle?.year || ''));
+  const consensusMake = pickConsensusScalar(valid.map((e) => e.vehicle?.make || ''));
+  const consensusModel = pickConsensusScalar(valid.map((e) => e.vehicle?.model || ''));
+  const consensusAdvisor = pickConsensusScalar(valid.map((e) => e.serviceAdvisorName || ''));
+
+  return {
+    ...merged,
+    roNumber: consensusRo || merged.roNumber,
+    customerName: consensusCustomer || merged.customerName,
+    serviceAdvisorName: consensusAdvisor || merged.serviceAdvisorName,
+    vehicle: {
+      ...merged.vehicle,
+      vin: consensusVin || (valid.length === 1 ? merged.vehicle.vin : ''),
+      mileageIn: consensusMileage || merged.vehicle.mileageIn,
+      year: consensusYear || merged.vehicle.year,
+      make: consensusMake || merged.vehicle.make,
+      model: consensusModel || merged.vehicle.model,
+    },
+  };
+}
+
 /** Merge Grok vision output with on-device OCR (labels from OCR column, text from best source). */
 export function mergeROExtractions(
   primary: StructuredROExtraction,

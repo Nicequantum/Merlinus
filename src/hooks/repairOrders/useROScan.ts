@@ -17,11 +17,13 @@ import {
   extractCustomerName,
   extractRoNumberFromText,
   finalizeLabeledComplaints,
+  mergeMultiPassOcrExtractions,
   mergeROExtractions,
   parseStructuredROText,
   sanitizeComplaints,
   sanitizeVehicle,
 } from '@/utils/roExtractor';
+import type { StructuredROExtraction } from '@/types';
 import { normalizeScanFiles } from '@/utils/scanFileHelpers';
 import {
   classifyScanPages,
@@ -39,7 +41,8 @@ interface UseROScanOptions {
   /** Flush + cancel stale debounced saves before scan (prevents post-scan overwrite). */
   prepareForScan: () => Promise<void>;
   /** Open scanned RO without flushPendingSave — navigateView races with new RO state. */
-  openScanResultView: () => void;
+  openScanResultView: (repairOrder: RepairOrder) => void;
+  scanInFlightRef: MutableRefObject<boolean>;
   onOcrStart: (message?: string) => void;
   onOcrFinish: () => void;
   setOcrProgress: (p: number) => void;
@@ -53,6 +56,7 @@ export function useROScan({
   setCurrentRO,
   prepareForScan,
   openScanResultView,
+  scanInFlightRef,
   onOcrStart,
   onOcrFinish,
   setOcrProgress,
@@ -60,7 +64,6 @@ export function useROScan({
 }: UseROScanOptions) {
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const scanCancelledRef = useRef(false);
-  const scanInFlightRef = useRef(false);
   const scanSessionRef = useRef(0);
 
   const clearPendingPreviews = useCallback((images: PendingImage[]) => {
@@ -93,10 +96,11 @@ export function useROScan({
           complaints,
           complaintLabels,
         } as never);
-        roRef.current = ensureComplaintIds(repairOrder);
-        setAllROs((prev) => [repairOrder, ...prev]);
-        setCurrentRO(repairOrder);
-        openScanResultView();
+        const normalized = ensureComplaintIds(repairOrder);
+        roRef.current = normalized;
+        setAllROs((prev) => [normalized, ...prev.filter((r) => r.id !== normalized.id)]);
+        setCurrentRO(normalized);
+        openScanResultView(normalized);
         toast.success('Repair order created from scan');
         return true;
       } catch (e) {
@@ -125,16 +129,31 @@ export function useROScan({
           complaints,
           complaintLabels: parsed.complaintLabels,
         } as never);
-        roRef.current = ensureComplaintIds(repairOrder);
-        setAllROs((prev) => [repairOrder, ...prev]);
-        setCurrentRO(repairOrder);
-        openScanResultView();
+        const normalized = ensureComplaintIds(repairOrder);
+        roRef.current = normalized;
+        setAllROs((prev) => [normalized, ...prev.filter((r) => r.id !== normalized.id)]);
+        setCurrentRO(normalized);
+        openScanResultView(normalized);
         toast.success('Repair order created from scan');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
       }
     },
     [openScanResultView, roRef, setAllROs, setCurrentRO]
+  );
+
+  const mergePageOcrExtraction = useCallback(
+    (
+      accumulated: StructuredROExtraction | null,
+      passExtractions: StructuredROExtraction[],
+      passTexts: string[],
+      pageMergedText: string
+    ): StructuredROExtraction => {
+      const pageMerged = mergeMultiPassOcrExtractions(passExtractions, passTexts);
+      if (!accumulated) return pageMerged;
+      return mergeROExtractions(accumulated, pageMerged, pageMergedText);
+    },
+    []
   );
 
   const processScanImages = useCallback(
@@ -172,20 +191,33 @@ export function useROScan({
 
         const runClientOcr = async () => {
           let combinedText = '';
+          let structuredFromPasses: StructuredROExtraction | null = null;
+
           for (let i = 0; i < images.length; i++) {
-            if (!isActiveSession()) return '';
+            if (!isActiveSession()) return { combinedText: '', structuredFromPasses: null };
             const img = images[i];
             setScanStatusMessage(
-              `Reading page ${i + 1} of ${images.length} (multi-pass OCR for accuracy)…`
+              `Reading page ${i + 1} of ${images.length} (3-pass OCR: color, B&W, enhanced)…`
             );
             setOcrProgress(Math.round(30 + (i / images.length) * 15));
-            const text = await runMultiPassOCR(img.file, (p) => {
+
+            const ocrResult = await runMultiPassOCR(img.file, (p) => {
               if (!isActiveSession()) return;
               setOcrProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35));
             });
-            combinedText += `\n\n=== PAGE ${i + 1} ===\n` + text;
+
+            const passExtractions = ocrResult.passes.map((pass) => parseStructuredROText(pass.text));
+            const passTexts = ocrResult.passes.map((pass) => pass.text);
+            structuredFromPasses = mergePageOcrExtraction(
+              structuredFromPasses,
+              passExtractions,
+              passTexts,
+              ocrResult.mergedText
+            );
+            combinedText += `\n\n=== PAGE ${i + 1} ===\n${ocrResult.mergedText}`;
           }
-          return combinedText;
+
+          return { combinedText, structuredFromPasses };
         };
 
         setOcrProgress(35);
@@ -199,8 +231,11 @@ export function useROScan({
         setOcrProgress(42);
         setScanStatusMessage('AI vision extraction in progress (OCR continues in parallel)…');
 
-        const [ocrText, grokExtracted] = await Promise.all([ocrPromise, grokPromise]);
+        const [ocrResult, grokExtracted] = await Promise.all([ocrPromise, grokPromise]);
         if (!isActiveSession()) return;
+
+        const ocrText = ocrResult.combinedText;
+        const structuredFromPasses = ocrResult.structuredFromPasses;
 
         if (!ocrText?.trim() && !grokExtracted) {
           throw new Error('Could not read the repair order. Try sharper photos or fewer pages.');
@@ -213,7 +248,9 @@ export function useROScan({
         const vmiOcrText = combineVmiPages(classifiedPages);
         const vmiWarranty = extractVmiWarrantyInfo(vmiOcrText);
 
-        const ocrExtracted = roOcrText ? parseStructuredROText(roOcrText) : null;
+        const ocrExtracted =
+          structuredFromPasses ||
+          (roOcrText ? parseStructuredROText(roOcrText) : null);
         let extracted =
           grokExtracted && ocrExtracted
             ? mergeROExtractions(grokExtracted, ocrExtracted, roOcrText)
@@ -238,9 +275,7 @@ export function useROScan({
         }
 
         setOcrProgress(100);
-        setScanStatusMessage('Scan complete');
-        clearPendingPreviews(images);
-        setPendingROImages([]);
+        setScanStatusMessage('Opening repair order…');
       } catch (error) {
         if (!isActiveSession()) return;
         clientLog.error('RO scan error', error);
@@ -253,14 +288,24 @@ export function useROScan({
         }
       } finally {
         if (scanSessionRef.current === sessionId) {
-          scanInFlightRef.current = false;
-          onOcrFinish();
+          if (createdSuccessfully) {
+            clearPendingPreviews(images);
+            setPendingROImages([]);
+            requestAnimationFrame(() => {
+              scanInFlightRef.current = false;
+              onOcrFinish();
+            });
+          } else {
+            scanInFlightRef.current = false;
+            onOcrFinish();
+          }
         }
       }
     },
     [
       clearPendingPreviews,
       createROFromExtracted,
+      mergePageOcrExtraction,
       onOcrFinish,
       onOcrStart,
       prepareForScan,

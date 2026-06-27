@@ -33,6 +33,8 @@ const ALLOWED_STRING_KEYS = new Set([
   'qualityGrade',
   'action',
   'reason',
+  'certifiedByName',
+  'certifiedAt',
 ]);
 
 function sanitizePrimitive(value: unknown): unknown {
