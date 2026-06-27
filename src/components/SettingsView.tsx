@@ -49,7 +49,10 @@ export function SettingsView({
     name: '',
     password: '',
     role: 'technician' as 'technician' | 'manager' | 'service_advisor',
+    serviceAdvisorLinkMode: 'create' as 'existing' | 'create',
     serviceAdvisorId: '',
+    newAdvisorDisplayName: '',
+    newAdvisorCode: '',
   });
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -124,15 +127,38 @@ export function SettingsView({
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (newUser.role === 'service_advisor') {
+      if (newUser.serviceAdvisorLinkMode === 'existing' && !newUser.serviceAdvisorId) {
+        toast.error('Select a service advisor profile to link');
+        return;
+      }
+      if (newUser.serviceAdvisorLinkMode === 'create' && newUser.newAdvisorDisplayName.trim().length < 3) {
+        toast.error('Enter the advisor name (at least 3 characters)');
+        return;
+      }
+    }
+
     setCreating(true);
     try {
+      const isServiceAdvisor = newUser.role === 'service_advisor';
       await api.createUser({
         d7Number: newUser.d7Number,
         name: newUser.name,
         password: newUser.password,
         role: newUser.role,
-        serviceAdvisorId:
-          newUser.role === 'service_advisor' ? newUser.serviceAdvisorId : undefined,
+        ...(isServiceAdvisor
+          ? newUser.serviceAdvisorLinkMode === 'existing'
+            ? {
+                serviceAdvisorLinkMode: 'existing' as const,
+                serviceAdvisorId: newUser.serviceAdvisorId,
+              }
+            : {
+                serviceAdvisorLinkMode: 'create' as const,
+                newAdvisorDisplayName: newUser.newAdvisorDisplayName.trim(),
+                newAdvisorCode: newUser.newAdvisorCode.trim() || undefined,
+              }
+          : {}),
       });
       toast.success(
         newUser.role === 'service_advisor' ? 'Service advisor account created' : 'Technician account created'
@@ -142,10 +168,13 @@ export function SettingsView({
         name: '',
         password: '',
         role: 'technician',
+        serviceAdvisorLinkMode: 'create',
         serviceAdvisorId: '',
+        newAdvisorDisplayName: '',
+        newAdvisorCode: '',
       });
       setShowCreateForm(false);
-      await loadUsers();
+      await Promise.all([loadUsers(), loadAdvisorProfiles()]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
@@ -364,6 +393,11 @@ export function SettingsView({
                     ...u,
                     role: e.target.value as 'technician' | 'manager' | 'service_advisor',
                     serviceAdvisorId: e.target.value === 'service_advisor' ? u.serviceAdvisorId : '',
+                    serviceAdvisorLinkMode:
+                      e.target.value === 'service_advisor' ? u.serviceAdvisorLinkMode : 'create',
+                    newAdvisorDisplayName:
+                      e.target.value === 'service_advisor' ? u.newAdvisorDisplayName : '',
+                    newAdvisorCode: e.target.value === 'service_advisor' ? u.newAdvisorCode : '',
                   }))
                 }
                 className="benz-input"
@@ -373,22 +407,88 @@ export function SettingsView({
                 <option value="service_advisor">Service Advisor</option>
               </select>
               {newUser.role === 'service_advisor' ? (
-                <select
-                  value={newUser.serviceAdvisorId}
-                  onChange={(e) => setNewUser((u) => ({ ...u, serviceAdvisorId: e.target.value }))}
-                  className="benz-input"
-                  required
-                  disabled={advisorProfilesLoading}
-                >
-                  <option value="">
-                    {advisorProfilesLoading ? 'Loading advisor profiles…' : 'Link to service advisor profile'}
-                  </option>
-                  {advisorProfiles.map((advisor) => (
-                    <option key={advisor.id} value={advisor.id}>
-                      {advisor.displayName}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-3">
+                  <div>
+                    <label className="benz-label">Service advisor profile</label>
+                    <div className="flex gap-2">
+                      {(
+                        [
+                          { value: 'create', label: 'Create new profile' },
+                          { value: 'existing', label: 'Link existing profile' },
+                        ] as const
+                      ).map(({ value, label }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={creating}
+                          onClick={() =>
+                            setNewUser((u) => ({
+                              ...u,
+                              serviceAdvisorLinkMode: value,
+                            }))
+                          }
+                          className={`benz-tab-btn flex-1 text-xs font-medium disabled:opacity-60 ${
+                            newUser.serviceAdvisorLinkMode === value ? 'benz-tab-btn-active' : ''
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {newUser.serviceAdvisorLinkMode === 'existing' ? (
+                    <select
+                      value={newUser.serviceAdvisorId}
+                      onChange={(e) =>
+                        setNewUser((u) => ({ ...u, serviceAdvisorId: e.target.value }))
+                      }
+                      className="benz-input"
+                      required
+                      disabled={advisorProfilesLoading || creating}
+                    >
+                      <option value="">
+                        {advisorProfilesLoading
+                          ? 'Loading advisor profiles…'
+                          : advisorProfiles.length === 0
+                            ? 'No existing profiles available'
+                            : 'Select service advisor profile'}
+                      </option>
+                      {advisorProfiles.map((advisor) => (
+                        <option key={advisor.id} value={advisor.id}>
+                          {advisor.displayName}
+                          {advisor.advisorCode ? ` (${advisor.advisorCode})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Advisor name (as shown on repair orders)"
+                        value={newUser.newAdvisorDisplayName}
+                        onChange={(e) =>
+                          setNewUser((u) => ({ ...u, newAdvisorDisplayName: e.target.value }))
+                        }
+                        className="benz-input"
+                        required
+                        minLength={3}
+                        maxLength={48}
+                        disabled={creating}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Advisor code (optional)"
+                        value={newUser.newAdvisorCode}
+                        onChange={(e) =>
+                          setNewUser((u) => ({ ...u, newAdvisorCode: e.target.value }))
+                        }
+                        className="benz-input"
+                        maxLength={16}
+                        disabled={creating}
+                      />
+                    </>
+                  )}
+                </div>
               ) : null}
               <button type="submit" disabled={creating} className="primary-btn w-full h-11 text-sm disabled:opacity-50">
                 {creating ? 'Creating…' : 'Create account'}

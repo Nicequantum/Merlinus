@@ -394,7 +394,10 @@ export const api = {
     name: string;
     password: string;
     role: 'technician' | 'manager' | 'service_advisor';
+    serviceAdvisorLinkMode?: 'existing' | 'create';
     serviceAdvisorId?: string;
+    newAdvisorDisplayName?: string;
+    newAdvisorCode?: string;
   }) =>
     apiFetch<{ user: TechnicianUser }>('/api/users', {
       method: 'POST',

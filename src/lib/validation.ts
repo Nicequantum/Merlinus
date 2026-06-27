@@ -130,20 +130,50 @@ export const resolveAdvisorSchema = z.object({
   serviceAdvisorName: safeText(48),
 });
 
+export type ServiceAdvisorLinkMode = 'existing' | 'create';
+
+export function resolveServiceAdvisorLinkMode(input: {
+  role: 'technician' | 'manager' | 'service_advisor';
+  serviceAdvisorLinkMode?: ServiceAdvisorLinkMode;
+  serviceAdvisorId?: string;
+}): ServiceAdvisorLinkMode | null {
+  if (input.role !== 'service_advisor') return null;
+  if (input.serviceAdvisorLinkMode) return input.serviceAdvisorLinkMode;
+  return input.serviceAdvisorId?.trim() ? 'existing' : 'create';
+}
+
 export const createUserSchema = z
   .object({
     d7Number: d7NumberField,
     name: safeText(100),
     password: z.string().min(8).max(128),
     role: z.enum(['technician', 'manager', 'service_advisor']).default('technician'),
+    serviceAdvisorLinkMode: z.enum(['existing', 'create']).optional(),
     serviceAdvisorId: safeIdOptional(64),
+    newAdvisorDisplayName: safeTextOptional(48),
+    newAdvisorCode: safeTextOptional(16),
   })
   .superRefine((data, ctx) => {
-    if (data.role === 'service_advisor' && !data.serviceAdvisorId?.trim()) {
+    if (data.role !== 'service_advisor') return;
+
+    const mode = resolveServiceAdvisorLinkMode(data);
+    if (mode === 'existing') {
+      if (!data.serviceAdvisorId?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Select a service advisor profile to link',
+          path: ['serviceAdvisorId'],
+        });
+      }
+      return;
+    }
+
+    const displayName = data.newAdvisorDisplayName?.trim() ?? '';
+    if (displayName.length < 3) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Service advisor accounts must be linked to a Service Advisor profile',
-        path: ['serviceAdvisorId'],
+        message: 'Enter the advisor name (at least 3 characters)',
+        path: ['newAdvisorDisplayName'],
       });
     }
   });

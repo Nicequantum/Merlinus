@@ -3,9 +3,17 @@ import { withAuth } from '@/lib/apiRoute';
 import { hashPassword } from '@/lib/auth';
 import { internalEmailForD7 } from '@/lib/d7Number';
 import { prisma } from '@/lib/db';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { createUserSchema, parseRequestBody } from '@/lib/validation';
+import {
+  AdvisorManagementError,
+  createManualServiceAdvisor,
+} from '@/lib/serviceAdvisorManagement';
+import {
+  createUserSchema,
+  parseRequestBody,
+  resolveServiceAdvisorLinkMode,
+} from '@/lib/validation';
 
 export async function GET(request: Request) {
   return withAuth(
@@ -46,73 +54,220 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, createUserSchema);
       if ('error' in parsed) return parsed.error;
 
-      const { d7Number, name, password, role, serviceAdvisorId } = parsed.data;
+      const {
+        d7Number,
+        name,
+        password,
+        role,
+        serviceAdvisorId,
+        newAdvisorDisplayName,
+        newAdvisorCode,
+      } = parsed.data;
 
       const existing = await prisma.technician.findUnique({ where: { d7Number } });
       if (existing) {
         return apiError('An account with this D7 number already exists.', 409);
       }
 
-      if (role === 'service_advisor') {
-        const linkedAdvisor = await prisma.serviceAdvisor.findFirst({
-          where: {
-            id: serviceAdvisorId,
-            dealershipId: session.dealershipId,
-            deletedAt: null,
-            status: 'active',
-          },
-        });
-        if (!linkedAdvisor) {
-          return apiError('Select a valid active service advisor profile to link.', 400);
-        }
-
-        const existingLink = await prisma.technician.findFirst({
-          where: {
-            serviceAdvisorId,
-            deletedAt: null,
-            isActive: true,
-          },
-        });
-        if (existingLink) {
-          return apiError('This service advisor profile already has a login account.', 409);
-        }
-      }
-
       const passwordHash = await hashPassword(password);
-      const user = await prisma.technician.create({
-        data: {
-          d7Number,
-          email: internalEmailForD7(d7Number),
-          name: name.trim(),
-          passwordHash,
-          role,
-          isActive: true,
+      const resolvedRole = role ?? 'technician';
+      const linkMode = resolveServiceAdvisorLinkMode({
+        role: resolvedRole,
+        serviceAdvisorLinkMode: parsed.data.serviceAdvisorLinkMode,
+        serviceAdvisorId,
+      });
+
+      try {
+        if (resolvedRole === 'service_advisor' && linkMode === 'existing') {
+          const linkedAdvisor = await prisma.serviceAdvisor.findFirst({
+            where: {
+              id: serviceAdvisorId,
+              dealershipId: session.dealershipId,
+              deletedAt: null,
+              status: 'active',
+            },
+          });
+          if (!linkedAdvisor) {
+            return apiError('Select a valid active service advisor profile to link.', 400);
+          }
+
+          const existingLink = await prisma.technician.findFirst({
+            where: {
+              serviceAdvisorId,
+              deletedAt: null,
+              isActive: true,
+            },
+          });
+          if (existingLink) {
+            return apiError('This service advisor profile already has a login account.', 409);
+          }
+
+          const user = await prisma.technician.create({
+            data: {
+              d7Number,
+              email: internalEmailForD7(d7Number),
+              name: name.trim(),
+              passwordHash,
+              role: resolvedRole,
+              isActive: true,
+              dealershipId: session.dealershipId,
+              serviceAdvisorId,
+            },
+            select: {
+              id: true,
+              d7Number: true,
+              name: true,
+              role: true,
+              isActive: true,
+              createdAt: true,
+            },
+          });
+
+          await writeAuditLog({
+            action: 'user.create',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'technician',
+            entityId: user.id,
+            metadata: {
+              d7Number: user.d7Number,
+              role: user.role,
+              serviceAdvisorId,
+              serviceAdvisorLinkMode: 'existing',
+            },
+            ipAddress: getRequestIp(request),
+          });
+
+          return {
+            user: { ...user, createdAt: user.createdAt.toISOString() },
+          };
+        }
+
+        if (resolvedRole === 'service_advisor' && linkMode === 'create') {
+          const result = await prisma.$transaction(async (tx) => {
+            const { advisor, reactivated } = await createManualServiceAdvisor(
+              session.dealershipId,
+              {
+                displayName: newAdvisorDisplayName!,
+                advisorCode: newAdvisorCode,
+              },
+              tx
+            );
+
+            const existingLink = await tx.technician.findFirst({
+              where: {
+                serviceAdvisorId: advisor.id,
+                deletedAt: null,
+                isActive: true,
+              },
+            });
+            if (existingLink) {
+              throw new AdvisorManagementError(
+                'This service advisor profile already has a login account.',
+                409
+              );
+            }
+
+            const user = await tx.technician.create({
+              data: {
+                d7Number,
+                email: internalEmailForD7(d7Number),
+                name: name.trim(),
+                passwordHash,
+                role: resolvedRole,
+                isActive: true,
+                dealershipId: session.dealershipId,
+                serviceAdvisorId: advisor.id,
+              },
+              select: {
+                id: true,
+                d7Number: true,
+                name: true,
+                role: true,
+                isActive: true,
+                createdAt: true,
+              },
+            });
+
+            return { user, advisor, reactivated };
+          });
+
+          await writeAuditLog({
+            action: result.reactivated ? 'advisor.reactivate' : 'advisor.create',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'service_advisor',
+            entityId: result.advisor.id,
+            metadata: {
+              displayName: result.advisor.displayName,
+              advisorCode: result.advisor.advisorCode,
+              manual: true,
+              reactivated: result.reactivated,
+              createdWithUser: true,
+            },
+            ipAddress: getRequestIp(request),
+          });
+
+          await writeAuditLog({
+            action: 'user.create',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'technician',
+            entityId: result.user.id,
+            metadata: {
+              d7Number: result.user.d7Number,
+              role: result.user.role,
+              serviceAdvisorId: result.advisor.id,
+              serviceAdvisorLinkMode: 'create',
+            },
+            ipAddress: getRequestIp(request),
+          });
+
+          return {
+            user: { ...result.user, createdAt: result.user.createdAt.toISOString() },
+          };
+        }
+
+        const user = await prisma.technician.create({
+          data: {
+            d7Number,
+            email: internalEmailForD7(d7Number),
+            name: name.trim(),
+            passwordHash,
+            role: resolvedRole,
+            isActive: true,
+            dealershipId: session.dealershipId,
+            serviceAdvisorId: null,
+          },
+          select: {
+            id: true,
+            d7Number: true,
+            name: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+          },
+        });
+
+        await writeAuditLog({
+          action: 'user.create',
           dealershipId: session.dealershipId,
-          serviceAdvisorId: role === 'service_advisor' ? serviceAdvisorId : null,
-        },
-        select: {
-          id: true,
-          d7Number: true,
-          name: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-        },
-      });
+          technicianId: session.technicianId,
+          entityType: 'technician',
+          entityId: user.id,
+          metadata: { d7Number: user.d7Number, role: user.role },
+          ipAddress: getRequestIp(request),
+        });
 
-      await writeAuditLog({
-        action: 'user.create',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'technician',
-        entityId: user.id,
-        metadata: { d7Number: user.d7Number, role: user.role },
-        ipAddress: getRequestIp(request),
-      });
-
-      return {
-        user: { ...user, createdAt: user.createdAt.toISOString() },
-      };
+        return {
+          user: { ...user, createdAt: user.createdAt.toISOString() },
+        };
+      } catch (error) {
+        if (error instanceof AdvisorManagementError) {
+          return apiError(error.message, error.status);
+        }
+        throw error;
+      }
     },
     { rateLimitKey: 'users.create', requireManager: true }
   );
