@@ -16,7 +16,7 @@ export function LoadingScreen({ label = 'Loading Merlin', sublabel }: LoadingScr
       aria-busy="true"
     >
       <div className="benz-logo-ring benz-logo-bubble w-24 h-24 mb-6" aria-hidden="true">
-        <MerlinLogo title="Merlin" />
+        <MerlinLogo title="Merlin" animated />
       </div>
       <p className="text-sm text-benz-silver font-semibold tracking-tight animate-pulse">{label}</p>
       {sublabel && <p className="text-xs text-benz-secondary mt-2 max-w-xs leading-relaxed">{sublabel}</p>}

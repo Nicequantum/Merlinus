@@ -19,7 +19,7 @@ export function LoadingOverlay({ visible, message }: LoadingOverlayProps) {
     >
       <div className="benz-card-elevated p-7 w-full max-w-sm text-center">
         <div className="benz-logo-ring benz-logo-bubble w-16 h-16 mx-auto mb-4 animate-pulse" aria-hidden="true">
-          <MerlinLogo />
+          <MerlinLogo animated />
         </div>
         <div className="text-sm font-medium text-benz-primary">{message}</div>
         <span className="sr-only">{message}</span>

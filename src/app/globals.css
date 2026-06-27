@@ -935,6 +935,26 @@
     border-radius: 20%;
   }
 
+  @keyframes merlin-logo-glow {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 0 rgba(0, 173, 239, 0));
+    }
+    50% {
+      filter: drop-shadow(0 0 14px rgba(0, 173, 239, 0.45));
+    }
+  }
+
+  .merlin-logo-animated {
+    animation: merlin-logo-glow 2.4s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .merlin-logo-animated {
+      animation: none;
+    }
+  }
+
   .touch-target {
     min-height: 48px;
     min-width: 48px;

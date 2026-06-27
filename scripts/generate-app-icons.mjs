@@ -1,7 +1,8 @@
 /**
- * Rasterize public/mercedes-star-icon.svg into PWA + Apple touch PNGs.
- * Run: node scripts/generate-app-icons.mjs
+ * Sync SVG from src/lib/merlinLogo, then rasterize into PWA + Apple touch PNGs.
+ * Run: npm run generate:icons
  */
+import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const publicDir = join(root, 'public');
 const svgPath = join(publicDir, 'mercedes-star-icon.svg');
-const svg = readFileSync(svgPath);
+
+function syncLogoSvg() {
+  execSync('npx tsx scripts/sync-merlin-logo-svg.ts', { cwd: root, stdio: 'inherit' });
+}
+
+const svg = () => readFileSync(svgPath);
 
 function svgDensityForSize(size) {
   // Higher density for Apple touch sizes keeps edges crisp on Retina home screens.
@@ -22,7 +28,7 @@ function svgDensityForSize(size) {
 
 async function writePng(size, filename) {
   const out = join(publicDir, filename);
-  await sharp(svg, { density: svgDensityForSize(size) })
+  await sharp(svg(), { density: svgDensityForSize(size) })
     .resize(size, size, { fit: 'contain', background: { r: 8, g: 8, b: 10, alpha: 1 } })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toFile(out);
@@ -33,7 +39,7 @@ async function writePng(size, filename) {
 async function writeMaskablePng(size, filename) {
   const logoSize = Math.round(size * 0.78);
   const offset = Math.round((size - logoSize) / 2);
-  const logo = await sharp(svg, { density: svgDensityForSize(logoSize) })
+  const logo = await sharp(svg(), { density: svgDensityForSize(logoSize) })
     .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
     .toBuffer();
@@ -57,7 +63,7 @@ async function writeFavicon() {
   const sizes = [16, 32, 48];
   const buffers = await Promise.all(
     sizes.map((size) =>
-      sharp(svg, { density: 128 })
+      sharp(svg(), { density: 128 })
         .resize(size, size, { fit: 'contain', background: { r: 8, g: 8, b: 10, alpha: 1 } })
         .png()
         .toBuffer()
@@ -69,6 +75,8 @@ async function writeFavicon() {
 }
 
 async function main() {
+  console.log('Syncing Merlin logo SVG from src/lib/merlinLogo…');
+  syncLogoSvg();
   console.log('Generating Merlin app icons from mercedes-star-icon.svg…');
 
   const appleSizes = [
@@ -95,7 +103,7 @@ async function main() {
   await writeFavicon();
 
   // Keep logo.svg in sync for static references
-  writeFileSync(join(publicDir, 'logo.svg'), svg);
+  writeFileSync(join(publicDir, 'logo.svg'), svg());
   console.log('  logo.svg (synced)');
   console.log('Done.');
 }
