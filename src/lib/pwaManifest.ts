@@ -33,6 +33,24 @@ export function getPwaManifest(): MetadataRoute.Manifest {
         purpose: 'any',
       },
       {
+        src: '/apple-touch-icon-167.png',
+        sizes: '167x167',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/apple-touch-icon-152.png',
+        sizes: '152x152',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/apple-touch-icon-120.png',
+        sizes: '120x120',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
         src: '/icon-512-maskable.png',
         sizes: '512x512',
         type: 'image/png',

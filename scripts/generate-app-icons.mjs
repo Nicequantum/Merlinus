@@ -15,7 +15,8 @@ const svgPath = join(publicDir, 'mercedes-star-icon.svg');
 const svg = readFileSync(svgPath);
 
 function svgDensityForSize(size) {
-  // Cap rasterization density so large outputs stay within sharp's pixel limit.
+  // Higher density for Apple touch sizes keeps edges crisp on Retina home screens.
+  if (size <= 180) return Math.min(256, Math.max(144, Math.round(size * 1.4)));
   return Math.min(192, Math.max(72, Math.round(size * 0.75)));
 }
 
