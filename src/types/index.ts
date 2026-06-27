@@ -38,10 +38,14 @@ export interface RepairLine {
   xentryOcrTexts?: string[];
   extractedData?: ExtractedData;
   warrantyStory?: string;
+  /** Persisted MI audit/review result — survives RO reload when story text still matches. */
+  storyQualityAudit?: StoryQualityResult | null;
   /** Set when a Customer Pay template was applied — bypasses AI generation and quality audit. */
   isCustomerPay?: boolean;
   /** M1: client-only flag to explicitly clear Customer Pay on save. */
   clearCustomerPay?: boolean;
+  /** Client-only flag to clear a persisted MI audit on the next RO save. */
+  clearStoryQualityAudit?: boolean;
 }
 
 export interface VehicleWarrantyInfo {
@@ -320,6 +324,9 @@ export interface DashboardSummary {
 }
 
 export const CONSENT_VERSION = '2026-06-07-v1';
+
+/** One-time technician legal disclaimer (client localStorage gate). */
+export const LEGAL_DISCLAIMER_VERSION = '2026-06-26-v1';
 export const WARRANTY_STORY_MAX_CHARS = 2500;
 export const WARRANTY_STORY_WARN_CHARS = 2200;
 

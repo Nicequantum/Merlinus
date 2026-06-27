@@ -141,12 +141,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           for (const line of data.repairLines) {
             if (line.id) {
               const existingLine = existing.repairLines.find((l) => l.id === line.id);
+              const existingMappedLine = existingMapped.repairLines.find((l) => l.id === line.id);
               // M1: explicit clearCustomerPay or dedicated clear endpoint strips the flag;
               // omitted/false alone cannot accidentally clear a persisted Customer Pay line.
               const isCustomerPay =
                 line.clearCustomerPay === true
                   ? false
                   : line.isCustomerPay === true || existingLine?.isCustomerPay === true;
+              const storyQualityAudit = line.clearStoryQualityAudit
+                ? null
+                : existingMappedLine?.storyQualityAudit ?? null;
 
               const lineFields = repairLineToDbFields({
                 id: line.id,
@@ -158,6 +162,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                 xentryOcrTexts: line.xentryOcrTexts || [],
                 extractedData: { ...emptyExtractedData(), ...line.extractedData },
                 warrantyStory: line.warrantyStory,
+                storyQualityAudit,
                 isCustomerPay,
               });
 

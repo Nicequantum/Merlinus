@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield } from 'lucide-react';
+import { MerlinLogo } from '@/components/MerlinLogo';
 import { CONSENT_VERSION } from '@/types';
 
 interface ConsentModalProps {
@@ -14,8 +14,8 @@ export function ConsentModal({ onAccept, loading }: ConsentModalProps) {
       <div className="benz-modal-panel sm:max-w-md w-full max-h-[90dvh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3.5 mb-5">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-benz-accent/15 border border-benz-accent/30">
-              <Shield size={22} className="text-benz-blue" />
+            <div className="benz-logo-ring benz-logo-bubble w-11 h-11 shrink-0" aria-hidden="true">
+              <MerlinLogo />
             </div>
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Data & Privacy Consent</h2>

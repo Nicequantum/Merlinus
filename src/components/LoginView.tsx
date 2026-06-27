@@ -33,7 +33,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
 
         <div className="text-center mb-8">
-          <div className="benz-logo-ring w-20 h-20 mx-auto mb-5">
+          <div className="benz-logo-ring benz-logo-bubble w-20 h-20 mx-auto mb-5">
             <MerlinLogo />
           </div>
           <DealershipBranding size="lg" />

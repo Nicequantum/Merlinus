@@ -1,5 +1,6 @@
 'use client';
 
+import { MerlinLogo } from '@/components/MerlinLogo';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface LoadErrorScreenProps {
@@ -13,8 +14,11 @@ interface LoadErrorScreenProps {
 export function LoadErrorScreen({ title, message, onRetry, retrying = false }: LoadErrorScreenProps) {
   return (
     <div className="app-container flex flex-col items-center justify-center min-h-[70vh] px-6 text-center">
-      <div className="benz-empty-state-icon mb-4 text-benz-amber" aria-hidden>
-        <AlertTriangle size={40} strokeWidth={1.5} />
+      <div className="benz-logo-ring benz-logo-bubble w-16 h-16 mb-4" aria-hidden="true">
+        <MerlinLogo />
+      </div>
+      <div className="benz-empty-state-icon mb-3 text-benz-amber" aria-hidden>
+        <AlertTriangle size={28} strokeWidth={1.5} />
       </div>
       <h1 className="text-lg font-semibold text-benz-primary mb-2">{title}</h1>
       <p className="text-sm text-benz-secondary max-w-sm leading-relaxed mb-6">{message}</p>

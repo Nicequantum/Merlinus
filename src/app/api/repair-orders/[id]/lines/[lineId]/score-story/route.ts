@@ -1,5 +1,6 @@
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
+import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
@@ -75,6 +76,11 @@ export async function POST(
           scoreOnly: true,
         },
         ipAddress: getRequestIp(request),
+      });
+
+      await prisma.repairLine.update({
+        where: { id: lineId },
+        data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
       });
 
       return { quality };

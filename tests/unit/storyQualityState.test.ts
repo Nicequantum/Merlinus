@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isStoryQualityCurrent } from '@/lib/storyQualityState';
+import {
+  isStoryQualityCurrent,
+  normalizeStoryForAudit,
+  storiesMatchForAudit,
+} from '@/lib/storyQualityState';
 
 describe('story quality state', () => {
   it('detects when scored baseline matches current story', () => {
@@ -16,5 +20,12 @@ describe('story quality state', () => {
     };
     assert.equal(isStoryQualityCurrent(quality, 'Customer Complaint: noise\nCause: bearing'), true);
     assert.equal(isStoryQualityCurrent(quality, 'Customer Complaint: noise\nCause: bearing\nExtra edit'), false);
+  });
+
+  it('treats CDK-normalized stories as equivalent for audit matching', () => {
+    const raw = 'Customer Complaint: noise—bearing fault';
+    const cdk = normalizeStoryForAudit(raw);
+    assert.equal(storiesMatchForAudit(raw, cdk), true);
+    assert.equal(isStoryQualityCurrent({ scoredAgainstStory: raw } as never, cdk), true);
   });
 });

@@ -89,6 +89,8 @@ const repairLineSchema = z.object({
   isCustomerPay: z.boolean().optional(),
   /** M1: Explicit intent to clear Customer Pay mode (isCustomerPay: false alone is ignored). */
   clearCustomerPay: z.boolean().optional(),
+  /** Explicit intent to clear a persisted MI audit result on save. */
+  clearStoryQualityAudit: z.boolean().optional(),
 });
 
 const advisorExtractionSourceSchema = z.enum(['grok', 'ocr_fallback', 'manual']);

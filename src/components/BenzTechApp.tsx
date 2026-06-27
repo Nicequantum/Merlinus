@@ -5,6 +5,7 @@ import { AppFooter } from '@/components/AppFooter';
 import { AppHeader } from '@/components/AppHeader';
 import { MaintenanceBanner } from '@/components/MaintenanceBanner';
 import { ConsentModal } from '@/components/ConsentModal';
+import { LegalDisclaimerModal } from '@/components/LegalDisclaimerModal';
 import { HomeView } from '@/components/HomeView';
 import { LoginView } from '@/components/LoginView';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
@@ -17,7 +18,8 @@ import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
-import { useState } from 'react';
+import { acceptLegalDisclaimer, hasAcceptedLegalDisclaimer } from '@/lib/legalDisclaimer';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const ManagerDashboard = dynamic(
@@ -62,6 +64,15 @@ export function BenzTechApp() {
     setScanStatusMessage: ocr.setScanStatusMessage,
   });
   const [consentLoading, setConsentLoading] = useState(false);
+  const [legalDisclaimerAccepted, setLegalDisclaimerAccepted] = useState(false);
+
+  useEffect(() => {
+    if (!session?.technicianId) {
+      setLegalDisclaimerAccepted(false);
+      return;
+    }
+    setLegalDisclaimerAccepted(hasAcceptedLegalDisclaimer(session.technicianId));
+  }, [session?.technicianId]);
 
   if (sessionLoading) {
     return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
@@ -69,21 +80,6 @@ export function BenzTechApp() {
 
   if (!session) {
     return <LoginView onLogin={login} />;
-  }
-
-  if (ro.loading && !ro.listError) {
-    return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
-  }
-
-  if (ro.listError) {
-    return (
-      <LoadErrorScreen
-        title="Could not load repair orders"
-        message={ro.listError}
-        onRetry={() => runAction('Retry loading repair orders', () => ro.retryListLoad())}
-        retrying={ro.listRetrying}
-      />
-    );
   }
 
   if (!session.consentAt) {
@@ -101,6 +97,32 @@ export function BenzTechApp() {
             setConsentLoading(false);
           }
         }}
+      />
+    );
+  }
+
+  if (!legalDisclaimerAccepted) {
+    return (
+      <LegalDisclaimerModal
+        onAccept={() => {
+          acceptLegalDisclaimer(session.technicianId);
+          setLegalDisclaimerAccepted(true);
+        }}
+      />
+    );
+  }
+
+  if (ro.loading && !ro.listError) {
+    return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
+  }
+
+  if (ro.listError) {
+    return (
+      <LoadErrorScreen
+        title="Could not load repair orders"
+        message={ro.listError}
+        onRetry={() => runAction('Retry loading repair orders', () => ro.retryListLoad())}
+        retrying={ro.listRetrying}
       />
     );
   }

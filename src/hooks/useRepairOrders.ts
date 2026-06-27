@@ -37,6 +37,8 @@ import {
   type StoryCertificationRecord,
 } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
+import { hydrateStoryQualityFromRO } from '@/lib/storyQualityHydration';
+import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import {
   createManualRepairOrder,
   createNewRepairLine,
@@ -236,8 +238,9 @@ export function useRepairOrders({
         setCurrentRO(normalized);
         setCurrentLineId(null);
         setLastGeneratedStoryByLine({});
-        setStoryQualityByLine({});
-        setStoryReviewByLine({});
+        const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
+        setStoryQualityByLine(qualityByLine);
+        setStoryReviewByLine(reviewByLine);
         generateStorySeqRef.current += 1;
         scoreStorySeqRef.current += 1;
         reviewStorySeqRef.current += 1;
@@ -309,7 +312,7 @@ export function useRepairOrders({
       if (!quality) return false;
 
       const storyText = targetLine.warrantyStory?.trim() ?? '';
-      if (!storyText || quality.scoredAgainstStory?.trim() !== storyText) return false;
+      if (!storyText || !isStoryQualityCurrent(quality, storyText)) return false;
 
       const certification = storyCertificationByLine[lineId];
       return !certification || certification.storyText !== storyText;
@@ -653,20 +656,34 @@ export function useRepairOrders({
     setScoringLineId(null);
   }, []);
 
-  const clearLineQualityState = useCallback((lineId: string) => {
-    setStoryQualityByLine((prev) => {
-      if (!prev[lineId]) return prev;
-      const next = { ...prev };
-      delete next[lineId];
-      return next;
-    });
-    setStoryReviewByLine((prev) => {
-      if (!prev[lineId]) return prev;
-      const next = { ...prev };
-      delete next[lineId];
-      return next;
-    });
-  }, []);
+  const clearLineQualityState = useCallback(
+    (lineId: string) => {
+      setStoryQualityByLine((prev) => {
+        if (!prev[lineId]) return prev;
+        const next = { ...prev };
+        delete next[lineId];
+        return next;
+      });
+      setStoryReviewByLine((prev) => {
+        if (!prev[lineId]) return prev;
+        const next = { ...prev };
+        delete next[lineId];
+        return next;
+      });
+      applyROUpdate(
+        (ro) => ({
+          ...ro,
+          repairLines: ro.repairLines.map((line) =>
+            line.id === lineId
+              ? { ...line, storyQualityAudit: null, clearStoryQualityAudit: true }
+              : line
+          ),
+        }),
+        { immediate: true }
+      );
+    },
+    [applyROUpdate]
+  );
 
   const clearLineCertification = useCallback((lineId: string) => {
     setStoryCertificationByLine((prev) => {
@@ -795,7 +812,7 @@ export function useRepairOrders({
     if (!quality) return null;
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
     if (!storyText) return null;
-    if (quality.scoredAgainstStory?.trim() !== storyText) return null;
+    if (!isStoryQualityCurrent(quality, storyText)) return null;
     return quality;
   })();
 
@@ -810,7 +827,7 @@ export function useRepairOrders({
     const quality = storyQualityByLine[currentLineId];
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
     if (!quality || !storyText) return false;
-    return quality.scoredAgainstStory?.trim() !== storyText;
+    return !isStoryQualityCurrent(quality, storyText);
   })();
 
   const storyCertificationForLine = (() => {

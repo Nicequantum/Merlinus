@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
 import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
-import type { RepairLine, RepairOrder } from '../../src/types';
+import type { RepairLine, RepairOrder, StoryQualityResult } from '../../src/types';
 
 const sampleRo: RepairOrder = {
   id: 'ro-1',
@@ -69,6 +69,23 @@ describe('roMapper sensitive field encryption', () => {
     assert.ok(fields.xentryOcrTextsEncrypted.length > 0);
     assert.ok(fields.warrantyStoryEncrypted && fields.warrantyStoryEncrypted.length > 0);
     assert.ok(fields.extractedDataEncrypted.length > 0);
+    assert.equal('storyQualityAuditEncrypted' in fields, false);
+  });
+
+  test('repairLineToDbFields encrypts persisted story quality audits when provided', () => {
+    const audit: StoryQualityResult = {
+      score: 82,
+      grade: 'strong',
+      strengths: ['Clear workflow'],
+      improvements: [],
+      auditRisks: [],
+      technicianDetails: [],
+      summary: 'Solid narrative',
+      scoredAgainstStory: sampleLine.warrantyStory,
+    };
+    const fields = repairLineToDbFields({ ...sampleLine, storyQualityAudit: audit });
+    assert.ok(fields.storyQualityAuditEncrypted && fields.storyQualityAuditEncrypted.length > 0);
+    assert.notEqual(fields.storyQualityAuditEncrypted, JSON.stringify(audit));
   });
 
   test('db mappers decrypt sensitive fields back to plaintext for API/UI', () => {
@@ -116,6 +133,8 @@ describe('roMapper sensitive field encryption', () => {
           xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
           extractedDataEncrypted: lineFields.extractedDataEncrypted,
           warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+          storyQualityAuditEncrypted: '',
+          isCustomerPay: false,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -129,5 +148,39 @@ describe('roMapper sensitive field encryption', () => {
     assert.deepEqual(mappedLine.xentryOcrTexts, sampleLine.xentryOcrTexts);
     assert.equal(mappedLine.warrantyStory, sampleLine.warrantyStory);
     assert.deepEqual(mappedLine.extractedData?.codes, sampleLine.extractedData?.codes);
+    assert.equal(mappedLine.storyQualityAudit, null);
+  });
+
+  test('dbToRepairLine decrypts persisted story quality audits', () => {
+    const audit: StoryQualityResult = {
+      score: 91,
+      grade: 'excellent',
+      strengths: [],
+      improvements: [],
+      auditRisks: [],
+      technicianDetails: [],
+      summary: 'Ready',
+      scoredAgainstStory: sampleLine.warrantyStory,
+    };
+    const lineFields = repairLineToDbFields({ ...sampleLine, storyQualityAudit: audit });
+    const mapped = dbToRepairLine({
+      id: sampleLine.id,
+      repairOrderId: 'ro-1',
+      lineNumber: sampleLine.lineNumber,
+      description: sampleLine.description,
+      descriptionEncrypted: lineFields.descriptionEncrypted,
+      customerConcernEncrypted: lineFields.customerConcernEncrypted,
+      technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
+      xentryImageUrls: lineFields.xentryImageUrls,
+      xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+      extractedDataEncrypted: lineFields.extractedDataEncrypted,
+      warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+      storyQualityAuditEncrypted: lineFields.storyQualityAuditEncrypted ?? '',
+      isCustomerPay: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    assert.equal(mapped.storyQualityAudit?.score, 91);
+    assert.equal(mapped.storyQualityAudit?.scoredAgainstStory, sampleLine.warrantyStory);
   });
 });

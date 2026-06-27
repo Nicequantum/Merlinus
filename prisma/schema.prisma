@@ -249,6 +249,8 @@ model RepairLine {
   xentryOcrTextsEncrypted   String      @default("")
   extractedDataEncrypted    String      @default("{}")
   warrantyStoryEncrypted    String?
+  /** Encrypted JSON: last MI audit/review score + coaching payload for this line. */
+  storyQualityAuditEncrypted String     @default("")
   /** True when story came from a Customer Pay template — skips AI generation and quality audit. */
   isCustomerPay             Boolean     @default(false)
   createdAt                 DateTime    @default(now())

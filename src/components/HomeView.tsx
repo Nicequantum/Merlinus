@@ -76,7 +76,7 @@ export function HomeView({
 
       <div className="pt-10">
         <div className="text-center mb-8">
-          <div className="benz-logo-ring w-[4.5rem] h-[4.5rem] mx-auto mb-4">
+          <div className="benz-logo-ring benz-logo-bubble w-[4.5rem] h-[4.5rem] mx-auto mb-4">
             <MerlinLogo />
           </div>
           <DealershipBranding size="lg" className="mb-2" />

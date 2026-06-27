@@ -1,4 +1,4 @@
-import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder } from '@/types';
+import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder, StoryQualityResult } from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
   decryptComplaintsPayload,
@@ -162,8 +162,18 @@ export function dbToRepairLine(line: DbLine): RepairLine {
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),
     extractedData: decryptJsonObject<ExtractedData>(line.extractedDataEncrypted, emptyExtractedData()),
     warrantyStory: decryptOptionalSensitiveText(line.warrantyStoryEncrypted),
+    storyQualityAudit: parseStoryQualityAudit(
+      (line as DbLine & { storyQualityAuditEncrypted?: string }).storyQualityAuditEncrypted
+    ),
     isCustomerPay: line.isCustomerPay ?? false,
   };
+}
+
+function parseStoryQualityAudit(raw: string | undefined | null): StoryQualityResult | null {
+  if (!raw?.trim()) return null;
+  const parsed = decryptJsonObject<StoryQualityResult | null>(raw, null);
+  if (!parsed || typeof parsed.score !== 'number') return null;
+  return parsed;
 }
 
 export interface RepairOrderInput {
@@ -223,6 +233,13 @@ export function repairLineToDbFields(line: RepairLine) {
     warrantyStoryEncrypted: encryptOptionalSensitiveText(
       line.warrantyStory ? sanitizeForCDK(line.warrantyStory) : line.warrantyStory
     ),
+    ...(line.storyQualityAudit !== undefined
+      ? {
+          storyQualityAuditEncrypted: line.storyQualityAudit
+            ? encryptJsonObject(line.storyQualityAudit)
+            : '',
+        }
+      : {}),
     isCustomerPay: line.isCustomerPay ?? false,
   };
 }

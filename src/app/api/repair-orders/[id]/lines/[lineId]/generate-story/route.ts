@@ -92,7 +92,10 @@ export async function POST(
 
       await prisma.repairLine.update({
         where: { id: lineId },
-        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
+        data: {
+          warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+          storyQualityAuditEncrypted: '',
+        },
       });
 
       return { warrantyStory, quality: null, cdkSanitized };

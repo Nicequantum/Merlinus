@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { OFFLINE_ERROR } from '@/lib/errors';
+import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
 
 function getLatestRoAndLine(
@@ -39,7 +40,8 @@ function isWarrantyStoryStale(ro: RepairOrder, lineId: string, expectedStoryText
   const line = ro.repairLines.find((l) => l.id === lineId);
   const currentStory = line?.warrantyStory?.trim() ?? '';
   const expectedStory = expectedStoryText.trim();
-  return !currentStory || currentStory !== expectedStory;
+  if (!currentStory || !expectedStory) return true;
+  return !isStoryQualityCurrent({ scoredAgainstStory: expectedStory } as StoryQualityResult, currentStory);
 }
 
 interface StoryWorkflowRefs {
@@ -80,7 +82,7 @@ export function useROStoryWorkflow(
     flushPendingSave: (options?: { maxWaitMs?: number }) => Promise<void>;
     applyROUpdate: (
       updater: (ro: RepairOrder) => RepairOrder,
-      options?: { immediate?: boolean }
+      options?: { immediate?: boolean; skipPersist?: boolean }
     ) => RepairOrder | null;
     clearLineQualityState: (lineId: string) => void;
     clearLineCertification: (lineId: string) => void;
@@ -205,10 +207,15 @@ export function useROStoryWorkflow(
           });
         }
         // Local state only — generate-story API already persisted the story; avoid racing PUTs.
-        deps.applyROUpdate((ro) => ({
-          ...ro,
-          repairLines: ro.repairLines.map((l) => (l.id === lineId ? { ...l, warrantyStory } : l)),
-        }));
+        deps.applyROUpdate(
+          (ro) => ({
+            ...ro,
+            repairLines: ro.repairLines.map((l) =>
+              l.id === lineId ? { ...l, warrantyStory, storyQualityAudit: null } : l
+            ),
+          }),
+          { skipPersist: true }
+        );
         if (cdkSanitized) {
           toast.message('Story cleaned for CDK compatibility');
         }
@@ -289,6 +296,7 @@ export function useROStoryWorkflow(
         if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
 
         const baseline = (quality.scoredAgainstStory ?? storyText).trim();
+        const persistedQuality = { ...quality, scoredAgainstStory: baseline };
         setters.setStoryCertificationByLine((prev) => {
           if (!prev[lineId]) return prev;
           const next = { ...prev };
@@ -297,8 +305,19 @@ export function useROStoryWorkflow(
         });
         setters.setStoryQualityByLine((prev) => ({
           ...prev,
-          [lineId]: { ...quality, scoredAgainstStory: baseline },
+          [lineId]: persistedQuality,
         }));
+        deps.applyROUpdate(
+          (ro) => ({
+            ...ro,
+            repairLines: ro.repairLines.map((l) =>
+              l.id === lineId
+                ? { ...l, storyQualityAudit: persistedQuality, clearStoryQualityAudit: undefined }
+                : l
+            ),
+          }),
+          { skipPersist: true }
+        );
         toast.success(`MI audit score: ${quality.score}/100 (${quality.grade})`);
       } catch (error: unknown) {
         if (seq === refs.scoreStorySeqRef.current) {
@@ -380,6 +399,17 @@ export function useROStoryWorkflow(
         });
         setters.setStoryReviewByLine((prev) => ({ ...prev, [lineId]: review }));
         setters.setStoryQualityByLine((prev) => ({ ...prev, [lineId]: review }));
+        deps.applyROUpdate(
+          (ro) => ({
+            ...ro,
+            repairLines: ro.repairLines.map((l) =>
+              l.id === lineId
+                ? { ...l, storyQualityAudit: review, clearStoryQualityAudit: undefined }
+                : l
+            ),
+          }),
+          { skipPersist: true }
+        );
         toast.success(`MI 4.3 review complete — ${review.score}/100 (${review.grade})`);
       } catch (error: unknown) {
         if (seq === refs.reviewStorySeqRef.current) {
