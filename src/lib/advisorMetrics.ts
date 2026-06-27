@@ -3,6 +3,12 @@ import { lineSoldTotal } from '@/lib/repairLineSoldMetrics';
 import { decryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 
+export {
+  formatMetricCurrency,
+  formatMetricNumber,
+  formatMetricPercent,
+} from '@/lib/advisorMetricsFormat';
+
 /** MI audit scores at or above this threshold count as warranty "approved" quality. */
 export const ADVISOR_APPROVAL_SCORE_THRESHOLD = 75;
 
@@ -222,20 +228,6 @@ export async function computeAdvisorMetricsBatch(
   }
 
   return result;
-}
-
-export function formatMetricPercent(value: number | null): string {
-  return value == null ? '—' : `${value}%`;
-}
-
-export function formatMetricCurrency(value: number | null): string {
-  return value == null
-    ? '—'
-    : value.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-}
-
-export function formatMetricNumber(value: number | null): string {
-  return value == null ? '—' : value.toLocaleString();
 }
 
 /** Exported for tests — finalize a single accumulator into API metrics. */

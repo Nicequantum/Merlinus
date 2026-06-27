@@ -19,7 +19,7 @@ import {
   formatMetricCurrency,
   formatMetricNumber,
   formatMetricPercent,
-} from '@/lib/advisorMetrics';
+} from '@/lib/advisorMetricsFormat';
 import type { AdvisorDetail, AdvisorListItem, AdvisorPerformanceMetrics } from '@/types';
 
 interface ServiceAdvisorsViewProps {
