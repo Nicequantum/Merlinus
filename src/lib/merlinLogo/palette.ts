@@ -1,8 +1,15 @@
-/** Classic Mercedes-Benz emblem — silver star in circle on black. */
+/** Premium Mercedes-Benz emblem tokens — metallic star in circle on black. */
 export const MERLIN_LOGO_PALETTE = {
-  canvas: '#000000',
-  ring: '#c4c9d0',
-  star: '#d8dde3',
+  canvasTop: '#121218',
+  canvasBottom: '#000000',
+  ambientGlow: 'rgba(220, 228, 236, 0.12)',
+  ringHighlight: '#f4f6f9',
+  ringMid: '#b8bec8',
+  ringShadow: '#5a626c',
+  starHighlight: '#ffffff',
+  starMid: '#d0d6de',
+  starShadow: '#6e7884',
+  specular: 'rgba(255, 255, 255, 0.55)',
 } as const;
 
 export const MERLIN_LOGO_VIEWBOX = 1024;

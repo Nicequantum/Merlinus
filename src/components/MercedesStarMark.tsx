@@ -1,13 +1,8 @@
 'use client';
 
-import {
-  MERCEDES_EMBLEM_CENTER,
-  MERCEDES_RING_RADIUS,
-  MERCEDES_RING_STROKE,
-  MERLIN_LOGO_PALETTE,
-  MERLIN_LOGO_VIEWBOX,
-} from '@/lib/merlinLogo/palette';
-import { MERCEDES_STAR_ARM, MERCEDES_STAR_ROTATIONS } from '@/lib/merlinLogo/paths';
+import { useId } from 'react';
+import { MERLIN_LOGO_VIEWBOX } from '@/lib/merlinLogo/palette';
+import { renderPremiumEmblemMarkup } from '@/lib/merlinLogo/renderPremiumEmblem';
 
 interface MercedesStarMarkProps {
   className?: string;
@@ -17,11 +12,9 @@ interface MercedesStarMarkProps {
   animated?: boolean;
 }
 
-const P = MERLIN_LOGO_PALETTE;
-const C = MERCEDES_EMBLEM_CENTER;
-
-/** Standard Mercedes-Benz emblem — three-pointed star inside a circle. */
+/** Premium Mercedes-Benz emblem — 3D metallic star in circle (official geometry). */
 export function MercedesStarMark({ className, title, animated = false }: MercedesStarMarkProps) {
+  const uid = useId().replace(/:/g, '');
   const labelled = Boolean(title);
 
   return (
@@ -33,23 +26,7 @@ export function MercedesStarMark({ className, title, animated = false }: Mercede
       aria-hidden={labelled ? undefined : true}
     >
       {title ? <title>{title}</title> : null}
-      <rect width={MERLIN_LOGO_VIEWBOX} height={MERLIN_LOGO_VIEWBOX} fill={P.canvas} />
-      <circle
-        cx={C}
-        cy={C}
-        r={MERCEDES_RING_RADIUS}
-        fill="none"
-        stroke={P.ring}
-        strokeWidth={MERCEDES_RING_STROKE}
-      />
-      {MERCEDES_STAR_ROTATIONS.map((rotation) => (
-        <path
-          key={rotation}
-          fill={P.star}
-          d={MERCEDES_STAR_ARM}
-          transform={`rotate(${rotation} ${C} ${C})`}
-        />
-      ))}
+      <g dangerouslySetInnerHTML={{ __html: renderPremiumEmblemMarkup(`mb-${uid}`) }} />
     </svg>
   );
 }

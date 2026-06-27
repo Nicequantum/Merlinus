@@ -7,4 +7,5 @@ export {
   MERLIN_LOGO_VIEWBOX,
 } from './palette';
 export { MERCEDES_STAR_ARM, MERCEDES_STAR_ROTATIONS } from './paths';
+export { renderPremiumEmblemMarkup } from './renderPremiumEmblem';
 export { renderMerlinLogoStaticSvg } from './renderStaticSvg';
