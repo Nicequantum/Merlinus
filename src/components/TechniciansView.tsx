@@ -36,6 +36,14 @@ function formatDate(value: string) {
   });
 }
 
+function formatLongDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 function OnboardingSection({ technician }: { technician: TechnicianDetail }) {
   const { onboarding } = technician;
   const hasRecord = Boolean(
@@ -48,7 +56,7 @@ function OnboardingSection({ technician }: { technician: TechnicianDetail }) {
     <div className="benz-card p-4">
       <div className="flex items-center gap-2 benz-section-title mb-3">
         <ShieldCheck size={14} />
-        First Launch — Consent & Disclaimer
+        Onboarding & Consent
       </div>
       {!hasRecord ? (
         <p className="text-xs text-benz-secondary leading-relaxed">
@@ -69,7 +77,7 @@ function OnboardingSection({ technician }: { technician: TechnicianDetail }) {
             <div className="text-xs text-benz-secondary">Legal disclaimer</div>
             <div className="text-sm font-medium mt-1">
               {onboarding.legalDisclaimerAt
-                ? `${formatDateTime(onboarding.legalDisclaimerAt)}${onboarding.legalDisclaimerVersion ? ` · v${onboarding.legalDisclaimerVersion}` : ''}`
+                ? `${formatLongDate(onboarding.legalDisclaimerAt)}${onboarding.legalDisclaimerVersion ? ` · v${onboarding.legalDisclaimerVersion}` : ''}`
                 : 'Not recorded'}
             </div>
           </div>
