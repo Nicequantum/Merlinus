@@ -66,7 +66,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
               className="benz-input"
             />
           </div>
-          <button type="submit" disabled={loading} className="primary-btn w-full h-12 text-sm font-semibold touch-target">
+          <button type="submit" disabled={loading} className="primary-btn login-submit-btn w-full touch-target">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

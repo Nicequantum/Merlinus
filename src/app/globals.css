@@ -1170,8 +1170,44 @@
     margin-bottom: 0.5rem;
   }
 
-  .login-form .primary-btn {
+  .login-submit-btn {
     margin-top: 0.25rem;
+    height: 3.125rem;
+    border-radius: calc(var(--benz-radius) + 2px);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    background: linear-gradient(180deg, #1eb8f5 0%, var(--benz-blue) 44%, var(--benz-blue-dim) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.22),
+      0 8px 24px rgba(0, 173, 239, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+
+  .login-submit-btn:hover:not(:disabled) {
+    filter: none;
+    background: linear-gradient(180deg, #33c1f5 0%, #00b8f5 48%, var(--benz-blue-dim) 100%);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.22),
+      0 12px 32px rgba(0, 173, 239, 0.36),
+      inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  }
+
+  .login-submit-btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.99);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.28),
+      0 4px 14px rgba(0, 173, 239, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .login-submit-btn:disabled {
+    opacity: 0.52;
+    background: linear-gradient(180deg, rgba(30, 184, 245, 0.5) 0%, rgba(0, 173, 239, 0.42) 100%);
+    box-shadow: none;
+    cursor: not-allowed;
   }
 
   .login-footer {
