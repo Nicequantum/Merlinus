@@ -1,3 +1,10 @@
+/** Classic flat emblem — reliable PWA / Apple touch / favicon fallback. */
+export const PLAIN_EMBLEM_PALETTE = {
+  canvas: '#000000',
+  ring: '#c4c9d0',
+  star: '#d8dde3',
+} as const;
+
 /** Premium Mercedes-Benz emblem tokens — metallic star in circle on black. */
 export const MERLIN_LOGO_PALETTE = {
   canvasTop: '#121218',

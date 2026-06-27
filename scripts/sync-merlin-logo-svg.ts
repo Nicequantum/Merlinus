@@ -1,6 +1,6 @@
 /**
- * Write canonical Merlin logo SVG from shared renderMerlinLogoStaticSvg().
- * Used by generate-app-icons.mjs so PNGs match MercedesStarMark exactly.
+ * Write premium in-app Merlin logo SVG from renderMerlinLogoStaticSvg().
+ * Matches MercedesStarMark (3D metallic emblem) — not used for PWA / Apple touch PNGs.
  */
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

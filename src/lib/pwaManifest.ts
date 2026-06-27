@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { PWA_ICON_ENTRIES } from '@/lib/pwaIcons';
 
 export function getPwaManifest(): MetadataRoute.Manifest {
   return {
@@ -13,55 +14,11 @@ export function getPwaManifest(): MetadataRoute.Manifest {
     theme_color: '#000000',
     background_color: '#000000',
     lang: 'en',
-    icons: [
-      {
-        src: '/icon-512.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/icon-192.png',
-        sizes: '192x192',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/apple-touch-icon.png',
-        sizes: '180x180',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/apple-touch-icon-167.png',
-        sizes: '167x167',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/apple-touch-icon-152.png',
-        sizes: '152x152',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/apple-touch-icon-120.png',
-        sizes: '120x120',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: '/icon-512-maskable.png',
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'maskable',
-      },
-      {
-        src: '/icon-1024.png',
-        sizes: '1024x1024',
-        type: 'image/png',
-        purpose: 'any',
-      },
-    ],
+    icons: PWA_ICON_ENTRIES.map((icon) => ({
+      src: icon.src,
+      sizes: icon.sizes,
+      type: icon.type,
+      purpose: icon.purpose,
+    })),
   };
 }

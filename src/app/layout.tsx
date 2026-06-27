@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { AppProviders } from '@/components/AppProviders';
+import { APPLE_TOUCH_ICON_LINKS } from '@/lib/pwaIcons';
 import './globals.css';
 
 const inter = Inter({
@@ -20,12 +21,11 @@ export const metadata: Metadata = {
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-      { url: '/apple-touch-icon-167.png', sizes: '167x167', type: 'image/png' },
-      { url: '/apple-touch-icon-152.png', sizes: '152x152', type: 'image/png' },
-      { url: '/apple-touch-icon-120.png', sizes: '120x120', type: 'image/png' },
-    ],
+    apple: APPLE_TOUCH_ICON_LINKS.filter((link) => !('precomposed' in link)).map((link) => ({
+      url: link.href,
+      sizes: link.sizes,
+      type: 'image/png',
+    })),
   },
   appleWebApp: {
     capable: true,
@@ -48,11 +48,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <head>
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
-        <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" sizes="180x180" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon-167.png" sizes="167x167" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon-152.png" sizes="152x152" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon-120.png" sizes="120x120" />
+        {APPLE_TOUCH_ICON_LINKS.map((link) =>
+          'precomposed' in link ? (
+            <link
+              key={link.href}
+              rel="apple-touch-icon-precomposed"
+              href={link.href}
+              sizes={link.sizes}
+            />
+          ) : (
+            <link key={link.href} rel="apple-touch-icon" href={link.href} sizes={link.sizes} />
+          )
+        )}
       </head>
       <body className={inter.className}>
         <AppProviders>{children}</AppProviders>
