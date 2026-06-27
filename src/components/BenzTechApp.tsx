@@ -18,7 +18,11 @@ import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useSession } from '@/hooks/useSession';
-import { acceptLegalDisclaimer, hasAcceptedLegalDisclaimer } from '@/lib/legalDisclaimer';
+import {
+  acceptLegalDisclaimer,
+  hasAcceptedLegalDisclaimer,
+  persistLegalDisclaimerAcceptance,
+} from '@/lib/legalDisclaimer';
 import { recordTechnicianAppStart } from '@/lib/recordTechnicianAppStart';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -122,6 +126,9 @@ export function BenzTechApp() {
         onAccept={() => {
           acceptLegalDisclaimer(session.technicianId);
           setLegalDisclaimerAccepted(true);
+          void persistLegalDisclaimerAcceptance().catch((error: unknown) => {
+            console.error('[Merlin] Legal disclaimer persistence failed', error);
+          });
         }}
       />
     );

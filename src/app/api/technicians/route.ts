@@ -1,10 +1,13 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
+import { backfillCertifiedStoriesFromAudit } from '@/lib/technicianCertifiedStory';
 
 export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
+      await backfillCertifiedStoriesFromAudit(session.dealershipId);
+
       const technicians = await prisma.technician.findMany({
         where: { dealershipId: session.dealershipId, deletedAt: null },
         select: {
@@ -14,36 +17,33 @@ export async function GET(request: Request) {
           role: true,
           isActive: true,
           createdAt: true,
+          consentAt: true,
+          legalDisclaimerAt: true,
+          firstAppLaunchAt: true,
         },
         orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
       });
 
-      const logCounts = await prisma.technicianActivityLog.groupBy({
-        by: ['technicianId', 'category'],
-        where: { dealershipId: session.dealershipId },
-        _count: { _all: true },
-      });
-
-      const lastActivity = await prisma.technicianActivityLog.groupBy({
+      const storyCounts = await prisma.technicianCertifiedStory.groupBy({
         by: ['technicianId'],
         where: { dealershipId: session.dealershipId },
-        _max: { createdAt: true },
+        _count: { _all: true },
+        _max: { certifiedAt: true },
       });
 
-      const countMap = new Map<string, { appStart: number; story: number }>();
-      for (const row of logCounts) {
-        const existing = countMap.get(row.technicianId) ?? { appStart: 0, story: 0 };
-        if (row.category === 'app_start') existing.appStart = row._count._all;
-        if (row.category === 'story') existing.story = row._count._all;
-        countMap.set(row.technicianId, existing);
-      }
-
-      const lastMap = new Map(lastActivity.map((row) => [row.technicianId, row._max.createdAt]));
+      const countMap = new Map(
+        storyCounts.map((row) => [
+          row.technicianId,
+          { count: row._count._all, lastCertifiedAt: row._max.certifiedAt },
+        ])
+      );
 
       return {
         technicians: technicians.map((tech) => {
-          const counts = countMap.get(tech.id) ?? { appStart: 0, story: 0 };
-          const last = lastMap.get(tech.id);
+          const stats = countMap.get(tech.id);
+          const hasOnboardingRecord = Boolean(
+            tech.consentAt || tech.legalDisclaimerAt || tech.firstAppLaunchAt
+          );
           return {
             id: tech.id,
             d7Number: tech.d7Number,
@@ -51,9 +51,9 @@ export async function GET(request: Request) {
             role: tech.role,
             isActive: tech.isActive,
             createdAt: tech.createdAt.toISOString(),
-            appStartLogCount: counts.appStart,
-            storyLogCount: counts.story,
-            lastActivityAt: last?.toISOString() ?? null,
+            certifiedStoryCount: stats?.count ?? 0,
+            lastCertifiedAt: stats?.lastCertifiedAt?.toISOString() ?? null,
+            hasOnboardingRecord,
           };
         }),
       };

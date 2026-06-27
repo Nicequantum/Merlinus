@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { LEGAL_DISCLAIMER_VERSION } from '@/types';
 
 const STORAGE_PREFIX = 'merlin.legalDisclaimer';
@@ -22,4 +23,8 @@ export function acceptLegalDisclaimer(technicianId: string): void {
   } catch {
     // localStorage unavailable — gate remains until a successful write
   }
+}
+
+export async function persistLegalDisclaimerAcceptance(): Promise<void> {
+  await api.acceptLegalDisclaimer();
 }

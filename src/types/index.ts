@@ -234,18 +234,29 @@ export interface TechnicianListItem {
   role: string;
   isActive: boolean;
   createdAt: string;
-  appStartLogCount: number;
-  storyLogCount: number;
-  lastActivityAt: string | null;
+  certifiedStoryCount: number;
+  lastCertifiedAt: string | null;
+  hasOnboardingRecord: boolean;
 }
 
-export interface TechnicianAppStartLog {
+export interface TechnicianOnboardingRecord {
+  consentAt: string | null;
+  consentVersion: string | null;
+  legalDisclaimerAt: string | null;
+  legalDisclaimerVersion: string | null;
+  firstAppLaunchAt: string | null;
+  firstAppLaunchSessionId: string | null;
+}
+
+export interface TechnicianCertifiedStoryItem {
   id: string;
-  event: string;
-  message: string;
-  clientSessionId: string | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
+  repairOrderId: string;
+  repairLineId: string;
+  roNumber: string;
+  lineNumber: number;
+  certifiedAt: string;
+  certifiedByName: string;
+  promptVersion: string;
 }
 
 export interface TechnicianActivityLogEntry {
@@ -267,11 +278,9 @@ export interface TechnicianDetail {
   role: string;
   isActive: boolean;
   createdAt: string;
-  consentAt: string | null;
-  appStartLogCount: number;
-  storyLogCount: number;
-  lastActivityAt: string | null;
-  recentAppStarts: TechnicianAppStartLog[];
+  certifiedStoryCount: number;
+  lastCertifiedAt: string | null;
+  onboarding: TechnicianOnboardingRecord;
 }
 
 export interface StructuredROExtraction {

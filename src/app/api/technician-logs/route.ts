@@ -1,4 +1,5 @@
 import { withAuth } from '@/lib/apiRoute';
+import { prisma } from '@/lib/db';
 import { writeTechnicianActivityLog } from '@/lib/technicianActivityLog';
 
 import { parseRequestBody, technicianAppStartLogSchema } from '@/lib/validation';
@@ -11,6 +12,8 @@ export async function POST(request: Request) {
       if ('error' in parsed) return parsed.error;
 
       const { clientSessionId, metadata } = parsed.data;
+
+      const launchedAt = new Date();
 
       await writeTechnicianActivityLog({
         dealershipId: session.dealershipId,
@@ -25,6 +28,14 @@ export async function POST(request: Request) {
           previousRoCount: metadata?.previousRoCount,
           appVersion: metadata?.appVersion,
           clientSessionId,
+        },
+      });
+
+      await prisma.technician.updateMany({
+        where: { id: session.technicianId, firstAppLaunchAt: null },
+        data: {
+          firstAppLaunchAt: launchedAt,
+          firstAppLaunchSessionId: clientSessionId,
         },
       });
 

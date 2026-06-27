@@ -18,6 +18,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           isActive: true,
           createdAt: true,
           consentAt: true,
+          consentVersion: true,
+          legalDisclaimerAt: true,
+          legalDisclaimerVersion: true,
+          firstAppLaunchAt: true,
+          firstAppLaunchSessionId: true,
         },
       });
 
@@ -25,34 +30,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const [appStartCount, storyCount, lastLog, recentSessions] = await Promise.all([
-        prisma.technicianActivityLog.count({
-          where: { technicianId: id, dealershipId: session.dealershipId, category: 'app_start' },
-        }),
-        prisma.technicianActivityLog.count({
-          where: { technicianId: id, dealershipId: session.dealershipId, category: 'story' },
-        }),
-        prisma.technicianActivityLog.findFirst({
+      const [certifiedStoryCount, lastCertified] = await Promise.all([
+        prisma.technicianCertifiedStory.count({
           where: { technicianId: id, dealershipId: session.dealershipId },
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
         }),
-        prisma.technicianActivityLog.findMany({
-          where: {
-            technicianId: id,
-            dealershipId: session.dealershipId,
-            category: 'app_start',
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 8,
-          select: {
-            id: true,
-            event: true,
-            message: true,
-            clientSessionId: true,
-            metadata: true,
-            createdAt: true,
-          },
+        prisma.technicianCertifiedStory.findFirst({
+          where: { technicianId: id, dealershipId: session.dealershipId },
+          orderBy: { certifiedAt: 'desc' },
+          select: { certifiedAt: true },
         }),
       ]);
 
@@ -64,30 +49,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           role: technician.role,
           isActive: technician.isActive,
           createdAt: technician.createdAt.toISOString(),
-          consentAt: technician.consentAt?.toISOString() ?? null,
-          appStartLogCount: appStartCount,
-          storyLogCount: storyCount,
-          lastActivityAt: lastLog?.createdAt.toISOString() ?? null,
-          recentAppStarts: recentSessions.map((log) => ({
-            id: log.id,
-            event: log.event,
-            message: log.message,
-            clientSessionId: log.clientSessionId,
-            metadata: safeParseMetadata(log.metadata),
-            createdAt: log.createdAt.toISOString(),
-          })),
+          certifiedStoryCount,
+          lastCertifiedAt: lastCertified?.certifiedAt.toISOString() ?? null,
+          onboarding: {
+            consentAt: technician.consentAt?.toISOString() ?? null,
+            consentVersion: technician.consentVersion ?? null,
+            legalDisclaimerAt: technician.legalDisclaimerAt?.toISOString() ?? null,
+            legalDisclaimerVersion: technician.legalDisclaimerVersion ?? null,
+            firstAppLaunchAt: technician.firstAppLaunchAt?.toISOString() ?? null,
+            firstAppLaunchSessionId: technician.firstAppLaunchSessionId ?? null,
+          },
         },
       };
     },
     { rateLimitKey: 'technicians.get', requireManager: true }
   );
-}
-
-function safeParseMetadata(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
 }

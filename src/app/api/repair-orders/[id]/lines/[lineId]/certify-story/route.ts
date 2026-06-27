@@ -9,6 +9,7 @@ import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
 import { parseRequestBody, certifyStorySchema } from '@/lib/validation';
 
 export async function POST(
@@ -105,6 +106,18 @@ export async function POST(
           certifiedAt: certifiedAt.toISOString(),
           promptVersion: PROMPT_VERSION,
         },
+      });
+
+      await recordTechnicianCertifiedStory({
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+        repairOrderId: id,
+        repairLineId: lineId,
+        roNumber: mapped.roNumber,
+        lineNumber: line.lineNumber,
+        certifiedAt,
+        certifiedByName,
+        promptVersion: PROMPT_VERSION,
       });
 
       return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName };

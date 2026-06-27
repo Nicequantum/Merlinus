@@ -12,6 +12,7 @@ import type {
   StoryTemplate,
   StructuredROExtraction,
   TechnicianActivityLogEntry,
+  TechnicianCertifiedStoryItem,
   TechnicianDetail,
   TechnicianListItem,
   TechnicianSession,
@@ -139,6 +140,11 @@ export const api = {
 
   acceptConsent: () => apiFetch<{ consentAt: string }>('/api/consent', { method: 'POST' }),
 
+  acceptLegalDisclaimer: () =>
+    apiFetch<{ legalDisclaimerAt: string; legalDisclaimerVersion: string }>('/api/legal-disclaimer', {
+      method: 'POST',
+    }),
+
   changePassword: (currentPassword: string, newPassword: string) =>
     apiFetch<{ ok: boolean; requiresReauth?: boolean }>('/api/auth/change-password', {
       method: 'POST',
@@ -210,6 +216,16 @@ export const api = {
     const qs = search.toString();
     return apiFetch<{ logs: TechnicianActivityLogEntry[] }>(
       `/api/technicians/${id}/logs${qs ? `?${qs}` : ''}`
+    );
+  },
+
+  listTechnicianStories: (id: string, params?: { limit?: number; cursor?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set('limit', String(params.limit));
+    if (params?.cursor) search.set('cursor', params.cursor);
+    const qs = search.toString();
+    return apiFetch<{ stories: TechnicianCertifiedStoryItem[]; nextCursor: string | null }>(
+      `/api/technicians/${id}/stories${qs ? `?${qs}` : ''}`
     );
   },
 

@@ -5,14 +5,14 @@ import {
   ArrowLeft,
   ChevronRight,
   ClipboardList,
-  PlayCircle,
   ScrollText,
+  ShieldCheck,
   UsersRound,
 } from 'lucide-react';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import type { TechnicianActivityLogEntry, TechnicianDetail, TechnicianListItem } from '@/types';
+import type { TechnicianCertifiedStoryItem, TechnicianDetail, TechnicianListItem } from '@/types';
 
 interface TechniciansViewProps {
   onBack: () => void;
@@ -22,49 +22,105 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   });
 }
 
-function formatEventLabel(event: string) {
-  return event.replace(/\./g, ' · ');
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
-function LogRow({ log }: { log: TechnicianActivityLogEntry }) {
-  const roNumber = typeof log.metadata.roNumber === 'string' ? log.metadata.roNumber : null;
-  const lineNumber = typeof log.metadata.lineNumber === 'number' ? log.metadata.lineNumber : null;
+function OnboardingSection({ technician }: { technician: TechnicianDetail }) {
+  const { onboarding } = technician;
+  const hasRecord = Boolean(
+    onboarding.consentAt ||
+      onboarding.legalDisclaimerAt ||
+      onboarding.firstAppLaunchAt
+  );
 
   return (
-    <div className="benz-list-row px-3 py-2.5">
-      <div className="flex justify-between items-start gap-2 mb-1">
-        <span className="text-xs font-semibold text-benz-blue uppercase tracking-wide">
-          {formatEventLabel(log.event)}
-        </span>
-        <span className="text-xs text-benz-secondary shrink-0">{formatDateTime(log.createdAt)}</span>
+    <div className="benz-card p-4">
+      <div className="flex items-center gap-2 benz-section-title mb-3">
+        <ShieldCheck size={14} />
+        First Launch — Consent & Disclaimer
       </div>
-      <div className="text-sm leading-snug">{log.message}</div>
-      {(roNumber || lineNumber) && (
-        <div className="text-xs text-benz-muted mt-1">
-          {roNumber ? `RO ${roNumber}` : ''}
-          {roNumber && lineNumber ? ' · ' : ''}
-          {lineNumber ? `Line ${lineNumber}` : ''}
+      {!hasRecord ? (
+        <p className="text-xs text-benz-secondary leading-relaxed">
+          No onboarding record yet. Consent, legal acknowledgment, and first app launch are saved when
+          this technician completes Merlin&apos;s startup flow.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="benz-list-row p-3">
+            <div className="text-xs text-benz-secondary">Privacy consent</div>
+            <div className="text-sm font-medium mt-1">
+              {onboarding.consentAt
+                ? `${formatDateTime(onboarding.consentAt)}${onboarding.consentVersion ? ` · v${onboarding.consentVersion}` : ''}`
+                : 'Not recorded'}
+            </div>
+          </div>
+          <div className="benz-list-row p-3">
+            <div className="text-xs text-benz-secondary">Legal disclaimer</div>
+            <div className="text-sm font-medium mt-1">
+              {onboarding.legalDisclaimerAt
+                ? `${formatDateTime(onboarding.legalDisclaimerAt)}${onboarding.legalDisclaimerVersion ? ` · v${onboarding.legalDisclaimerVersion}` : ''}`
+                : 'Not recorded'}
+            </div>
+          </div>
+          <div className="benz-list-row p-3">
+            <div className="text-xs text-benz-secondary">First app launch</div>
+            <div className="text-sm font-medium mt-1">
+              {onboarding.firstAppLaunchAt
+                ? formatDateTime(onboarding.firstAppLaunchAt)
+                : 'Not recorded'}
+            </div>
+            {onboarding.firstAppLaunchSessionId ? (
+              <div className="text-xs text-benz-muted mt-1 truncate">
+                Session {onboarding.firstAppLaunchSessionId}
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+function StoryRow({ story }: { story: TechnicianCertifiedStoryItem }) {
+  return (
+    <div className="benz-list-row px-3 py-2.5">
+      <div className="flex justify-between items-start gap-2 mb-1">
+        <span className="text-xs font-semibold text-benz-blue uppercase tracking-wide">
+          RO {story.roNumber} · Line {story.lineNumber}
+        </span>
+        <span className="text-xs text-benz-secondary shrink-0">{formatDate(story.certifiedAt)}</span>
+      </div>
+      <div className="text-sm leading-snug">Certified by {story.certifiedByName}</div>
+      <div className="text-xs text-benz-muted mt-1">Prompt v{story.promptVersion}</div>
+    </div>
+  );
+}
+
 function TechnicianDetailPanel({
   technician,
-  appStartLogs,
-  storyLogs,
-  logsLoading,
+  stories,
+  storiesLoading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
 }: {
   technician: TechnicianDetail;
-  appStartLogs: TechnicianActivityLogEntry[];
-  storyLogs: TechnicianActivityLogEntry[];
-  logsLoading: boolean;
+  stories: TechnicianCertifiedStoryItem[];
+  storiesLoading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -78,59 +134,45 @@ function TechnicianDetailPanel({
             </div>
           </div>
           <span className="status-pill bg-benz-accent/15 text-benz-blue border border-benz-accent/30">
-            {technician.appStartLogCount + technician.storyLogCount} logs
+            {technician.certifiedStoryCount} stor{technician.certifiedStoryCount === 1 ? 'y' : 'ies'}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 mt-4 text-sm">
-          <div className="benz-list-row p-3">
-            <div className="text-xs text-benz-secondary">App starts</div>
-            <div className="font-medium mt-1">{technician.appStartLogCount}</div>
+        {technician.lastCertifiedAt ? (
+          <div className="text-xs text-benz-muted mt-3">
+            Last certified {formatDateTime(technician.lastCertifiedAt)}
           </div>
-          <div className="benz-list-row p-3">
-            <div className="text-xs text-benz-secondary">Story events</div>
-            <div className="font-medium mt-1">{technician.storyLogCount}</div>
-          </div>
-        </div>
+        ) : null}
       </div>
 
-      <div className="benz-card p-4">
-        <div className="flex items-center gap-2 benz-section-title mb-3">
-          <PlayCircle size={14} />
-          App Start Logs
-        </div>
-        {logsLoading ? (
-          <div className="text-sm text-benz-secondary">Loading session logs…</div>
-        ) : appStartLogs.length === 0 ? (
-          <p className="text-xs text-benz-secondary leading-relaxed">
-            No app-start logs yet. Logs are recorded when this technician opens Merlin and repair orders
-            finish loading.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {appStartLogs.map((log) => (
-              <LogRow key={log.id} log={log} />
-            ))}
-          </div>
-        )}
-      </div>
+      <OnboardingSection technician={technician} />
 
       <div className="benz-card p-4">
         <div className="flex items-center gap-2 benz-section-title mb-3">
           <ScrollText size={14} />
-          Story Activity Logs
+          Certified Warranty Stories
         </div>
-        {logsLoading ? (
-          <div className="text-sm text-benz-secondary">Loading story logs…</div>
-        ) : storyLogs.length === 0 ? (
+        {storiesLoading ? (
+          <div className="text-sm text-benz-secondary">Loading story library…</div>
+        ) : stories.length === 0 ? (
           <p className="text-xs text-benz-secondary leading-relaxed">
-            No story logs yet. Generate, score, review, or certify warranty stories to build this
-            history.
+            No certified warranty stories yet. Stories appear here when this technician certifies
+            AI-generated warranty work.
           </p>
         ) : (
           <div className="space-y-2">
-            {storyLogs.map((log) => (
-              <LogRow key={log.id} log={log} />
+            {stories.map((story) => (
+              <StoryRow key={story.id} story={story} />
             ))}
+            {hasMore ? (
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                className="benz-btn-secondary w-full text-sm mt-2"
+              >
+                {loadingMore ? 'Loading more…' : 'Load more stories'}
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -138,11 +180,11 @@ function TechnicianDetailPanel({
       <div className="benz-card p-4 benz-alert-info border">
         <div className="flex items-center gap-2 text-benz-blue text-sm font-medium mb-2">
           <ClipboardList size={16} />
-          Separate from advisor & audit data
+          Per-technician library
         </div>
         <p className="text-xs text-benz-secondary leading-relaxed">
-          Technician logs track operational app sessions and story workflow events only. They are stored
-          separately from Service Advisor intelligence and the compliance audit hash chain.
+          Each certified story is indexed under its technician with RO number and certification date.
+          Data is stored separately from Service Advisor intelligence and the compliance audit hash chain.
         </p>
       </div>
     </div>
@@ -153,11 +195,12 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
   const [technicians, setTechnicians] = useState<TechnicianListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TechnicianDetail | null>(null);
-  const [appStartLogs, setAppStartLogs] = useState<TechnicianActivityLogEntry[]>([]);
-  const [storyLogs, setStoryLogs] = useState<TechnicianActivityLogEntry[]>([]);
+  const [stories, setStories] = useState<TechnicianCertifiedStoryItem[]>([]);
+  const [storiesCursor, setStoriesCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [logsLoading, setLogsLoading] = useState(false);
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const loadTechnicians = useCallback(async () => {
     setLoading(true);
@@ -171,29 +214,54 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
     }
   }, []);
 
-  const loadDetail = useCallback(async (id: string) => {
-    setDetailLoading(true);
-    setLogsLoading(true);
+  const loadStories = useCallback(async (id: string, cursor?: string) => {
+    const isLoadMore = Boolean(cursor);
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setStoriesLoading(true);
+    }
     try {
-      const [{ technician }, { logs: appLogs }, { logs: story }] = await Promise.all([
-        api.getTechnician(id),
-        api.listTechnicianLogs(id, { category: 'app_start', limit: 50 }),
-        api.listTechnicianLogs(id, { category: 'story', limit: 50 }),
-      ]);
-      setDetail(technician);
-      setAppStartLogs(appLogs);
-      setStoryLogs(story);
+      const { stories: page, nextCursor } = await api.listTechnicianStories(id, {
+        limit: 50,
+        cursor,
+      });
+      setStories((prev) => (isLoadMore ? [...prev, ...page] : page));
+      setStoriesCursor(nextCursor);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load technician logs');
-      setSelectedId(null);
-      setDetail(null);
-      setAppStartLogs([]);
-      setStoryLogs([]);
+      toast.error(e instanceof Error ? e.message : 'Failed to load certified stories');
+      if (!isLoadMore) {
+        setStories([]);
+        setStoriesCursor(null);
+      }
     } finally {
-      setDetailLoading(false);
-      setLogsLoading(false);
+      if (isLoadMore) {
+        setLoadingMore(false);
+      } else {
+        setStoriesLoading(false);
+      }
     }
   }, []);
+
+  const loadDetail = useCallback(
+    async (id: string) => {
+      setDetailLoading(true);
+      try {
+        const { technician } = await api.getTechnician(id);
+        setDetail(technician);
+        await loadStories(id);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Failed to load technician profile');
+        setSelectedId(null);
+        setDetail(null);
+        setStories([]);
+        setStoriesCursor(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [loadStories]
+  );
 
   useEffect(() => {
     loadTechnicians();
@@ -204,8 +272,8 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
       loadDetail(selectedId);
     } else {
       setDetail(null);
-      setAppStartLogs([]);
-      setStoryLogs([]);
+      setStories([]);
+      setStoriesCursor(null);
     }
   }, [selectedId, loadDetail]);
 
@@ -228,14 +296,14 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
           <ArrowLeft size={22} />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="benz-dashboard-eyebrow text-left mb-0.5">Technician Activity</div>
+          <div className="benz-dashboard-eyebrow text-left mb-0.5">Technician Library</div>
           <h1 className="text-xl font-bold tracking-tight truncate">
             {selectedTechnician ? selectedTechnician.name : 'Technicians'}
           </h1>
           <p className="text-xs text-benz-secondary mt-0.5 leading-snug">
             {selectedTechnician
-              ? 'App-start sessions & per-story workflow logs'
-              : 'Dedicated logs — separate from advisors and audit trail'}
+              ? 'Onboarding record & certified warranty stories'
+              : 'Profiles and per-technician story libraries'}
           </p>
         </div>
       </div>
@@ -244,20 +312,26 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
         <div className="benz-card p-6 text-sm text-benz-secondary">Loading technicians...</div>
       ) : selectedId ? (
         detailLoading || !detail ? (
-          <div className="benz-card p-6 text-sm text-benz-secondary">Loading technician logs...</div>
+          <div className="benz-card p-6 text-sm text-benz-secondary">Loading technician profile...</div>
         ) : (
           <TechnicianDetailPanel
             technician={detail}
-            appStartLogs={appStartLogs}
-            storyLogs={storyLogs}
-            logsLoading={logsLoading}
+            stories={stories}
+            storiesLoading={storiesLoading}
+            loadingMore={loadingMore}
+            hasMore={Boolean(storiesCursor)}
+            onLoadMore={() => {
+              if (selectedId && storiesCursor) {
+                void loadStories(selectedId, storiesCursor);
+              }
+            }}
           />
         )
       ) : technicians.length === 0 ? (
         <BenzEmptyState
           icon={UsersRound}
           title="No technicians found"
-          hint="Add technician accounts in Settings. App-start and story logs appear here as they use Merlin."
+          hint="Add technician accounts in Settings. Onboarding records and certified stories appear here as they use Merlin."
         />
       ) : (
         <div className="space-y-2.5">
@@ -271,14 +345,15 @@ export function TechniciansView({ onBack }: TechniciansViewProps) {
                   ) : null}
                 </div>
                 <div className="text-xs text-benz-secondary mt-1">
-                  {tech.d7Number} · {tech.role} · {tech.appStartLogCount} start
-                  {tech.appStartLogCount === 1 ? '' : 's'} · {tech.storyLogCount} story
-                  {tech.storyLogCount === 1 ? '' : ' logs'}
+                  {tech.d7Number} · {tech.role} · {tech.certifiedStoryCount} certified stor
+                  {tech.certifiedStoryCount === 1 ? 'y' : 'ies'}
                 </div>
                 <div className="text-xs text-benz-muted">
-                  {tech.lastActivityAt
-                    ? `Last activity ${formatDateTime(tech.lastActivityAt)}`
-                    : 'No activity logged yet'}
+                  {tech.lastCertifiedAt
+                    ? `Last certified ${formatDateTime(tech.lastCertifiedAt)}`
+                    : tech.hasOnboardingRecord
+                      ? 'Onboarding recorded · no certified stories yet'
+                      : 'No activity recorded yet'}
                 </div>
               </div>
               <ChevronRight size={18} className="text-benz-secondary shrink-0" />
