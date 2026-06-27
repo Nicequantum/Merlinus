@@ -17,7 +17,7 @@ import { BenzEmptyState } from '@/components/BenzEmptyState';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { api, type TechnicianUser } from '@/lib/api';
-import type { TechnicianSession } from '@/types';
+import type { AdvisorListItem, TechnicianSession } from '@/types';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { SecurityComplianceSection } from '@/components/SecurityComplianceSection';
 
@@ -42,7 +42,15 @@ export function SettingsView({
   const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ d7Number: '', name: '', password: '', role: 'technician' as 'technician' | 'manager' });
+  const [advisorProfiles, setAdvisorProfiles] = useState<AdvisorListItem[]>([]);
+  const [advisorProfilesLoading, setAdvisorProfilesLoading] = useState(false);
+  const [newUser, setNewUser] = useState({
+    d7Number: '',
+    name: '',
+    password: '',
+    role: 'technician' as 'technician' | 'manager' | 'service_advisor',
+    serviceAdvisorId: '',
+  });
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
@@ -67,9 +75,23 @@ export function SettingsView({
     }
   }, [isManager]);
 
+  const loadAdvisorProfiles = useCallback(async () => {
+    if (!isManager) return;
+    setAdvisorProfilesLoading(true);
+    try {
+      const { advisors } = await api.listAdvisors();
+      setAdvisorProfiles(advisors.filter((advisor) => advisor.status === 'active'));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load service advisor profiles');
+    } finally {
+      setAdvisorProfilesLoading(false);
+    }
+  }, [isManager]);
+
   useEffect(() => {
     loadUsers();
-  }, [loadUsers]);
+    loadAdvisorProfiles();
+  }, [loadUsers, loadAdvisorProfiles]);
 
   const handleLogout = async () => {
     try {
@@ -104,9 +126,24 @@ export function SettingsView({
     e.preventDefault();
     setCreating(true);
     try {
-      await api.createUser(newUser);
-      toast.success('Technician account created');
-      setNewUser({ d7Number: '', name: '', password: '', role: 'technician' });
+      await api.createUser({
+        d7Number: newUser.d7Number,
+        name: newUser.name,
+        password: newUser.password,
+        role: newUser.role,
+        serviceAdvisorId:
+          newUser.role === 'service_advisor' ? newUser.serviceAdvisorId : undefined,
+      });
+      toast.success(
+        newUser.role === 'service_advisor' ? 'Service advisor account created' : 'Technician account created'
+      );
+      setNewUser({
+        d7Number: '',
+        name: '',
+        password: '',
+        role: 'technician',
+        serviceAdvisorId: '',
+      });
       setShowCreateForm(false);
       await loadUsers();
     } catch (err) {
@@ -322,12 +359,37 @@ export function SettingsView({
               />
               <select
                 value={newUser.role}
-                onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value as 'technician' | 'manager' }))}
+                onChange={(e) =>
+                  setNewUser((u) => ({
+                    ...u,
+                    role: e.target.value as 'technician' | 'manager' | 'service_advisor',
+                    serviceAdvisorId: e.target.value === 'service_advisor' ? u.serviceAdvisorId : '',
+                  }))
+                }
                 className="benz-input"
               >
                 <option value="technician">Technician</option>
                 <option value="manager">Manager</option>
+                <option value="service_advisor">Service Advisor</option>
               </select>
+              {newUser.role === 'service_advisor' ? (
+                <select
+                  value={newUser.serviceAdvisorId}
+                  onChange={(e) => setNewUser((u) => ({ ...u, serviceAdvisorId: e.target.value }))}
+                  className="benz-input"
+                  required
+                  disabled={advisorProfilesLoading}
+                >
+                  <option value="">
+                    {advisorProfilesLoading ? 'Loading advisor profiles…' : 'Link to service advisor profile'}
+                  </option>
+                  {advisorProfiles.map((advisor) => (
+                    <option key={advisor.id} value={advisor.id}>
+                      {advisor.displayName}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <button type="submit" disabled={creating} className="primary-btn w-full h-11 text-sm disabled:opacity-50">
                 {creating ? 'Creating…' : 'Create account'}
               </button>

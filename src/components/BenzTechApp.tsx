@@ -52,6 +52,11 @@ const LineView = dynamic(
   { loading: () => <LoadingScreen label="Loading repair line" sublabel="Preparing warranty tools…" /> }
 );
 
+const AdvisorDashboard = dynamic(
+  () => import('@/components/AdvisorDashboard').then((m) => m.AdvisorDashboard),
+  { loading: () => <LoadingScreen label="Loading advisor dashboard" /> }
+);
+
 function runAction(label: string, action: () => void | Promise<void>): void {
   void Promise.resolve(action()).catch((error: unknown) => {
     console.error(`[Merlin] ${label} failed`, error);
@@ -73,14 +78,16 @@ export function BenzTechApp() {
   const [consentLoading, setConsentLoading] = useState(false);
   const [legalDisclaimerLoading, setLegalDisclaimerLoading] = useState(false);
 
+  const isServiceAdvisor = session?.role === 'service_advisor';
+
   useEffect(() => {
-    if (!session || ro.loading || ro.listError) return;
+    if (!session || isServiceAdvisor || ro.loading || ro.listError) return;
     void recordTechnicianAppStart({
       role: session.role,
       todayRoCount: ro.todayROs.length,
       previousRoCount: ro.previousROs.length,
     });
-  }, [session, ro.loading, ro.listError, ro.todayROs.length, ro.previousROs.length]);
+  }, [session, isServiceAdvisor, ro.loading, ro.listError, ro.todayROs.length, ro.previousROs.length]);
 
   if (sessionLoading) {
     return <LoadingScreen label="Starting Merlin" sublabel="Verifying your session..." />;
@@ -130,11 +137,11 @@ export function BenzTechApp() {
     );
   }
 
-  if (ro.loading && !ro.listError) {
+  if (!isServiceAdvisor && ro.loading && !ro.listError) {
     return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
   }
 
-  if (ro.listError) {
+  if (!isServiceAdvisor && ro.listError) {
     return (
       <LoadErrorScreen
         title="Could not load repair orders"
@@ -147,6 +154,30 @@ export function BenzTechApp() {
 
   const goToSettings = () => ro.setView('settings');
   const isManager = session.role === 'manager';
+
+  if (isServiceAdvisor) {
+    return (
+      <div className="app-container">
+        <MaintenanceBanner />
+        {ro.view === 'settings' ? (
+          <SettingsView
+            session={session}
+            onBack={() => ro.setView('home')}
+            onLogout={logout}
+          />
+        ) : (
+          <ViewErrorBoundary viewName="the service advisor dashboard">
+            <AdvisorDashboard
+              session={session}
+              onOpenSettings={goToSettings}
+              onLogout={logout}
+            />
+          </ViewErrorBoundary>
+        )}
+        <AppFooter />
+      </div>
+    );
+  }
 
   const roListSection = (
     <RepairOrderHomeLists

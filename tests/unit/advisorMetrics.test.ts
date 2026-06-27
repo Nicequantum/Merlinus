@@ -17,16 +17,22 @@ describe('advisorMetrics', () => {
       approvedAudits: 6,
       warrantyLinesWithStory: 5,
       certifiedStories: 3,
+      soldApprovalLines: 8,
+      approvedSoldLines: 6,
+      soldAddOnLines: 5,
+      addOnLines: 2,
+      totalRevenue: 4200,
+      roValueCount: 3,
       csiScore: 92,
     });
 
     assert.equal(metrics.rosWritten, 4);
     assert.equal(metrics.approvalRate, 75);
     assert.equal(metrics.closingRatio, 60);
-    assert.equal(metrics.upsellRate, 20);
+    assert.equal(metrics.upsellRate, 40);
     assert.equal(metrics.csiScore, 92);
-    assert.equal(metrics.avgRepairOrderValue, null);
-    assert.equal(metrics.totalRevenue, null);
+    assert.equal(metrics.totalRevenue, 4200);
+    assert.equal(metrics.avgRepairOrderValue, 1400);
   });
 
   it('formats unavailable metrics gracefully', () => {

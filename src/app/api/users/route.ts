@@ -46,11 +46,36 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, createUserSchema);
       if ('error' in parsed) return parsed.error;
 
-      const { d7Number, name, password, role } = parsed.data;
+      const { d7Number, name, password, role, serviceAdvisorId } = parsed.data;
 
       const existing = await prisma.technician.findUnique({ where: { d7Number } });
       if (existing) {
         return apiError('An account with this D7 number already exists.', 409);
+      }
+
+      if (role === 'service_advisor') {
+        const linkedAdvisor = await prisma.serviceAdvisor.findFirst({
+          where: {
+            id: serviceAdvisorId,
+            dealershipId: session.dealershipId,
+            deletedAt: null,
+            status: 'active',
+          },
+        });
+        if (!linkedAdvisor) {
+          return apiError('Select a valid active service advisor profile to link.', 400);
+        }
+
+        const existingLink = await prisma.technician.findFirst({
+          where: {
+            serviceAdvisorId,
+            deletedAt: null,
+            isActive: true,
+          },
+        });
+        if (existingLink) {
+          return apiError('This service advisor profile already has a login account.', 409);
+        }
       }
 
       const passwordHash = await hashPassword(password);
@@ -63,6 +88,7 @@ export async function POST(request: Request) {
           role,
           isActive: true,
           dealershipId: session.dealershipId,
+          serviceAdvisorId: role === 'service_advisor' ? serviceAdvisorId : null,
         },
         select: {
           id: true,

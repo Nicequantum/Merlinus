@@ -37,6 +37,7 @@ export type AuditAction =
   | 'advisor.deactivate'
   | 'advisor.reactivate'
   | 'advisor.delete'
+  | 'advisor.sold_metrics'
   | 'template.save'
   | 'customerPayTemplateApplied'
   | 'customerPayStory.edit'

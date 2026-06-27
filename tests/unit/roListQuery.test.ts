@@ -41,6 +41,20 @@ describe('repair order list query', () => {
     assert.ok((where.updatedAt as { lt: Date }).lt instanceof Date);
   });
 
+  test('service advisor where clause scopes to linked advisor profile', () => {
+    const where = buildRepairOrderListWhere(
+      {
+        role: 'service_advisor',
+        dealershipId: 'd1',
+        technicianId: 't1',
+        serviceAdvisorId: 'sa-1',
+      },
+      { scope: 'today', limit: 50 }
+    );
+    assert.equal(where.dealershipId, 'd1');
+    assert.equal(where.serviceAdvisorId, 'sa-1');
+  });
+
   test('search where clause matches RO number and vehicle fields', () => {
     const where = buildRepairOrderListWhere(
       { role: 'technician', dealershipId: 'd1', technicianId: 't1' },

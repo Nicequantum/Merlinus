@@ -1,4 +1,5 @@
 import type { AdvisorPerformanceMetrics, StoryQualityResult } from '@/types';
+import { lineSoldTotal } from '@/lib/repairLineSoldMetrics';
 import { decryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 
@@ -37,6 +38,12 @@ type AdvisorAccumulator = {
   approvedAudits: number;
   warrantyLinesWithStory: number;
   certifiedStories: number;
+  soldApprovalLines: number;
+  approvedSoldLines: number;
+  soldAddOnLines: number;
+  addOnLines: number;
+  totalRevenue: number;
+  roValueCount: number;
   csiScore: number | null;
 };
 
@@ -49,28 +56,43 @@ function createAccumulator(csiScore: number | null = null): AdvisorAccumulator {
     approvedAudits: 0,
     warrantyLinesWithStory: 0,
     certifiedStories: 0,
+    soldApprovalLines: 0,
+    approvedSoldLines: 0,
+    soldAddOnLines: 0,
+    addOnLines: 0,
+    totalRevenue: 0,
+    roValueCount: 0,
     csiScore,
   };
 }
 
 function finalizeMetrics(acc: AdvisorAccumulator): AdvisorPerformanceMetrics {
   const approvalRate =
-    acc.auditedLines > 0
-      ? roundPercent((acc.approvedAudits / acc.auditedLines) * 100)
-      : null;
+    acc.soldApprovalLines > 0
+      ? roundPercent((acc.approvedSoldLines / acc.soldApprovalLines) * 100)
+      : acc.auditedLines > 0
+        ? roundPercent((acc.approvedAudits / acc.auditedLines) * 100)
+        : null;
   const closingRatio =
     acc.warrantyLinesWithStory > 0
       ? roundPercent((acc.certifiedStories / acc.warrantyLinesWithStory) * 100)
       : null;
   const upsellRate =
-    acc.totalLines > 0 ? roundPercent((acc.customerPayLines / acc.totalLines) * 100) : null;
+    acc.soldAddOnLines > 0
+      ? roundPercent((acc.addOnLines / acc.soldAddOnLines) * 100)
+      : acc.totalLines > 0
+        ? roundPercent((acc.customerPayLines / acc.totalLines) * 100)
+        : null;
+  const totalRevenue = acc.totalRevenue > 0 ? roundCurrency(acc.totalRevenue) : null;
+  const avgRepairOrderValue =
+    acc.roValueCount > 0 ? roundCurrency(acc.totalRevenue / acc.roValueCount) : null;
 
   return {
     rosWritten: acc.rosWritten,
     approvalRate,
     closingRatio,
-    avgRepairOrderValue: null,
-    totalRevenue: null,
+    avgRepairOrderValue,
+    totalRevenue,
     upsellRate,
     csiScore: acc.csiScore,
   };
@@ -103,6 +125,11 @@ export async function computeAdvisorMetricsBatch(
           isCustomerPay: true,
           storyQualityAuditEncrypted: true,
           warrantyStoryEncrypted: true,
+          soldLaborHours: true,
+          soldLaborAmount: true,
+          soldPartsAmount: true,
+          customerApproved: true,
+          isAddOn: true,
         },
       },
     },
@@ -120,9 +147,26 @@ export async function computeAdvisorMetricsBatch(
     if (!acc) continue;
 
     acc.rosWritten += 1;
+    let roSoldTotal = 0;
 
     for (const line of ro.repairLines) {
       acc.totalLines += 1;
+      const soldTotal = lineSoldTotal(line);
+      if (soldTotal > 0) {
+        roSoldTotal += soldTotal;
+        acc.totalRevenue += soldTotal;
+      }
+
+      if (line.customerApproved != null) {
+        acc.soldApprovalLines += 1;
+        if (line.customerApproved) acc.approvedSoldLines += 1;
+      }
+
+      if (line.isAddOn != null) {
+        acc.soldAddOnLines += 1;
+        if (line.isAddOn) acc.addOnLines += 1;
+      }
+
       if (line.isCustomerPay) {
         acc.customerPayLines += 1;
         continue;
@@ -140,6 +184,10 @@ export async function computeAdvisorMetricsBatch(
           acc.approvedAudits += 1;
         }
       }
+    }
+
+    if (roSoldTotal > 0) {
+      acc.roValueCount += 1;
     }
   }
 

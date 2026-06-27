@@ -38,6 +38,17 @@ export function useROList(session: TechnicianSession | null) {
       return;
     }
 
+    if (session.role === 'service_advisor') {
+      setAllROs([]);
+      setPreviousROs([]);
+      setListError(null);
+      setLoading(false);
+      setListRetrying(false);
+      previousLoadedRef.current = false;
+      setPreviousExpanded(false);
+      return;
+    }
+
     setListError(null);
     try {
       const { repairOrders, todayStart } = await api.listRepairOrders({ scope: 'today' });

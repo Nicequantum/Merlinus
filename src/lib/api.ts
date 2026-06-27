@@ -1,6 +1,9 @@
 import type {
   AdvisorDetail,
   AdvisorListItem,
+  AdvisorRepairOrderDetail,
+  AdvisorRepairOrderSummary,
+  RepairLineSoldMetrics,
   AuditDashboardSummary,
   AuditLogEntry,
   DashboardSummary,
@@ -223,6 +226,25 @@ export const api = {
   deleteAdvisor: (id: string) =>
     apiFetch<{ ok: boolean }>(`/api/advisors/${id}`, { method: 'DELETE' }),
 
+  listAdvisorDashboardRepairOrders: () =>
+    apiFetch<{ repairOrders: AdvisorRepairOrderSummary[] }>('/api/advisor-dashboard/repair-orders'),
+
+  getAdvisorDashboardRepairOrder: (id: string) =>
+    apiFetch<{ repairOrder: AdvisorRepairOrderDetail }>(`/api/advisor-dashboard/repair-orders/${id}`),
+
+  saveAdvisorSoldMetrics: (
+    roId: string,
+    lineId: string,
+    data: Partial<RepairLineSoldMetrics>
+  ) =>
+    apiFetch<{ lineId: string; soldMetrics: RepairLineSoldMetrics }>(
+      `/api/advisor-dashboard/repair-orders/${roId}/lines/${lineId}/sold-metrics`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    ),
+
   listTechnicians: () => apiFetch<{ technicians: TechnicianListItem[] }>('/api/technicians'),
 
   getTechnician: (id: string) => apiFetch<{ technician: TechnicianDetail }>(`/api/technicians/${id}`),
@@ -375,7 +397,13 @@ export const api = {
 
   listUsers: () => apiFetch<{ users: TechnicianUser[] }>('/api/users'),
 
-  createUser: (data: { d7Number: string; name: string; password: string; role: 'technician' | 'manager' }) =>
+  createUser: (data: {
+    d7Number: string;
+    name: string;
+    password: string;
+    role: 'technician' | 'manager' | 'service_advisor';
+    serviceAdvisorId?: string;
+  }) =>
     apiFetch<{ user: TechnicianUser }>('/api/users', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -130,11 +130,30 @@ export const resolveAdvisorSchema = z.object({
   serviceAdvisorName: safeText(48),
 });
 
-export const createUserSchema = z.object({
-  d7Number: d7NumberField,
-  name: safeText(100),
-  password: z.string().min(8).max(128),
-  role: z.enum(['technician', 'manager']).default('technician'),
+export const createUserSchema = z
+  .object({
+    d7Number: d7NumberField,
+    name: safeText(100),
+    password: z.string().min(8).max(128),
+    role: z.enum(['technician', 'manager', 'service_advisor']).default('technician'),
+    serviceAdvisorId: safeIdOptional(64),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === 'service_advisor' && !data.serviceAdvisorId?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Service advisor accounts must be linked to a Service Advisor profile',
+        path: ['serviceAdvisorId'],
+      });
+    }
+  });
+
+export const soldMetricsSchema = z.object({
+  soldLaborHours: z.number().min(0).max(999).nullable().optional(),
+  soldLaborAmount: z.number().min(0).max(1_000_000).nullable().optional(),
+  soldPartsAmount: z.number().min(0).max(1_000_000).nullable().optional(),
+  customerApproved: z.boolean().nullable().optional(),
+  isAddOn: z.boolean().nullable().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -202,7 +221,7 @@ export const technicianAppStartLogSchema = z.object({
   clientSessionId: z.string().min(8).max(64),
   metadata: z
     .object({
-      role: z.enum(['technician', 'manager']).optional(),
+      role: z.enum(['technician', 'manager', 'service_advisor']).optional(),
       todayRoCount: z.number().int().min(0).max(10_000).optional(),
       previousRoCount: z.number().int().min(0).max(10_000).optional(),
       appVersion: z.string().max(32).optional(),

@@ -48,6 +48,40 @@ export interface RepairLine {
   clearStoryQualityAudit?: boolean;
 }
 
+export interface RepairLineSoldMetrics {
+  soldLaborHours: number | null;
+  soldLaborAmount: number | null;
+  soldPartsAmount: number | null;
+  customerApproved: boolean | null;
+  isAddOn: boolean | null;
+  soldMetricsUpdatedAt?: string | null;
+}
+
+export interface AdvisorRepairOrderSummary {
+  id: string;
+  roNumber: string;
+  vehicle: {
+    year: string;
+    make: string;
+    model: string;
+  };
+  lineCount: number;
+  metricsCaptured: number;
+  updatedAt: string;
+}
+
+export interface AdvisorRepairOrderDetail {
+  id: string;
+  roNumber: string;
+  vehicle: VehicleInfo;
+  lines: Array<{
+    id: string;
+    lineNumber: number;
+    description: string;
+    soldMetrics: RepairLineSoldMetrics;
+  }>;
+}
+
 export interface VehicleWarrantyInfo {
   factoryWarranty?: string;
   cpoWarranty?: string;
@@ -318,6 +352,7 @@ export interface TechnicianSession {
   isAdmin: boolean;
   dealershipId: string;
   dealershipName: string;
+  serviceAdvisorId: string | null;
   consentAt: string | null;
   legalDisclaimerAt: string | null;
 }
@@ -430,6 +465,7 @@ export const AUDIT_ACTIONS = [
   'advisor.deactivate',
   'advisor.reactivate',
   'advisor.delete',
+  'advisor.sold_metrics',
   'template.save',
   'customerPayTemplateApplied',
   'customerPayStory.edit',

@@ -28,13 +28,20 @@ export function parseRepairOrderListParams(url: URL): RepairOrderListParams {
 }
 
 export function buildRepairOrderListWhere(
-  session: { role: string; dealershipId: string; technicianId: string },
+  session: {
+    role: string;
+    dealershipId: string;
+    technicianId: string;
+    serviceAdvisorId?: string | null;
+  },
   params: RepairOrderListParams
 ): Prisma.RepairOrderWhereInput {
   const roleWhere: Prisma.RepairOrderWhereInput =
     session.role === 'manager'
       ? { dealershipId: session.dealershipId }
-      : { technicianId: session.technicianId };
+      : session.role === 'service_advisor' && session.serviceAdvisorId
+        ? { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId }
+        : { technicianId: session.technicianId };
 
   if (params.q) {
     const term = params.q;

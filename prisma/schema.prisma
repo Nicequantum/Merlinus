@@ -83,6 +83,7 @@ datasource db {
 enum TechnicianRole {
   technician
   manager
+  service_advisor
 }
 
 model Dealership {
@@ -109,6 +110,9 @@ model Technician {
   sessionVersion Int           @default(0)
   dealershipId   String
   dealership     Dealership    @relation(fields: [dealershipId], references: [id])
+  /** Links service_advisor role logins to their ServiceAdvisor profile for RO scoping. */
+  serviceAdvisorId String?
+  serviceAdvisor   ServiceAdvisor? @relation(fields: [serviceAdvisorId], references: [id], onDelete: SetNull)
   consentAt      DateTime?
   consentVersion String?
   legalDisclaimerAt      DateTime?
@@ -127,6 +131,7 @@ model Technician {
   @@index([dealershipId])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([serviceAdvisorId])
 }
 
 model RepairOrder {
@@ -192,6 +197,7 @@ model ServiceAdvisor {
   observations    AdvisorComplaintObservation[]
   profile         AdvisorWritingProfile?
   repairOrders    RepairOrder[]
+  linkedAccounts  Technician[]
 
   @@unique([dealershipId, nameFingerprint])
   @@index([dealershipId, lastSeenAt])
@@ -266,6 +272,13 @@ model RepairLine {
   storyQualityAuditEncrypted String     @default("")
   /** True when story came from a Customer Pay template — skips AI generation and quality audit. */
   isCustomerPay             Boolean     @default(false)
+  /** Advisor-captured sold metrics — used for dealership KPI dashboards. */
+  soldLaborHours            Float?
+  soldLaborAmount           Float?
+  soldPartsAmount           Float?
+  customerApproved          Boolean?
+  isAddOn                   Boolean?
+  soldMetricsUpdatedAt      DateTime?
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
 

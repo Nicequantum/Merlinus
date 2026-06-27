@@ -21,6 +21,7 @@ export interface SessionPayload {
   isAdmin: boolean;
   dealershipId: string;
   dealershipName: string;
+  serviceAdvisorId: string | null;
   consentAt: string | null;
   legalDisclaimerAt: string | null;
   sessionVersion: number;
@@ -111,6 +112,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
 
   if (!tech || !isTechnicianAccountActive(tech)) return null;
   if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
+  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
 
   return {
     technicianId: tech.id,
@@ -120,6 +122,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     isAdmin: tech.isAdmin,
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
+    serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
     sessionVersion: tech.sessionVersion,
@@ -182,6 +185,7 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     include: { dealership: true },
   });
   if (!tech || !isTechnicianAccountActive(tech)) return null;
+  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
   const valid = await verifyPassword(password, tech.passwordHash);
   if (!valid) return null;
   return {
@@ -192,6 +196,7 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     isAdmin: tech.isAdmin,
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
+    serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
     sessionVersion: tech.sessionVersion,
