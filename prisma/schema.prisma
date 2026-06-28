@@ -9,20 +9,22 @@ datasource db {
 }
 
 // ─── PII PLAINTEXT MIGRATION PLAN (audit S2) ─────────────────────────────────
-// Phase 2 [COMPLETE]: S2 backfill finished — *Encrypted columns are canonical at rest.
-// Dual-storage writes have been removed; remaining plaintext columns below are
-// read-only compatibility/search fields until Phase 5 schema drop. Do NOT add new
-// plaintext PII write paths.
+// Phase 2 [BACKFILL COMPLETE]: *Encrypted columns are canonical for reads; S2 backfill done.
+// ACTIVE dual-storage writes remain for RepairOrder.roNumber and RepairLine.description
+// (see src/lib/roMapper.ts repairOrderToDbFields / repairLineToDbFields). Plaintext
+// columns are still written at create/update until Phase 4 write cutover.
 //
-// ── Migrated fields (plaintext column retained for search/UI until Phase 5) ───
+// ── Dual-storage fields (plaintext + encrypted both written until Phase 4) ────
 // RepairOrder.roNumber
-//   → roNumberEncrypted (canonical, backfill complete)
+//   → roNumberEncrypted (canonical for decrypt-first reads)
+//   WRITE: src/lib/roMapper.ts — roNumber and roNumberEncrypted both written
 //   READ:  src/lib/roMapper.ts dbToRepairOrder (decrypt first, plaintext fallback)
 //   SEARCH: src/lib/roListQuery.ts buildRepairOrderListWhere (contains on roNumber)
 //   CLIENT: src/hooks/repairOrders/roListUtils.ts matchesROSearch (in-memory filter)
 //
 // RepairLine.description
-//   → descriptionEncrypted (canonical, backfill complete)
+//   → descriptionEncrypted (canonical for decrypt-first reads)
+//   WRITE: src/lib/roMapper.ts — description and descriptionEncrypted both written
 //   READ:  src/lib/roMapper.ts dbToRepairLine (decrypt first, plaintext fallback)
 //
 // RepairOrder.serviceAdvisorName (denormalized, encrypted-only at rest)
@@ -48,9 +50,9 @@ datasource db {
 // ── Phased cutover (non-breaking) ─────────────────────────────────────────────
 // Phase 1 [COMPLETE] — dual-write introduced encrypted twins for RO/advisor fields
 //
-// Phase 2 [COMPLETE] — backfill finished; dual-storage removed
+// Phase 2 [BACKFILL COMPLETE] — backfill finished; dual-storage writes still active
 //   • npm run db:migrate-pii-safe / db:migrate-pii / db:reencrypt completed
-//   • *Encrypted columns are canonical; plaintext columns are read-only legacy
+//   • *Encrypted columns are canonical for reads; roNumber/description still dual-written
 //
 // Phase 3 [CURRENT — requires search replacement]
 //   • dbToRepairOrder / dbToRepairLine: encrypted-only reads (remove plaintext fallback)
