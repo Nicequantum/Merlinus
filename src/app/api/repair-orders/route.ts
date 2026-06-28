@@ -76,6 +76,10 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
+      if (session.role === 'service_advisor') {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
       const parsed = await parseRequestBody(request, createRepairOrderSchema, LARGE_JSON_BODY_LIMIT_BYTES);
       if ('error' in parsed) return parsed.error;
 

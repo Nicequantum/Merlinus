@@ -44,6 +44,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
+      if (session.role === 'service_advisor') {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
       const existing = await canAccessRepairOrder(session, id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
