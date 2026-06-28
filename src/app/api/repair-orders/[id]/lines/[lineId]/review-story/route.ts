@@ -6,6 +6,7 @@ import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { reviewWarrantyStory } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
+import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -32,16 +33,9 @@ export async function POST(
         return apiError('Warranty story text is required for review.', 400);
       }
 
-      const ro = await prisma.repairOrder.findUnique({
-        where: { id },
-        include: { repairLines: true },
-      });
-
-      if (!ro || ro.dealershipId !== session.dealershipId) {
+      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
+      if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
-      }
-      if (session.role !== 'manager' && ro.technicianId !== session.technicianId) {
-        return apiError('You do not have permission to perform this action.', 403);
       }
 
       const mapped = dbToRepairOrder(ro);
