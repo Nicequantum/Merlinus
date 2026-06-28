@@ -8,7 +8,8 @@ export function initSentryServer(): void {
   const dsn = getSentryDsn();
   if (!dsn) return;
 
-  // H-5: Lower production trace volume — 100% sampling was excessive for dealership scale.
+  // H-5: 0.2 in production — balances latency/error visibility with cost and noise at dealership scale
+  // (full sampling inflated Sentry quota without improving warranty-workflow triage).
   const isProduction =
     process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
   Sentry.init({

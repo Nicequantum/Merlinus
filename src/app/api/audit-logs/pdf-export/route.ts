@@ -2,8 +2,8 @@ import { writeAuditLog } from '@/lib/audit';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 import { getRequestIp } from '@/lib/rate-limit';
 import { logPerformance } from '@/lib/perf';
 import { parseRequestBody, pdfExportAuditSchema } from '@/lib/validation';
@@ -17,15 +17,12 @@ export async function POST(request: Request) {
 
       const { repairLineId, repairOrderId, durationMs } = parsed.data;
 
-      const line = await prisma.repairLine.findFirst({
-        where: {
-          id: repairLineId,
-          repairOrderId,
-          repairOrder: { dealershipId: session.dealershipId },
-        },
-        select: { id: true, lineNumber: true, isCustomerPay: true },
-      });
+      const ro = await canAccessRepairOrder(session, repairOrderId);
+      if (!ro) {
+        return apiError(VALIDATION_ERROR, 400);
+      }
 
+      const line = ro.repairLines.find((entry) => entry.id === repairLineId);
       if (!line) {
         return apiError(VALIDATION_ERROR, 400);
       }

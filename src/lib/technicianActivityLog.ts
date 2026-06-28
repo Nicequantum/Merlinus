@@ -23,6 +23,11 @@ export interface WriteTechnicianActivityLogInput {
   metadata?: Record<string, unknown>;
 }
 
+/** M-FINAL-2: strip plaintext RO numbers from durable activity messages (IDs remain in repairOrderId). */
+function sanitizeActivityLogMessage(message: string): string {
+  return message.replace(/\bRO\s+[^\s,]+/gi, 'RO [redacted]');
+}
+
 /** Non-blocking operational log — never fails parent workflows. */
 export async function writeTechnicianActivityLog(
   input: WriteTechnicianActivityLogInput
@@ -35,7 +40,7 @@ export async function writeTechnicianActivityLog(
         technicianId: input.technicianId,
         category: input.category,
         event: input.event,
-        message: input.message.slice(0, 500),
+        message: sanitizeActivityLogMessage(input.message).slice(0, 500),
         repairOrderId: input.repairOrderId,
         repairLineId: input.repairLineId,
         clientSessionId: input.clientSessionId,

@@ -11,6 +11,8 @@ import {
   MAINTENANCE_MODE_ERROR,
   UNAUTHORIZED_ERROR,
 } from './errors';
+import { CONSENT_VERSION } from '@/types';
+import { prisma } from './db';
 import { logPerformance } from './perf';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
@@ -63,8 +65,18 @@ export async function withAuth<T>(
     return apiError(FORBIDDEN_ERROR, 403);
   }
 
-  if (!options.skipConsent && !session.consentAt) {
-    return apiError(CONSENT_REQUIRED_ERROR, 403);
+  if (!options.skipConsent) {
+    if (!session.consentAt) {
+      return apiError(CONSENT_REQUIRED_ERROR, 403);
+    }
+    // H-FINAL-6: policy updates require re-consent when CONSENT_VERSION changes.
+    const consentRecord = await prisma.technician.findUnique({
+      where: { id: session.technicianId },
+      select: { consentVersion: true },
+    });
+    if (consentRecord?.consentVersion !== CONSENT_VERSION) {
+      return apiError(CONSENT_REQUIRED_ERROR, 403);
+    }
   }
 
   if (options.trackUsage) {
