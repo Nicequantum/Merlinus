@@ -1,5 +1,6 @@
 'use client';
 
+// Voice dictation uses the browser Web Speech API; audio is sent to Google's speech service.
 import { Mic, MicOff } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';

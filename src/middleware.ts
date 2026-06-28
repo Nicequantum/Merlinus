@@ -15,15 +15,15 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.has(pathname);
 }
 
-/** Internal dealership tool — permissive script CSP so Next.js inline bootstrap always runs. */
+/** Internal dealership tool — Grok calls are server-side only; styles allow inline for Next.js. */
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "script-src 'self' https://cdn.jsdelivr.net",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "manifest-src 'self' data:",
-  "connect-src 'self' blob: https://api.x.ai https://*.google.com https://*.gstatic.com wss://*.google.com https://*.sentry.io",
+  "connect-src 'self' blob: https://*.google.com https://*.gstatic.com wss://*.google.com https://*.sentry.io",
   "worker-src 'self' blob: https://cdn.jsdelivr.net",
   "child-src 'self' blob:",
   "frame-ancestors 'none'",

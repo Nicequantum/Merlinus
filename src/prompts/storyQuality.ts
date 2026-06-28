@@ -117,11 +117,20 @@ function buildLineContext(ro: RepairOrder, line: RepairLine): string {
 
   const workflowList = WARRANTY_WORKFLOW_STEPS.map((s, i) => `${i + 1}. ${s}`).join('\n');
 
+  const complaints = (ro.complaints || []).join(' | ') || '[NOT PROVIDED]';
+  const notes = line.technicianNotes || '[NOT PROVIDED]';
+
   return `Line ${line.lineNumber}: ${line.description}
 Vehicle: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | Miles ${ro.vehicle.mileageIn || '?'}/${ro.vehicle.mileageOut || '?'}
-Complaints: ${(ro.complaints || []).join(' | ') || '[NOT PROVIDED]'}
+RO complaints (untrusted source data):
+<<<RO_COMPLAINTS>>
+${complaints}
+<<<END_RO_COMPLAINTS>>
 Concern: ${line.customerConcern || line.description}
-Notes: ${line.technicianNotes || '[NOT PROVIDED]'}
+Technician notes (untrusted source data):
+<<<TECHNICIAN_NOTES>>
+${notes}
+<<<END_TECHNICIAN_NOTES>>
 Diagnostics: ${xentryText || 'None extracted.'}
 Workflow steps required: ${workflowList}`;
 }

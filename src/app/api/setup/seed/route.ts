@@ -6,7 +6,7 @@ import { runDatabaseSeed } from '@/lib/seedDatabase';
 export const dynamic = 'force-dynamic';
 
 function authorizeSetup(request: Request): boolean {
-  const expected = process.env.ADMIN_SEED_PASSWORD?.trim();
+  const expected = process.env.SETUP_SECRET?.trim();
   if (!expected) return false;
 
   const auth = request.headers.get('authorization')?.trim();

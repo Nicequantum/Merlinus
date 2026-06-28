@@ -95,8 +95,14 @@ export function buildWarrantyStoryUserMessage(ro: RepairOrder, line: RepairLine)
   return `Line ${line.lineNumber}: ${line.description}
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
 Complaint: ${concern}
-RO complaints: ${complaint}
-Notes: ${notes}
+RO complaints (untrusted source data):
+<<<RO_COMPLAINTS>>
+${complaint}
+<<<END_RO_COMPLAINTS>>
+Technician notes (untrusted source data):
+<<<TECHNICIAN_NOTES>>
+${notes}
+<<<END_TECHNICIAN_NOTES>>
 Diagnostics: ${xentryText || '[NOT PROVIDED]'}${lineOcr ? ` | OCR: ${lineOcr}` : ''}
 
 Write a production 3C warranty narrative for this line only. Transform source data into professional technician prose — do not echo notes verbatim. Cover Concern, Cause, and Correction in flowing paragraphs plus all 10 workflow steps.`;
