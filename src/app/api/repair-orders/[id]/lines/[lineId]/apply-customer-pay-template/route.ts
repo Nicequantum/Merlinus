@@ -2,7 +2,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { applyCustomerPayTemplate } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { parseRequestBody, applyCustomerPayTemplateSchema } from '@/lib/validation';
 
 /**
@@ -21,8 +21,7 @@ export async function POST(
       const parsed = await parseRequestBody(request, applyCustomerPayTemplateSchema);
       if ('error' in parsed) return parsed.error;
 
-      const ro = await canAccessRepairOrder(session, repairOrderId);
-      if (!ro) {
+      if (!(await loadStoryRouteRepairOrder(session, repairOrderId))) {
         return apiError(NOT_FOUND_ERROR, 404);
       }
 

@@ -1,7 +1,7 @@
 import { withAuth } from '@/lib/apiRoute';
 import { clearCustomerPayMode } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { getRequestIp } from '@/lib/rate-limit';
 
 /** M1: Dedicated endpoint to clear Customer Pay mode and re-enable warranty AI flows. */
@@ -14,7 +14,7 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
-      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
+      const ro = await loadStoryRouteRepairOrder(session, id);
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
       }

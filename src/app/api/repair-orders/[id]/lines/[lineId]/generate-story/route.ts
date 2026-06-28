@@ -5,7 +5,7 @@ import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -27,7 +27,7 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
-      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
+      const ro = await loadStoryRouteRepairOrder(session, id);
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
       }

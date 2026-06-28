@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -33,7 +33,7 @@ export async function POST(
         return apiError('Warranty story text is required for scoring.', 400);
       }
 
-      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
+      const ro = await loadStoryRouteRepairOrder(session, id);
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
       }

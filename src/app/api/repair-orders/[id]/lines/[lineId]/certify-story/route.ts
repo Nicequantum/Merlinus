@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -34,7 +34,7 @@ export async function POST(
         return apiError('Technician full name is required for certification.', 400);
       }
 
-      const ro = await canAccessRepairOrder(session, id, { repairLines: true });
+      const ro = await loadStoryRouteRepairOrder(session, id);
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);
       }

@@ -19,38 +19,47 @@ export async function canAccessRepairOrder(
   roId: string,
   include: Prisma.RepairOrderInclude = { repairLines: true }
 ) {
-  const ro = await prisma.repairOrder.findUnique({
-    where: { id: roId },
-    include,
-  });
-
-  if (!ro) return null;
-
-  if (session.role === 'manager' && ro.dealershipId === session.dealershipId) {
-    return ro;
+  if (session.role === 'manager') {
+    return prisma.repairOrder.findFirst({
+      where: { id: roId, dealershipId: session.dealershipId },
+      include,
+    });
   }
 
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
-    if (
-      ro.dealershipId === session.dealershipId &&
-      ro.serviceAdvisorId === session.serviceAdvisorId
-    ) {
-      const advisor = await prisma.serviceAdvisor.findFirst({
-        where: {
-          id: session.serviceAdvisorId,
-          dealershipId: session.dealershipId,
-          deletedAt: null,
-        },
-      });
-      if (!advisor || !isServiceAdvisorActive(advisor)) return null;
-      return ro;
-    }
-    return null;
+    const advisor = await prisma.serviceAdvisor.findFirst({
+      where: {
+        id: session.serviceAdvisorId,
+        dealershipId: session.dealershipId,
+        deletedAt: null,
+      },
+    });
+    if (!advisor || !isServiceAdvisorActive(advisor)) return null;
+
+    return prisma.repairOrder.findFirst({
+      where: {
+        id: roId,
+        dealershipId: session.dealershipId,
+        serviceAdvisorId: session.serviceAdvisorId,
+      },
+      include,
+    });
   }
 
-  if (ro.technicianId === session.technicianId) {
-    return ro;
-  }
+  return prisma.repairOrder.findFirst({
+    where: {
+      id: roId,
+      dealershipId: session.dealershipId,
+      technicianId: session.technicianId,
+    },
+    include,
+  });
+}
 
-  return null;
+/** Story line routes: load RO with repair lines using role-scoped lookup. */
+export async function loadStoryRouteRepairOrder(
+  session: RepairOrderAccessSession,
+  roId: string
+) {
+  return canAccessRepairOrder(session, roId, { repairLines: true });
 }
