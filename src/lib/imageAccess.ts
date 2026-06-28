@@ -5,6 +5,7 @@ export type ImageAccessSession = {
   technicianId: string;
   role: string;
   dealershipId: string;
+  serviceAdvisorId?: string | null;
 };
 
 function pathnamesFromImageJson(raw: string): string[] {
@@ -45,7 +46,11 @@ async function repairOrderContainsPathname(
 ): Promise<boolean> {
   const roWhere = {
     dealershipId: session.dealershipId,
-    ...(session.role === 'manager' ? {} : { technicianId: session.technicianId }),
+    ...(session.role === 'manager'
+      ? {}
+      : session.role === 'service_advisor' && session.serviceAdvisorId
+        ? { serviceAdvisorId: session.serviceAdvisorId }
+        : { technicianId: session.technicianId }),
     OR: [
       { xentryImageUrls: { contains: pathname } },
       { repairLines: { some: { xentryImageUrls: { contains: pathname } } } },

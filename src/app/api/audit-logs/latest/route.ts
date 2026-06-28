@@ -1,6 +1,7 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 
 const WARRANTY_STORY_ACTIONS = ['story.generate', 'story.review', 'story.edit', 'story.certify'] as const;
 const CUSTOMER_PAY_STORY_ACTIONS = [
@@ -23,10 +24,15 @@ export async function GET(request: Request) {
           id: repairLineId,
           repairOrder: { dealershipId: session.dealershipId },
         },
-        select: { id: true, isCustomerPay: true },
+        select: { id: true, isCustomerPay: true, repairOrderId: true },
       });
 
       if (!line) {
+        return { hash: null, promptVersion: null };
+      }
+
+      const ro = await canAccessRepairOrder(session, line.repairOrderId, {});
+      if (!ro) {
         return { hash: null, promptVersion: null };
       }
 

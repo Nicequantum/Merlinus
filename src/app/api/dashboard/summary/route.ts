@@ -1,6 +1,22 @@
+import type { Prisma } from '@prisma/client';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
 import { prisma } from '@/lib/db';
+
+function buildRoleScopedRoWhere(session: {
+  role: string;
+  dealershipId: string;
+  technicianId: string;
+  serviceAdvisorId: string | null;
+}): Prisma.RepairOrderWhereInput {
+  if (session.role === 'manager') {
+    return { dealershipId: session.dealershipId };
+  }
+  if (session.role === 'service_advisor' && session.serviceAdvisorId) {
+    return { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId };
+  }
+  return { technicianId: session.technicianId };
+}
 
 export async function GET(request: Request) {
   return withAuth(
@@ -8,19 +24,23 @@ export async function GET(request: Request) {
     async (session) => {
       const dealershipId = session.dealershipId;
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const isManager = session.role === 'manager';
+      const roWhere = buildRoleScopedRoWhere(session);
 
       const [totalRos, storiesGenerated, activeTechnicians, recentRos, auditSummary] = await Promise.all([
-        prisma.repairOrder.count({ where: { dealershipId } }),
+        prisma.repairOrder.count({ where: roWhere }),
         prisma.repairLine.count({
           where: {
             warrantyStoryEncrypted: { not: null },
             NOT: { warrantyStoryEncrypted: '' },
-            repairOrder: { dealershipId },
+            repairOrder: roWhere,
           },
         }),
-        prisma.technician.count({ where: { dealershipId, isActive: true, deletedAt: null } }),
+        isManager
+          ? prisma.technician.count({ where: { dealershipId, isActive: true, deletedAt: null } })
+          : Promise.resolve(0),
         prisma.repairOrder.findMany({
-          where: { dealershipId },
+          where: roWhere,
           include: {
             technician: { select: { name: true } },
             repairLines: { select: { warrantyStoryEncrypted: true } },
@@ -28,11 +48,13 @@ export async function GET(request: Request) {
           orderBy: { updatedAt: 'desc' },
           take: 5,
         }),
-        session.role === 'manager' ? getAuditDashboardSummary(dealershipId) : null,
+        isManager ? getAuditDashboardSummary(dealershipId) : null,
       ]);
 
       const activityThisWeek = await prisma.auditLog.count({
-        where: { dealershipId, createdAt: { gte: weekAgo } },
+        where: isManager
+          ? { dealershipId, createdAt: { gte: weekAgo } }
+          : { dealershipId, technicianId: session.technicianId, createdAt: { gte: weekAgo } },
       });
 
       return {

@@ -9,7 +9,35 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      NODE_OPTIONS: --import ./tests/setup/integration.ts
+      SESSION_SECRET: ci-test-session-secret-min-32-chars
+      ENCRYPTION_KEY: ci-test-encryption-key-32b
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      BLOB_READ_WRITE_TOKEN: ci-blob-token
+      KV_REST_API_URL: https://ci-kv.example.com
+      KV_REST_API_TOKEN: ci-kv-token
+      GROK_API_KEY: ci-grok-key
+      NEXT_PUBLIC_SENTRY_DSN: https://fake@o0.ingest.sentry.io/0
 
     steps:
       - name: Checkout
@@ -27,6 +55,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
       - name: Lint
         run: npm run lint
 
@@ -35,12 +66,12 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Ready to deploy
+        run: npm run ready-to-deploy
         env:
-          NODE_ENV: test
-          SESSION_SECRET: ci-test-session-secret-min-32-chars
-          ENCRYPTION_KEY: ci-test-encryption-key-32b
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-          BLOB_READ_WRITE_TOKEN: ci-blob-token
-          KV_REST_API_URL: https://ci-kv.example.com
-          KV_REST_API_TOKEN: ci-kv-token
-          GROK_API_KEY: ci-grok-key
+          NODE_ENV: production
+          VERCEL_ENV: production
