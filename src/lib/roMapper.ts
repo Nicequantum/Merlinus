@@ -210,8 +210,7 @@ export function repairOrderToDbFields(
   input: RepairOrderInput & { serviceAdvisorName?: string }
 ) {
   return {
-    // ACTIVE dual-storage write (Phase 4 pending): roNumber and roNumberEncrypted are both written.
-    // Plaintext is retained for list search until Phase 3–4 cutover (see schema.prisma migration plan).
+    // S2 PLAINTEXT WRITE: roNumber retained for list search until Phase 4 write cutover (see schema.prisma).
     roNumber: input.roNumber,
     roNumberEncrypted: encryptPII(input.roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
@@ -234,8 +233,7 @@ export function repairOrderToDbFields(
 export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
-    // ACTIVE dual-storage write (Phase 4 pending): description and descriptionEncrypted are both written.
-    // Plaintext is retained for legacy read fallback until Phase 4 write cutover.
+    // S2 PLAINTEXT WRITE: description retained for legacy read fallback until Phase 4 write cutover.
     description: line.description,
     descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),

@@ -7,7 +7,7 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
-import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -27,6 +27,10 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
+      if (session.role === 'service_advisor') {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
       const ro = await loadStoryRouteRepairOrder(session, id);
       if (!ro) {
         return apiError(NOT_FOUND_ERROR, 404);

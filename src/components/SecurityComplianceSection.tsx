@@ -10,13 +10,13 @@ const SECURITY_CATEGORIES: Array<{ title: string; items: string[] }> = [
     title: 'Data Encryption',
     items: [
       'Customer PII and repair content encrypted at rest using AES-256-GCM',
-      'Dual-write PII migration strategy (plaintext + encrypted columns)',
+      'Phase 3 PII migration: dual-storage active (plaintext + encrypted columns until Phase 4 cutover)',
     ],
   },
   {
     title: 'Access Control',
     items: [
-      'Session-based authentication with 12-hour expiry',
+      'Session-based authentication with 8-hour expiry',
       'Diagnostic images protected with strict authorization checks on upload and update',
       'Images stored in Vercel Blob with session-based private access',
       'Optimistic concurrency control to prevent data corruption',

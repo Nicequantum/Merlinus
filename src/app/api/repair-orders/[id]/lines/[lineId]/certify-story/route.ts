@@ -2,7 +2,7 @@ import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
@@ -22,6 +22,10 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
+      if (session.role === 'service_advisor') {
+        return apiError(FORBIDDEN_ERROR, 403);
+      }
+
       const parsed = await parseRequestBody(request, certifyStorySchema);
       if ('error' in parsed) return parsed.error;
 
