@@ -28,7 +28,6 @@ jobs:
 
     env:
       NODE_ENV: test
-      NODE_OPTIONS: --import ./tests/setup/integration.ts
       SESSION_SECRET: ci-test-session-secret-min-32-chars
       ENCRYPTION_KEY: ci-test-encryption-key-32b
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
