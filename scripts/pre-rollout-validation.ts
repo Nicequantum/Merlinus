@@ -655,14 +655,14 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
 
   const envSrc = readFileSync(resolve(process.cwd(), 'src/lib/env.ts'), 'utf8');
   const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
-  if (envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS') && rateSrc.includes('effectiveRateLimitConfig')) {
+  if (envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS') && rateSrc.includes('devMemoryRateLimitConfig')) {
     record('High Priority', 'H8 KV rate limiting', 'pass', 'KV required in production + stricter memory fallback');
   } else {
     record('High Priority', 'H8 KV rate limiting', 'fail', 'Rate limit production hardening incomplete');
   }
 
   const imageSrc = readFileSync(resolve(process.cwd(), 'src/lib/imageAccess.ts'), 'utf8');
-  if (imageSrc.includes('repairOrderContainsPathname') && imageSrc.includes('findFirst')) {
+  if (imageSrc.includes('repairOrderContainsPathname') && imageSrc.includes('findMany')) {
     record('High Priority', 'H9 image access query', 'pass', 'Targeted pathname lookup (no full RO scan)');
   } else {
     record('High Priority', 'H9 image access query', 'fail', 'Image access still scans all repair orders');
