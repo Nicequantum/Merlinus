@@ -106,4 +106,17 @@ describe('Third-party audit hardening', () => {
     assert.ok(shell.includes('loginSession'));
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
   });
+
+  it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {
+    const shell = readSrc('src/components/BenzTechApp.tsx');
+    assert.ok(shell.includes('LoginView'));
+    assert.ok(shell.includes("from '@/components/LoginView'"));
+    assert.ok(shell.includes("from '@/components/ConsentModal'"));
+    assert.ok(shell.includes("from '@/components/LegalDisclaimerModal'"));
+    assert.equal(shell.includes('sessionLoading'), false);
+    assert.ok(shell.includes('sessionPhase'));
+    assert.ok(shell.includes('loading: () =>'));
+    assert.ok(readSrc('src/components/HomePageClient.tsx').includes('BenzTechApp'));
+    assert.equal(readSrc('src/app/page.tsx').includes('next/dynamic'), false);
+  });
 });

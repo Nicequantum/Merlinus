@@ -1,7 +1,5 @@
 'use client';
 
-console.log('[Merlin] LoginView module evaluated');
-
 import { useState } from 'react';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
@@ -12,8 +10,6 @@ interface LoginViewProps {
 }
 
 export function LoginView({ onLogin }: LoginViewProps) {
-  console.log('[Merlin] LoginView render');
-
   const [d7Number, setD7Number] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

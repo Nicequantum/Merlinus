@@ -14,7 +14,11 @@ function useUnhandledRejectionLogging(): void {
         reason: reason instanceof Error ? reason.message : reason,
         stack: reason instanceof Error ? reason.stack : undefined,
       });
-      Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+      try {
+        Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+      } catch {
+        // Telemetry must never interfere with login or repair-order workflows.
+      }
     };
 
     window.addEventListener('unhandledrejection', onUnhandledRejection);

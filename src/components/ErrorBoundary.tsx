@@ -25,9 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     clientLog.error('Merlin error boundary', { scope: this.props.scope, error, info });
-    Sentry.captureException(error, {
-      extra: { componentStack: info.componentStack, scope: this.props.scope },
-    });
+    try {
+      Sentry.captureException(error, {
+        extra: { componentStack: info.componentStack, scope: this.props.scope },
+      });
+    } catch {
+      // Telemetry must never mask the in-app recovery UI.
+    }
     toast.error('An unexpected error occurred. You can try again.');
   }
 
