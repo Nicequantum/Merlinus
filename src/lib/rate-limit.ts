@@ -129,12 +129,15 @@ export async function checkRateLimit(
     return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
   }
 
-  // Production without KV should be blocked at build time; log and skip limiting if misconfigured at runtime.
+  // Production without KV: fail closed — do not serve unbounded AI/auth traffic.
   logger.error('rate_limit.kv_required', {
     routeKey,
-    detail: 'KV_REST_API_URL/TOKEN not configured in production — rate limiting disabled for this request',
+    detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
   });
-  return null;
+  return apiError(
+    'Service temporarily unavailable. Contact your administrator to configure rate limiting.',
+    503
+  );
 }
 
 export function getRequestIp(request: Request): string {

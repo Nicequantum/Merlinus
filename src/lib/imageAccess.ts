@@ -39,6 +39,15 @@ function imageJsonContainsPathname(raw: string, pathname: string): boolean {
   return pathnamesFromImageJson(raw).includes(pathname);
 }
 
+function auditMetadataContainsPathname(raw: string, pathname: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return typeof parsed.pathname === 'string' && parsed.pathname === pathname;
+  } catch {
+    return false;
+  }
+}
+
 /** H9: targeted lookup — avoid scanning every RO in the dealership. */
 async function repairOrderContainsPathname(
   session: ImageAccessSession,
@@ -57,11 +66,23 @@ async function repairOrderContainsPathname(
     ],
   };
 
-  const match = await prisma.repairOrder.findFirst({
+  const candidates = await prisma.repairOrder.findMany({
     where: roWhere,
-    select: { id: true },
+    select: {
+      xentryImageUrls: true,
+      repairLines: { select: { xentryImageUrls: true } },
+    },
+    take: 25,
   });
-  return Boolean(match);
+
+  for (const ro of candidates) {
+    if (imageJsonContainsPathname(ro.xentryImageUrls, pathname)) return true;
+    for (const line of ro.repairLines) {
+      if (imageJsonContainsPathname(line.xentryImageUrls, pathname)) return true;
+    }
+  }
+
+  return false;
 }
 
 /** True when the session may read this private blob (RO attachment or recent own upload). */
@@ -82,11 +103,11 @@ export async function userCanAccessImage(
       createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
       metadata: { contains: pathname },
     },
-    select: { id: true },
-    take: 1,
+    select: { metadata: true },
+    take: 20,
   });
 
-  return recentUploads.length > 0;
+  return recentUploads.some((entry) => auditMetadataContainsPathname(entry.metadata, pathname));
 }
 
 /** Returns the first pathname the session may not attach, or null when all are allowed. */

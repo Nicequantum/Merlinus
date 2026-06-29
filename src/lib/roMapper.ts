@@ -15,6 +15,7 @@ import {
   encryptStringArray,
 } from './encryption';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
+import { mapStoryCertificationFromDbLine, storyCertificationMatchesStory } from './storyCertification';
 import { mapSoldMetricsFromDb } from './repairLineSoldMetrics';
 import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
@@ -177,6 +178,21 @@ export function dbToRepairLine(line: DbLine): RepairLine {
         soldMetricsUpdatedAt?: Date | null;
       }
     ),
+    storyCertification: (() => {
+      const certification = mapStoryCertificationFromDbLine(
+        line as DbLine & {
+          storyCertifiedAt?: Date | null;
+          storyCertifiedByTechnicianId?: string | null;
+          storyCertifiedByNameEncrypted?: string;
+          storyCertifiedHash?: string;
+        }
+      );
+      const storyText = decryptOptionalSensitiveText(line.warrantyStoryEncrypted);
+      if (!certification || !storyCertificationMatchesStory(certification, storyText)) {
+        return null;
+      }
+      return certification;
+    })(),
   };
 }
 

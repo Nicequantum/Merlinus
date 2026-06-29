@@ -17,6 +17,7 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.password_change'
   | 'consent.accept'
+  | 'legalDisclaimer.accept'
   | 'ro.create'
   | 'ro.update'
   | 'ro.delete'
@@ -58,6 +59,8 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.login',
   'auth.logout',
   'auth.password_change',
+  'consent.accept',
+  'legalDisclaimer.accept',
   'story.generate',
   'story.review',
   'story.certify',
@@ -159,7 +162,7 @@ export async function appendAuditLogInTransaction(
   tx: Prisma.TransactionClient,
   input: AuditLogInput,
   createdAt = new Date()
-): Promise<void> {
+): Promise<string> {
   const promptVersion = resolvePromptVersion(input);
   assertPromptVersionValid(input.action, promptVersion);
   const metadata = JSON.stringify(sanitizeAuditMetadata(input.metadata, input.action));
@@ -205,12 +208,14 @@ export async function appendAuditLogInTransaction(
       createdAt,
     },
   });
+
+  return id;
 }
 
-export async function writeAuditLog(input: AuditLogInput): Promise<void> {
+export async function writeAuditLog(input: AuditLogInput): Promise<string | void> {
   try {
-    await prisma.$transaction(async (tx) => {
-      await appendAuditLogInTransaction(tx, input);
+    return await prisma.$transaction(async (tx) => {
+      return appendAuditLogInTransaction(tx, input);
     });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Audit log rejected:')) {

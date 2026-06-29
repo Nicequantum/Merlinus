@@ -37,6 +37,7 @@ import {
   type StoryCertificationRecord,
 } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
+import { hydrateStoryWorkflowFromRO } from '@/lib/storyCertificationClient';
 import { hydrateStoryQualityFromRO } from '@/lib/storyQualityHydration';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import {
@@ -237,8 +238,10 @@ export function useRepairOrders({
         roRef.current = normalized;
         setCurrentRO(normalized);
         setCurrentLineId(null);
-        setLastGeneratedStoryByLine({});
         const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
+        const { certificationByLine, lastGeneratedByLine } = hydrateStoryWorkflowFromRO(normalized);
+        setLastGeneratedStoryByLine(lastGeneratedByLine);
+        setStoryCertificationByLine(certificationByLine);
         setStoryQualityByLine(qualityByLine);
         setStoryReviewByLine(reviewByLine);
         generateStorySeqRef.current += 1;
@@ -768,7 +771,18 @@ export function useRepairOrders({
           (ro) => ({
             ...ro,
             repairLines: ro.repairLines.map((l) =>
-              l.id === lineId ? { ...l, warrantyStory: result.warrantyStory } : l
+              l.id === lineId
+                ? {
+                    ...l,
+                    warrantyStory: result.warrantyStory,
+                    storyCertification: {
+                      certifiedByName: result.certifiedByName,
+                      certifiedAt: result.certifiedAt,
+                      storyHash: result.storyHash ?? '',
+                      certifiedByTechnicianId: session?.technicianId ?? '',
+                    },
+                  }
+                : l
             ),
           }),
           { immediate: true }

@@ -46,6 +46,13 @@ export interface RepairLine {
   clearCustomerPay?: boolean;
   /** Client-only flag to clear a persisted MI audit on the next RO save. */
   clearStoryQualityAudit?: boolean;
+  /** Persisted technician certification — survives RO reload when story hash still matches. */
+  storyCertification?: {
+    certifiedByName: string;
+    certifiedAt: string;
+    storyHash: string;
+    certifiedByTechnicianId: string;
+  } | null;
   /** Advisor-captured sold metrics — persisted on RepairLine, read-only in technician/manager UI. */
   soldMetrics?: RepairLineSoldMetrics;
 }
@@ -422,6 +429,7 @@ export const AUDIT_ACTIONS = [
   'auth.logout',
   'auth.password_change',
   'consent.accept',
+  'legalDisclaimer.accept',
   'ro.create',
   'ro.update',
   'ro.delete',

@@ -8,10 +8,21 @@ import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
+import { buildStoryCertificationDbFields } from '@/lib/storyCertification';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
 import { parseRequestBody, certifyStorySchema } from '@/lib/validation';
+
+function namesMatchForCertification(sessionName: string, certifiedByName: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  return normalize(sessionName) === normalize(certifiedByName);
+}
 
 export async function POST(
   request: Request,
@@ -36,6 +47,12 @@ export async function POST(
       }
       if (!certifiedByName) {
         return apiError('Technician full name is required for certification.', 400);
+      }
+      if (!namesMatchForCertification(session.name, certifiedByName)) {
+        return apiError(
+          'Certification name must match your signed-in technician profile name exactly.',
+          400
+        );
       }
 
       const ro = await loadStoryRouteRepairOrder(session, id);
@@ -66,14 +83,10 @@ export async function POST(
       }
 
       const { text: warrantyStory } = sanitizeForCDKWithMeta(rawStory);
+      const storyHash = hashWarrantyStory(warrantyStory);
       const certifiedAt = new Date();
 
-      await prisma.repairLine.update({
-        where: { id: lineId },
-        data: { warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory) },
-      });
-
-      await writeAuditLog({
+      const auditLogId = await writeAuditLog({
         action: 'story.certify',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
@@ -87,8 +100,22 @@ export async function POST(
           certifiedAt: certifiedAt.toISOString(),
           aiAssistedStoryCertified: true,
           promptVersion: PROMPT_VERSION,
+          storyHash,
         },
         ipAddress: getRequestIp(request),
+      });
+
+      await prisma.repairLine.update({
+        where: { id: lineId },
+        data: {
+          warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+          ...buildStoryCertificationDbFields({
+            certifiedAt,
+            certifiedByTechnicianId: session.technicianId,
+            certifiedByName,
+            storyHash,
+          }),
+        },
       });
 
       void logStoryTechnicianActivity({
@@ -103,6 +130,7 @@ export async function POST(
         metadata: {
           certifiedAt: certifiedAt.toISOString(),
           promptVersion: PROMPT_VERSION,
+          storyHash,
         },
       });
 
@@ -116,9 +144,10 @@ export async function POST(
         certifiedAt,
         certifiedByName,
         promptVersion: PROMPT_VERSION,
+        auditLogId: typeof auditLogId === 'string' ? auditLogId : undefined,
       });
 
-      return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName };
+      return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName, storyHash };
     },
     {
       rateLimitKey: 'story.certify',

@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, it } from 'node:test';
+import { CRITICAL_AUDIT_ACTIONS } from '@/lib/audit';
+import { hashWarrantyStory } from '@/lib/storyHash';
+import { storyCertificationMatchesStory } from '@/lib/storyCertification';
+import { STORY_REVIEW_CLIENT_MS, UPLOAD_CLIENT_MS } from '@/lib/timeouts';
+
+const root = resolve(process.cwd());
+
+function readSrc(relativePath: string): string {
+  return readFileSync(resolve(root, relativePath), 'utf8');
+}
+
+describe('Third-party audit hardening', () => {
+  it('legal disclaimer is server-gated with version re-check and audit trail', () => {
+    const apiRoute = readSrc('src/lib/apiRoute.ts');
+    const disclaimerRoute = readSrc('src/app/api/legal-disclaimer/route.ts');
+    assert.ok(apiRoute.includes('LEGAL_DISCLAIMER_REQUIRED_ERROR'));
+    assert.ok(apiRoute.includes('legalDisclaimerVersion'));
+    assert.ok(apiRoute.includes('skipLegalDisclaimer'));
+    assert.ok(disclaimerRoute.includes("action: 'legalDisclaimer.accept'"));
+    assert.ok(disclaimerRoute.includes('skipLegalDisclaimer: true'));
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('legalDisclaimer.accept'));
+  });
+
+  it('story certification persists on RepairLine with hash binding', () => {
+    const schema = readSrc('prisma/schema.prisma');
+    const certifyRoute = readSrc(
+      'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'
+    );
+    assert.ok(schema.includes('storyCertifiedHash'));
+    assert.ok(certifyRoute.includes('buildStoryCertificationDbFields'));
+    assert.ok(certifyRoute.includes('storyHash'));
+    assert.ok(certifyRoute.includes('namesMatchForCertification'));
+  });
+
+  it('story hash is stable for identical sanitized text', () => {
+    const story = 'Customer states check engine light is on.';
+    const hashA = hashWarrantyStory(story);
+    const hashB = hashWarrantyStory(story);
+    assert.equal(hashA, hashB);
+    assert.ok(
+      storyCertificationMatchesStory(
+        { certifiedByName: 'Tech', certifiedAt: new Date().toISOString(), storyHash: hashA, certifiedByTechnicianId: 't1' },
+        story
+      )
+    );
+  });
+
+  it('production rate limiting fails closed without KV', () => {
+    const src = readSrc('src/lib/rate-limit.ts');
+    assert.ok(src.includes('request blocked'));
+    assert.ok(src.includes('503'));
+  });
+
+  it('Grok errors do not echo response bodies', () => {
+    const src = readSrc('src/lib/grok.ts');
+    assert.ok(src.includes('grok.api_error'));
+    assert.equal(src.includes('${err}'), false);
+    assert.equal(src.includes('errBody'), true);
+  });
+
+  it('service advisors are blocked from Grok extraction routes', () => {
+    assert.ok(readSrc('src/app/api/diagnostics/extract/route.ts').includes('blockServiceAdvisorAi'));
+    assert.ok(readSrc('src/app/api/repair-orders/extract/route.ts').includes('blockServiceAdvisorAi'));
+  });
+
+  it('client timeouts align with shared constants', () => {
+    const apiSrc = readSrc('src/lib/api.ts');
+    assert.ok(apiSrc.includes('STORY_REVIEW_CLIENT_MS'));
+    assert.ok(apiSrc.includes('UPLOAD_CLIENT_MS'));
+    assert.equal(apiSrc.includes('120_000'), false);
+    assert.equal(STORY_REVIEW_CLIENT_MS, 130_000);
+    assert.equal(UPLOAD_CLIENT_MS, 60_000);
+  });
+
+  it('HSTS is production-only', () => {
+    const src = readSrc('next.config.mjs');
+    assert.ok(src.includes("process.env.NODE_ENV === 'production'"));
+    assert.ok(src.includes('Strict-Transport-Security'));
+  });
+
+  it('image access verifies exact pathname matches', () => {
+    const src = readSrc('src/lib/imageAccess.ts');
+    assert.ok(src.includes('imageJsonContainsPathname'));
+    assert.ok(src.includes('auditMetadataContainsPathname'));
+  });
+
+  it('client hooks do not import server-only certification modules', () => {
+    const useRepairOrders = readSrc('src/hooks/useRepairOrders.ts');
+    assert.ok(useRepairOrders.includes('storyCertificationClient'));
+    assert.equal(useRepairOrders.includes("from '@/lib/storyCertification'"), false);
+    assert.ok(readSrc('src/lib/storyCertification.ts').includes("import 'server-only'"));
+  });
+});

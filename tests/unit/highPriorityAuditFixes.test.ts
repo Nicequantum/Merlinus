@@ -63,9 +63,10 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(rateSrc.includes('isProductionEnv'));
   });
 
-  it('H9: image access uses targeted query', () => {
+  it('H9: image access uses targeted query with exact pathname verification', () => {
     const src = readSrc('src/lib/imageAccess.ts');
-    assert.ok(src.includes('findFirst'));
+    assert.ok(src.includes('findMany'));
+    assert.ok(src.includes('imageJsonContainsPathname'));
     assert.equal(src.includes('findMany({\n    where: {\n      dealershipId'), false);
   });
 

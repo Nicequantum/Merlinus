@@ -8,10 +8,11 @@ import {
   FORBIDDEN_ERROR,
   GENERIC_ERROR,
   handleRouteError,
+  LEGAL_DISCLAIMER_REQUIRED_ERROR,
   MAINTENANCE_MODE_ERROR,
   UNAUTHORIZED_ERROR,
 } from './errors';
-import { CONSENT_VERSION } from '@/types';
+import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
 import { prisma } from './db';
 import { logPerformance } from './perf';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
@@ -28,6 +29,8 @@ interface RouteOptions {
   trackUsage?: boolean;
   /** When true, allow the route before privacy consent is recorded (e.g. POST /api/consent). */
   skipConsent?: boolean;
+  /** When true, allow the route before legal disclaimer is recorded (e.g. POST /api/legal-disclaimer). */
+  skipLegalDisclaimer?: boolean;
   /** Block when MERLIN_MAINTENANCE_MODE is enabled (AI and heavy write paths). */
   blockInMaintenance?: boolean;
   /** Emit structured perf log for the route handler duration. */
@@ -76,6 +79,19 @@ export async function withAuth<T>(
     });
     if (consentRecord?.consentVersion !== CONSENT_VERSION) {
       return apiError(CONSENT_REQUIRED_ERROR, 403);
+    }
+  }
+
+  if (!options.skipLegalDisclaimer) {
+    if (!session.legalDisclaimerAt) {
+      return apiError(LEGAL_DISCLAIMER_REQUIRED_ERROR, 403);
+    }
+    const disclaimerRecord = await prisma.technician.findUnique({
+      where: { id: session.technicianId },
+      select: { legalDisclaimerVersion: true },
+    });
+    if (disclaimerRecord?.legalDisclaimerVersion !== LEGAL_DISCLAIMER_VERSION) {
+      return apiError(LEGAL_DISCLAIMER_REQUIRED_ERROR, 403);
     }
   }
 

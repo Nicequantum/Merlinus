@@ -273,10 +273,16 @@ model RepairLine {
   customerApproved          Boolean?
   isAddOn                   Boolean?
   soldMetricsUpdatedAt      DateTime?
+  /** Technician certification — binds signed story hash to persisted warranty text. */
+  storyCertifiedAt              DateTime?
+  storyCertifiedByTechnicianId  String?
+  storyCertifiedByNameEncrypted String      @default("")
+  storyCertifiedHash            String      @default("")
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
 
   @@index([repairOrderId])
+  @@index([storyCertifiedAt])
 }
 
 model Template {

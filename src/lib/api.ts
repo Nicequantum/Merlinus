@@ -31,7 +31,9 @@ import {
   DIAGNOSTIC_EXTRACT_CLIENT_MS,
   RO_EXTRACT_CLIENT_MS,
   STORY_GENERATE_CLIENT_MS,
+  STORY_REVIEW_CLIENT_MS,
   STORY_SCORE_CLIENT_MS,
+  UPLOAD_CLIENT_MS,
 } from '@/lib/timeouts';
 
 export interface TechnicianUser {
@@ -113,12 +115,16 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
   return res.json();
 }
 
-async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetchWithNetworkRetry(path, {
-    method: 'POST',
-    body: formData,
-    credentials: 'include',
-  });
+async function apiUpload<T>(path: string, formData: FormData, timeoutMs?: number): Promise<T> {
+  const res = await fetchWithNetworkRetry(
+    path,
+    {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    },
+    timeoutMs
+  );
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -199,7 +205,11 @@ export const api = {
   uploadImage: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiUpload<{ pathname: string; url: string; name: string }>('/api/upload', formData);
+    return apiUpload<{ pathname: string; url: string; name: string }>(
+      '/api/upload',
+      formData,
+      UPLOAD_CLIENT_MS
+    );
   },
 
   listAdvisors: () => apiFetch<{ advisors: AdvisorListItem[] }>('/api/advisors'),
@@ -327,11 +337,11 @@ export const api = {
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>
     apiFetch<{ review: StoryReviewResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/review-story`,
-      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: 120_000 }
+      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: STORY_REVIEW_CLIENT_MS }
     ),
 
   certifyStory: (roId: string, lineId: string, warrantyStory: string, certifiedByName: string) =>
-    apiFetch<{ warrantyStory: string; certifiedAt: string; certifiedByName: string }>(
+    apiFetch<{ warrantyStory: string; certifiedAt: string; certifiedByName: string; storyHash: string }>(
       `/api/repair-orders/${roId}/lines/${lineId}/certify-story`,
       {
         method: 'POST',

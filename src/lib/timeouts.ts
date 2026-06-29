@@ -41,3 +41,6 @@ export const STORY_REVIEW_GROK_MS = 90_000;
 /** Sync with `maxDuration` in `review-story/route.ts` */
 export const STORY_REVIEW_ROUTE_MAX_DURATION_S = 120;
 export const STORY_REVIEW_CLIENT_MS = STORY_REVIEW_ROUTE_MAX_DURATION_S * 1000 + CLIENT_BUFFER_MS;
+
+/** Image upload during RO/diagnostic scans — allow slow dealership uplinks. */
+export const UPLOAD_CLIENT_MS = 60_000;

@@ -14,6 +14,7 @@ import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { logPerformance } from '@/lib/perf';
 import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -94,6 +95,7 @@ export async function POST(
         data: {
           warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
           storyQualityAuditEncrypted: '',
+          ...CLEAR_STORY_CERTIFICATION_DB,
         },
       });
 

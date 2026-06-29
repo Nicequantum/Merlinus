@@ -12,6 +12,8 @@ export const DAILY_USAGE_LIMIT_ERROR =
 export const SESSION_EXPIRED_ERROR = 'Your session has expired. Please sign in again.';
 export const CONSENT_REQUIRED_ERROR =
   'Data and privacy consent is required before using Merlin. Please accept the consent terms to continue.';
+export const LEGAL_DISCLAIMER_REQUIRED_ERROR =
+  'Legal disclaimer acknowledgment is required before using Merlin. Please accept the disclaimer to continue.';
 export const MAINTENANCE_MODE_ERROR =
   'Merlin is in maintenance mode. Story generation and uploads are paused — try again shortly.';
 export const GROK_UNAVAILABLE_ERROR =

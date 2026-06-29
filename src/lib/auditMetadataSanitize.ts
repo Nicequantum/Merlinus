@@ -35,6 +35,8 @@ const ALLOWED_STRING_KEYS = new Set([
   'reason',
   'certifiedByName',
   'certifiedAt',
+  'storyHash',
+  'legalDisclaimerVersion',
 ]);
 
 function sanitizePrimitive(value: unknown): unknown {

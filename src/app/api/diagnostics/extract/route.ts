@@ -1,5 +1,6 @@
 import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
+import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractDiagnosticsFromImage } from '@/lib/grok';
 import { apiError, FORBIDDEN_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
+      const blocked = blockServiceAdvisorAi(session);
+      if (blocked) return blocked;
+
       const parsed = await parseRequestBody(request, imagePathnamesSchema);
       if ('error' in parsed) return parsed.error;
 

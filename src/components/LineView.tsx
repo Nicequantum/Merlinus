@@ -151,6 +151,12 @@ export function LineView({
     }
   }, [storyCertification]);
 
+  useEffect(() => {
+    if (!storyCertification && !certificationName.trim() && technicianName?.trim()) {
+      setCertificationName(technicianName.trim());
+    }
+  }, [line.id, technicianName, storyCertification, certificationName]);
+
   const canSaveAsTemplate = useMemo(() => {
     return Boolean(lastGeneratedStoryText && line.warrantyStory?.trim());
   }, [lastGeneratedStoryText, line.warrantyStory]);
