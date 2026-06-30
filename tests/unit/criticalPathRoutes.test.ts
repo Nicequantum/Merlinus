@@ -59,4 +59,13 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /criticalPathMocks/);
     assert.match(src, /runWithNextRouteContext/);
   });
+
+  it('cookies intercept test guards the traced auth.ts next/headers import path', () => {
+    const src = readSrc('tests/integration/cookies-intercept.test.ts');
+    assert.match(src, /setSessionCookie/);
+    assert.match(src, /getMockSessionCookie/);
+    const mock = readSrc('tests/setup/cookiesMock.mjs');
+    assert.match(mock, /next\/headers/);
+    assert.match(mock, /\.\/dist\/server\/request\/cookies/);
+  });
 });

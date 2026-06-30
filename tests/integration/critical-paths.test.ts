@@ -163,14 +163,12 @@ describe('critical path HTTP routes', () => {
       where: { action: 'auth.login', technicianId, dealershipId },
     });
 
-    const response = await runWithNextRouteContext(
+    const response = await postLogin(
       new Request('http://localhost/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d7Number: techD7, password: techPassword }),
-      }),
-      '/api/auth/login/route',
-      (request) => postLogin(request)
+      })
     );
 
     const { status, body } = await readJsonResponse<{
@@ -190,14 +188,12 @@ describe('critical path HTTP routes', () => {
   });
 
   test('POST /api/auth/login rejects invalid credentials', async () => {
-    const response = await runWithNextRouteContext(
+    const response = await postLogin(
       new Request('http://localhost/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d7Number: 'D7TECH001', password: 'wrong-password-value' }),
-      }),
-      '/api/auth/login/route',
-      (request) => postLogin(request)
+      })
     );
     const { status } = await readJsonResponse(response);
     assert.equal(status, 401);

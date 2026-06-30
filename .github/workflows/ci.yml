@@ -73,7 +73,7 @@ jobs:
         run: npm run db:seed
 
       - name: Integration tests
-        run: npx tsx --import ./tests/setup/integration.ts --test tests/integration/**/*.test.ts
+        run: npx tsx --import ./tests/setup/preload.mjs --test tests/integration/**/*.test.ts
         env:
           # Fake KV URLs make /api/health return 503 (probe error). CI has no real KV; use in-memory fallback.
           KV_REST_API_URL: ''
