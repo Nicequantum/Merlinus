@@ -1,6 +1,7 @@
 import { withAuth } from '@/lib/apiRoute';
 import { applyCustomerPayTemplate } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { getRequestIp } from '@/lib/rate-limit';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { parseRequestBody, applyCustomerPayTemplateSchema } from '@/lib/validation';
@@ -18,6 +19,9 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
+      const blocked = blockServiceAdvisorAi(session);
+      if (blocked) return blocked;
+
       const parsed = await parseRequestBody(request, applyCustomerPayTemplateSchema);
       if ('error' in parsed) return parsed.error;
 

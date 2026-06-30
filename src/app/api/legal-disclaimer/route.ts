@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { appendAuditLogInTransaction } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -10,32 +10,29 @@ export async function POST(request: Request) {
     async (session) => {
       const now = new Date();
 
-      await prisma.technician.update({
-        where: { id: session.technicianId },
-        data: {
-          legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
-          legalDisclaimerAt: now,
-        },
-      });
+      await prisma.$transaction(async (tx) => {
+        await tx.technician.update({
+          where: { id: session.technicianId },
+          data: {
+            legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+            legalDisclaimerAt: now,
+          },
+        });
 
-      await writeAuditLog({
-        action: 'legalDisclaimer.accept',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'technician',
-        entityId: session.technicianId,
-        metadata: { legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION },
-        ipAddress: getRequestIp(request),
-      });
-
-      const technician = await prisma.technician.findUnique({
-        where: { id: session.technicianId },
-        select: { legalDisclaimerAt: true, legalDisclaimerVersion: true },
+        await appendAuditLogInTransaction(tx, {
+          action: 'legalDisclaimer.accept',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'technician',
+          entityId: session.technicianId,
+          metadata: { legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION },
+          ipAddress: getRequestIp(request),
+        });
       });
 
       return {
-        legalDisclaimerAt: technician?.legalDisclaimerAt?.toISOString() ?? now.toISOString(),
-        legalDisclaimerVersion: technician?.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
+        legalDisclaimerAt: now.toISOString(),
+        legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
       };
     },
     { rateLimitKey: 'legal_disclaimer', skipLegalDisclaimer: true }

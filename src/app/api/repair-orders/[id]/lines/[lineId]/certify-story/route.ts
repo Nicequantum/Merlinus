@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { appendAuditLogInTransaction } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
@@ -86,36 +86,40 @@ export async function POST(
       const storyHash = hashWarrantyStory(warrantyStory);
       const certifiedAt = new Date();
 
-      const auditLogId = await writeAuditLog({
-        action: 'story.certify',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairLine',
-        entityId: lineId,
-        promptVersion: PROMPT_VERSION,
-        metadata: {
-          repairOrderId: id,
-          lineNumber: line.lineNumber,
-          certifiedByName,
-          certifiedAt: certifiedAt.toISOString(),
-          aiAssistedStoryCertified: true,
+      const auditLogId = await prisma.$transaction(async (tx) => {
+        const newAuditLogId = await appendAuditLogInTransaction(tx, {
+          action: 'story.certify',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'repairLine',
+          entityId: lineId,
           promptVersion: PROMPT_VERSION,
-          storyHash,
-        },
-        ipAddress: getRequestIp(request),
-      });
-
-      await prisma.repairLine.update({
-        where: { id: lineId },
-        data: {
-          warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
-          ...buildStoryCertificationDbFields({
-            certifiedAt,
-            certifiedByTechnicianId: session.technicianId,
+          metadata: {
+            repairOrderId: id,
+            lineNumber: line.lineNumber,
             certifiedByName,
+            certifiedAt: certifiedAt.toISOString(),
+            aiAssistedStoryCertified: true,
+            promptVersion: PROMPT_VERSION,
             storyHash,
-          }),
-        },
+          },
+          ipAddress: getRequestIp(request),
+        });
+
+        await tx.repairLine.update({
+          where: { id: lineId },
+          data: {
+            warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+            ...buildStoryCertificationDbFields({
+              certifiedAt,
+              certifiedByTechnicianId: session.technicianId,
+              certifiedByName,
+              storyHash,
+            }),
+          },
+        });
+
+        return newAuditLogId;
       });
 
       void logStoryTechnicianActivity({

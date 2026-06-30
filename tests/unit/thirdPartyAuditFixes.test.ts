@@ -67,6 +67,31 @@ describe('Third-party audit hardening', () => {
     assert.ok(readSrc('src/app/api/repair-orders/extract/route.ts').includes('blockServiceAdvisorAi'));
   });
 
+  it('compliance routes use atomic Prisma transactions for DB + audit', () => {
+    const consent = readSrc('src/app/api/consent/route.ts');
+    const disclaimer = readSrc('src/app/api/legal-disclaimer/route.ts');
+    const certify = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts');
+    assert.ok(consent.includes('prisma.$transaction'));
+    assert.ok(consent.includes('appendAuditLogInTransaction'));
+    assert.ok(disclaimer.includes('prisma.$transaction'));
+    assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
+    assert.ok(certify.includes('prisma.$transaction'));
+    assert.ok(certify.includes('appendAuditLogInTransaction'));
+  });
+
+  it('service advisors are blocked from customer-pay template routes', () => {
+    assert.ok(
+      readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/apply-customer-pay-template/route.ts').includes(
+        'blockServiceAdvisorAi'
+      )
+    );
+    assert.ok(
+      readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route.ts').includes(
+        'blockServiceAdvisorAi'
+      )
+    );
+  });
+
   it('client timeouts align with shared constants', () => {
     const apiSrc = readSrc('src/lib/api.ts');
     assert.ok(apiSrc.includes('STORY_REVIEW_CLIENT_MS'));
