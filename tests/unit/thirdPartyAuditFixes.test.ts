@@ -55,6 +55,22 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('503'));
   });
 
+  it('technician UI paths do not use console.log for debug noise', () => {
+    const technicianPaths = [
+      'src/components/LineView.tsx',
+      'src/components/BenzTechApp.tsx',
+      'src/components/BenzTechAuthenticatedApp.tsx',
+      'src/hooks/repairOrders/useROStoryWorkflow.ts',
+      'src/hooks/repairOrders/useROScan.ts',
+      'src/hooks/useRepairOrders.ts',
+      'src/services/ocr.ts',
+    ];
+    for (const relativePath of technicianPaths) {
+      const src = readSrc(relativePath);
+      assert.equal(src.includes('console.log'), false, `${relativePath} must not contain console.log`);
+    }
+  });
+
   it('ErrorBoundary does not expose raw error messages to users', () => {
     const src = readSrc('src/components/ErrorBoundary.tsx');
     assert.equal(src.includes('error.message'), false);

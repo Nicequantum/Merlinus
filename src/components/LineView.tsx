@@ -195,7 +195,6 @@ export function LineView({
   };
 
   const handleGenerateStory = () => {
-    console.log('Generate Story clicked');
     void onGenerateStory();
   };
 

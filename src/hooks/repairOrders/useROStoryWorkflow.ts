@@ -155,8 +155,6 @@ export function useROStoryWorkflow(
 
   const generateStory = useCallback(
     async (lineId: string) => {
-      console.log('Generate Story clicked', { lineId });
-
       if (refs.storyGenerationInFlightRef.current) {
         toast.message('Story generation already in progress…');
         return;
