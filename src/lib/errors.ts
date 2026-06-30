@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
 
@@ -32,9 +33,15 @@ export function handleRouteError(error: unknown, context: string): NextResponse 
     logger.warn('route.unauthorized', { context });
     return apiError(SESSION_EXPIRED_ERROR, 401);
   }
+
+  const err = error instanceof Error ? error : new Error('unknown route error');
   logger.error('route.error', {
     context,
-    error: error instanceof Error ? error.message : 'unknown',
+    error: err.message,
+  });
+  Sentry.captureException(err, {
+    tags: { routeContext: context },
+    extra: { routeContext: context },
   });
   return apiError(GENERIC_ERROR, 500);
 }
