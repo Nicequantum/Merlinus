@@ -756,8 +756,16 @@ function checkMediumAuditFixes(): void {
     record('Medium', 'M9/M10 session', 'fail', 'Session medium fixes incomplete');
   }
 
+  const policyPath = resolve(process.cwd(), 'security-policy.mjs');
+  const policy = existsSync(policyPath) ? readFileSync(policyPath, 'utf8') : '';
   const mw = readFileSync(resolve(process.cwd(), 'src/middleware.ts'), 'utf8');
-  if (mw.includes("'unsafe-inline'") && mw.includes('script-src') && !mw.includes('unsafe-eval')) {
+  const m12Ok =
+    policy.includes("'unsafe-inline'") &&
+    policy.includes('script-src') &&
+    !policy.includes('unsafe-eval') &&
+    mw.includes('security-policy.mjs') &&
+    mw.includes('CONTENT_SECURITY_POLICY');
+  if (m12Ok) {
     record('Medium', 'M12 CSP', 'pass', 'CSP middleware with inline scripts allowed');
   } else {
     record('Medium', 'M12 CSP', 'fail', 'CSP medium fixes incomplete');
@@ -866,7 +874,11 @@ async function checkCoreFeatures(): Promise<void> {
     const nextCfg = existsSync(resolve(process.cwd(), 'next.config.mjs'))
       ? readFileSync(resolve(process.cwd(), 'next.config.mjs'), 'utf8')
       : '';
-    const micOk = nextCfg.includes('microphone=(self)');
+    const policyPath = resolve(process.cwd(), 'security-policy.mjs');
+    const policy = existsSync(policyPath) ? readFileSync(policyPath, 'utf8') : '';
+    const micOk =
+      policy.includes('microphone=(self)') &&
+      (nextCfg.includes('microphone=(self)') || nextCfg.includes('security-policy.mjs'));
     record(
       'Core Features',
       'Voice microphone CSP policy',
@@ -1145,9 +1157,11 @@ async function checkSecurityAndConfig(): Promise<void> {
   const nextConfig = existsSync(nextConfigPath) ? readFileSync(nextConfigPath, 'utf8') : '';
   const middlewarePath = resolve(process.cwd(), 'src/middleware.ts');
   const middleware = existsSync(middlewarePath) ? readFileSync(middlewarePath, 'utf8') : '';
+  const policyPath = resolve(process.cwd(), 'security-policy.mjs');
+  const securityPolicy = existsSync(policyPath) ? readFileSync(policyPath, 'utf8') : '';
 
   const cspRequirements = ["default-src 'self'", "'unsafe-inline'", "object-src 'none'"];
-  const cspSource = middleware + nextConfig;
+  const cspSource = securityPolicy + middleware + nextConfig;
   const missingCsp = cspRequirements.filter((req) => !cspSource.includes(req));
   const hasUnsafeEval = middleware.includes('unsafe-eval') || nextConfig.includes('unsafe-eval');
   if (missingCsp.length === 0 && !hasUnsafeEval && nextConfig.includes('Strict-Transport-Security')) {

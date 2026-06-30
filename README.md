@@ -9,7 +9,7 @@
 
 Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
 
-**Version:** 2.0.0 · **Prompt version:** 2.1.0 · **Status:** **v2.0 Hardening** — enterprise security upgrade from Merlin 3.x baseline
+**Version:** 2.0.0 · **Prompt version:** 2.1.0 · **Status:** **Production Ready** — v2.0 Hardening (enterprise security upgrade from Merlin 3.x baseline)
 
 ---
 

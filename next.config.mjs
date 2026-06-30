@@ -3,6 +3,9 @@ import { fileURLToPath } from 'url';
 import { withSentryConfig } from '@sentry/nextjs';
 import { BASE_SECURITY_HEADERS } from './security-policy.mjs';
 
+// Permissions-Policy: camera=(self), microphone=(self), geolocation=()
+// CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveBuildCommit() {

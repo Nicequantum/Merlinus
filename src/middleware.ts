@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { BASE_SECURITY_HEADERS, CONTENT_SECURITY_POLICY } from '../security-policy.mjs';
 import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeaders';
 
+/** M12 CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'. */
+
 /** Routes that must stay public (no session) — login page, auth bootstrap, PWA manifest. */
 const PUBLIC_PATHS = new Set([
   '/',
