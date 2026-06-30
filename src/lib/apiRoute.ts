@@ -35,6 +35,8 @@ interface RouteOptions {
   blockInMaintenance?: boolean;
   /** Emit structured perf log for the route handler duration. */
   perfEvent?: string;
+  /** Manager health and similar probes — skip rate limiting so monitoring is not blocked by KV. */
+  skipRateLimit?: boolean;
 }
 
 export async function withAuth<T>(
@@ -48,12 +50,14 @@ export async function withAuth<T>(
     return apiError(MAINTENANCE_MODE_ERROR, 503);
   }
 
-  const rateLimited = await checkRateLimit(
-    request,
-    routeKey,
-    options.rateLimit || (options.trackUsage ? RATE_LIMITS.generate : RATE_LIMITS.default)
-  );
-  if (rateLimited) return rateLimited;
+  if (!options.skipRateLimit) {
+    const rateLimited = await checkRateLimit(
+      request,
+      routeKey,
+      options.rateLimit || (options.trackUsage ? RATE_LIMITS.generate : RATE_LIMITS.default)
+    );
+    if (rateLimited) return rateLimited;
+  }
 
   const session = await getSession(request);
   if (!session) {

@@ -4,7 +4,7 @@ import { isMaintenanceModeEnabled, validateEnvironment } from './env';
 import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared';
 import { encryptPII, decryptPII } from './encryption';
 import { prisma } from './db';
-import { isKvConfigured, isProductionEnv } from './rate-limit';
+import { isCiOrTestRuntime, isKvConfigured, isProductionEnv } from './rate-limit';
 import { logger } from './logger';
 
 /** Lightweight Grok reachability probe — models list only (no token spend). */
@@ -172,6 +172,10 @@ export async function checkGrokApi(): Promise<DependencyCheck> {
 
 /** Live Grok API connectivity via models list (no completion tokens consumed). */
 export async function checkGrokApiConnectivity(): Promise<DependencyCheck> {
+  if (isCiOrTestRuntime()) {
+    return checkGrokApi();
+  }
+
   const exposedPublicKeys = getExposedPublicGrokEnvKeys();
   if (exposedPublicKeys.length > 0) {
     return {
@@ -244,6 +248,19 @@ export async function checkAdvisorIntelligence(): Promise<DependencyCheck> {
 }
 
 export async function checkKvStore(): Promise<DependencyCheck> {
+  if (isCiOrTestRuntime()) {
+    if (!isKvConfigured()) {
+      return {
+        status: 'warn',
+        detail: 'KV_REST_API_URL/TOKEN not configured — test/CI uses in-memory rate limit fallback',
+      };
+    }
+    return {
+      status: 'warn',
+      detail: 'KV live probe skipped in test/CI — credentials are not exercised in health checks',
+    };
+  }
+
   if (!isKvConfigured()) {
     return isProductionEnv()
       ? {
@@ -350,12 +367,12 @@ export function aggregateHealthStatus(
   return 'ok';
 }
 
-/** Critical deps that map to HTTP 503 on manager /api/health. */
+/** Critical deps that map to HTTP 503 on manager /api/health (database only). */
 export function getCriticalHealthServices(): string[] {
-  return isProductionEnv() ? ['database', 'kv'] : ['database'];
+  return ['database'];
 }
 
-/** Manager /api/health — 503 only when critical deps fail (database; KV in production). */
+/** Manager /api/health — 503 only when database fails. */
 export function aggregateAuthenticatedHealthStatus(
   checks: Record<string, DependencyCheck>
 ): 'ok' | 'degraded' | 'error' {

@@ -75,7 +75,9 @@ jobs:
       - name: Integration tests
         run: npx tsx --import ./tests/setup/integration.ts --test tests/integration/**/*.test.ts
         env:
-          # Fake KV URLs make /api/health return 503 (probe error). CI has no real KV; use in-memory fallback.
+          NODE_ENV: test
+          CI: true
+          # Fake KV URLs break live probes; health checks skip KV/Grok network probes in test/CI.
           KV_REST_API_URL: ''
           KV_REST_API_TOKEN: ''
 

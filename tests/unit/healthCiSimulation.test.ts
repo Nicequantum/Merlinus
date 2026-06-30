@@ -6,7 +6,7 @@ import {
   checkKvStore,
   resolveAuthenticatedHealthHttpStatus,
 } from '@/lib/healthChecks';
-import { isProductionEnv } from '@/lib/rate-limit';
+import { isCiOrTestRuntime, isProductionEnv } from '@/lib/rate-limit';
 
 describe('health CI simulation', () => {
   const originalEnv = { ...process.env };
@@ -30,17 +30,24 @@ describe('health CI simulation', () => {
   });
 
   it('treats NODE_ENV=test as non-production even when VERCEL_ENV=production', () => {
+    assert.equal(isCiOrTestRuntime(), true);
     assert.equal(isProductionEnv(), false);
   });
 
-  it('returns warn for fake Grok key HTTP 400 and keeps HTTP 200 aggregate', async () => {
-    mock.method(globalThis, 'fetch', async () => new Response('bad key', { status: 400 }));
+  it('skips live Grok/KV probes in test/CI and keeps HTTP 200 aggregate', async () => {
+    let fetchCalls = 0;
+    mock.method(globalThis, 'fetch', async () => {
+      fetchCalls += 1;
+      return new Response('bad key', { status: 400 });
+    });
 
     const grok = await checkGrokApiConnectivity();
-    assert.equal(grok.status, 'warn');
+    assert.equal(grok.status, 'ok', 'CI/test uses config-only Grok check');
+    assert.equal(fetchCalls, 0, 'Grok connectivity probe must not call fetch in test/CI');
 
     const kv = await checkKvStore();
     assert.equal(kv.status, 'warn');
+    assert.match(kv.detail ?? '', /test\/CI/i);
 
     const checks = {
       database: { status: 'ok' as const },

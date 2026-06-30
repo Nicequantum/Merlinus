@@ -54,6 +54,6 @@ export async function GET(request: Request) {
         headers: { 'Cache-Control': 'no-store' },
       });
     },
-    { rateLimitKey: 'health', requireManager: true }
+    { rateLimitKey: 'health', requireManager: true, skipRateLimit: true }
   );
 }

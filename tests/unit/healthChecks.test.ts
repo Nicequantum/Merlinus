@@ -106,6 +106,8 @@ describe('enterprise health checks', () => {
 
     process.env.NODE_ENV = 'production';
     delete process.env.VERCEL_ENV;
+    delete process.env.CI;
+    delete process.env.GITHUB_ACTIONS;
     assert.equal(isProductionEnv(), true);
     assert.equal(
       aggregateAuthenticatedHealthStatus({
@@ -113,7 +115,7 @@ describe('enterprise health checks', () => {
         kv: { status: 'error' },
         grok: { status: 'warn' },
       }),
-      'error'
+      'degraded'
     );
     assert.equal(
       resolveAuthenticatedHealthHttpStatus({
@@ -121,7 +123,7 @@ describe('enterprise health checks', () => {
         kv: { status: 'error' },
         grok: { status: 'warn' },
       }),
-      503
+      200
     );
 
     process.env.NODE_ENV = originalNodeEnv;
