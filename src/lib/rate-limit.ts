@@ -1,3 +1,16 @@
+/**
+ * Distributed per-IP rate limiting for API routes (KV INCR + EXPIRE sliding window).
+ *
+ * Production (`NODE_ENV` or `VERCEL_ENV` = production):
+ * - Requires `KV_REST_API_URL` + `KV_REST_API_TOKEN` (enforced at build via validate-env.mjs).
+ * - Missing or unreachable KV fails closed with HTTP 503 — no in-memory fallback.
+ *
+ * Development:
+ * - Without KV: per-instance in-memory limits (halved vs production values).
+ * - With KV configured but transient errors: dev-only memory fallback with warning log.
+ *
+ * Routes pass a stable `routeKey` plus an optional limit override through `withAuth` / `checkRateLimit`.
+ */
 import { apiError, RATE_LIMIT_ERROR } from './errors';
 import { logger } from './logger';
 
@@ -13,14 +26,21 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
+/** Per-IP request ceilings (requests per `windowMs`). Override per route via `checkRateLimit` options. */
 export const RATE_LIMITS = {
+  /** Login, logout, seed — brute-force protection. */
   auth: { limit: 10, windowMs: 60_000 },
+  /** Image blob uploads. */
   upload: { limit: 30, windowMs: 60_000 },
-  /** All Grok-backed routes (story, review, RO/diagnostic extract) share this ceiling. */
+  /** Grok-backed routes: story generate/review/score, RO + diagnostic vision extract. */
   generate: { limit: 20, windowMs: 60_000 },
   grok: { limit: 20, windowMs: 60_000 },
+  /** General authenticated API traffic. */
   default: { limit: 60, windowMs: 60_000 },
 } as const;
+
+export const RATE_LIMIT_UNAVAILABLE_MESSAGE =
+  'Service temporarily unavailable. Contact your administrator to configure rate limiting.';
 
 const IPV4_REGEX =
   /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
@@ -91,8 +111,26 @@ export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL?.trim() && process.env.KV_REST_API_TOKEN?.trim());
 }
 
-function isProductionEnv(): boolean {
+export function isProductionEnv(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+}
+
+function rateLimitUnavailableResponse(): Response {
+  return apiError(RATE_LIMIT_UNAVAILABLE_MESSAGE, 503);
+}
+
+function logKvRateLimitError(routeKey: string, ip: string, error: unknown): void {
+  const errorMessage = error instanceof Error ? error.message : 'unknown';
+  const context = {
+    routeKey,
+    ip: ip === 'unknown' ? undefined : ip,
+    error: errorMessage,
+  };
+  if (isProductionEnv()) {
+    logger.error('rate_limit.kv_unavailable', context);
+    return;
+  }
+  logger.warn('rate_limit.kv_fallback_dev', context);
 }
 
 /** Dev-only: weaker per-instance limits when KV is not configured locally. */
@@ -116,12 +154,12 @@ export async function checkRateLimit(
     try {
       return await checkKvRateLimit(key, config);
     } catch (error) {
-      logger.warn('rate_limit.kv_fallback', {
-        routeKey,
-        error: error instanceof Error ? error.message : 'unknown',
-      });
-      // Transient KV errors: per-instance memory preserves 429 behavior and limit values.
-      return checkMemoryRateLimit(key, config);
+      logKvRateLimitError(routeKey, ip, error);
+      if (isProductionEnv()) {
+        return rateLimitUnavailableResponse();
+      }
+      // Dev-only: preserve local iteration when KV is misconfigured or briefly unavailable.
+      return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
     }
   }
 
@@ -129,15 +167,12 @@ export async function checkRateLimit(
     return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
   }
 
-  // Production without KV: fail closed — do not serve unbounded AI/auth traffic.
   logger.error('rate_limit.kv_required', {
     routeKey,
+    ip: ip === 'unknown' ? undefined : ip,
     detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
   });
-  return apiError(
-    'Service temporarily unavailable. Contact your administrator to configure rate limiting.',
-    503
-  );
+  return rateLimitUnavailableResponse();
 }
 
 export function getRequestIp(request: Request): string {

@@ -6,7 +6,7 @@ import { encryptPII, decryptPII } from './encryption';
 import 'server-only';
 
 import { prisma } from './db';
-import { isKvConfigured } from './rate-limit';
+import { isKvConfigured, isProductionEnv } from './rate-limit';
 
 export type DependencyStatus = 'ok' | 'warn' | 'error';
 
@@ -158,10 +158,16 @@ export async function checkAdvisorIntelligence(): Promise<DependencyCheck> {
 
 export async function checkKvStore(): Promise<DependencyCheck> {
   if (!isKvConfigured()) {
-    return {
-      status: 'warn',
-      detail: 'KV_REST_API_URL/TOKEN not configured — using in-memory rate limit fallback',
-    };
+    return isProductionEnv()
+      ? {
+          status: 'error',
+          detail:
+            'KV_REST_API_URL/TOKEN not configured — production rate limiting fails closed (HTTP 503)',
+        }
+      : {
+          status: 'warn',
+          detail: 'KV_REST_API_URL/TOKEN not configured — dev uses in-memory rate limit fallback',
+        };
   }
   try {
     const { latencyMs } = await timed(async () => {

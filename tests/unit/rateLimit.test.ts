@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, it } from 'node:test';
+import {
+  checkRateLimit,
+  isKvConfigured,
+  RATE_LIMITS,
+  RATE_LIMIT_UNAVAILABLE_MESSAGE,
+} from '@/lib/rate-limit';
+
+const root = resolve(process.cwd());
+
+function readSrc(relativePath: string): string {
+  return readFileSync(resolve(root, relativePath), 'utf8');
+}
+
+function makeRequest(ip = '203.0.113.10'): Request {
+  return new Request('http://localhost/api/test', {
+    headers: { 'x-real-ip': ip },
+  });
+}
+
+describe('rate limiting', () => {
+  it('documents limits and production fail-closed behavior in source', () => {
+    const src = readSrc('src/lib/rate-limit.ts');
+    assert.ok(src.includes('RATE_LIMIT_UNAVAILABLE_MESSAGE'));
+    assert.ok(src.includes('rate_limit.kv_unavailable'));
+    assert.ok(src.includes('rate_limit.kv_required'));
+    assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
+    assert.ok(src.includes("logger.warn('rate_limit.kv_fallback_dev'"));
+    assert.ok(src.includes('Distributed per-IP rate limiting'));
+    assert.ok(RATE_LIMITS.auth.limit === 10);
+    assert.ok(RATE_LIMITS.generate.limit === 20);
+    assert.ok(RATE_LIMITS.upload.limit === 30);
+    assert.ok(RATE_LIMITS.default.limit === 60);
+  });
+
+  it('allows dev traffic without KV using in-memory limits', async () => {
+    const saved = {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      kvUrl: process.env.KV_REST_API_URL,
+      kvToken: process.env.KV_REST_API_TOKEN,
+    };
+    process.env.NODE_ENV = 'development';
+    delete process.env.VERCEL_ENV;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+
+    try {
+      assert.equal(isKvConfigured(), false);
+      const routeKey = `test.dev.${Date.now()}`;
+      const result = await checkRateLimit(makeRequest(), routeKey, RATE_LIMITS.default);
+      assert.equal(result, null);
+    } finally {
+      process.env.NODE_ENV = saved.nodeEnv;
+      process.env.VERCEL_ENV = saved.vercelEnv;
+      process.env.KV_REST_API_URL = saved.kvUrl;
+      process.env.KV_REST_API_TOKEN = saved.kvToken;
+    }
+  });
+
+  it('fails closed in production when KV is not configured', async () => {
+    const saved = {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      kvUrl: process.env.KV_REST_API_URL,
+      kvToken: process.env.KV_REST_API_TOKEN,
+    };
+    process.env.NODE_ENV = 'production';
+    delete process.env.VERCEL_ENV;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+
+    try {
+      const routeKey = `test.prod.${Date.now()}`;
+      const result = await checkRateLimit(makeRequest(), routeKey, RATE_LIMITS.auth);
+      assert.ok(result);
+      assert.equal(result.status, 503);
+      const body = (await result.json()) as { error?: string };
+      assert.equal(body.error, RATE_LIMIT_UNAVAILABLE_MESSAGE);
+    } finally {
+      process.env.NODE_ENV = saved.nodeEnv;
+      process.env.VERCEL_ENV = saved.vercelEnv;
+      process.env.KV_REST_API_URL = saved.kvUrl;
+      process.env.KV_REST_API_TOKEN = saved.kvToken;
+    }
+  });
+});
