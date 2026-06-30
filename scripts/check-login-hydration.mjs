@@ -29,6 +29,14 @@ try {
     process.exit(1);
   }
 
+  const cspViolations = consoleErrors.filter((line) =>
+    /content security policy|csp/i.test(line)
+  );
+  if (cspViolations.length > 0) {
+    console.error('[login-hydration] CSP console errors:', cspViolations.join('\n'));
+    process.exit(1);
+  }
+
   if (consoleErrors.length > 0) {
     console.error('[login-hydration] Console errors:', consoleErrors.join('\n'));
     process.exit(1);

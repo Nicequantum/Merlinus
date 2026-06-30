@@ -15,10 +15,10 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.has(pathname);
 }
 
-/** Internal dealership tool — Grok calls are server-side only; styles allow inline for Next.js. */
+/** Internal dealership tool — Next.js requires inline scripts for hydration. */
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' https://cdn.jsdelivr.net",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",

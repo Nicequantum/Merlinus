@@ -17,6 +17,12 @@ if (!res.ok) {
   process.exit(1);
 }
 
+const csp = res.headers.get('content-security-policy') ?? '';
+if (!csp.includes("'unsafe-inline'") || !csp.includes('script-src')) {
+  console.error('[login-first-paint] CSP missing script-src unsafe-inline:', csp || '(none)');
+  process.exit(1);
+}
+
 const html = await res.text();
 const missing = required.filter((needle) => !html.includes(needle));
 if (missing.length > 0) {

@@ -8,6 +8,24 @@ function resolveBuildCommit() {
   return process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT || process.env.NEXT_PUBLIC_BUILD_COMMIT || 'dev';
 }
 
+/** Keep in sync with src/middleware.ts — Next.js inline bootstrap scripts require unsafe-inline. */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self'",
+  "manifest-src 'self' data:",
+  "connect-src 'self' blob: https://*.google.com https://*.gstatic.com wss://*.google.com https://*.sentry.io",
+  "worker-src 'self' blob: https://cdn.jsdelivr.net",
+  "child-src 'self' blob:",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join('; ');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -41,6 +59,7 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
       { key: 'X-DNS-Prefetch-Control', value: 'off' },
+      { key: 'Content-Security-Policy', value: CONTENT_SECURITY_POLICY },
     ];
 
     return [
