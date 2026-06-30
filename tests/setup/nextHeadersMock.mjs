@@ -39,6 +39,12 @@ export function createMockCookieStore() {
   };
 }
 
+export function createCjsCookiesModuleExports() {
+  return {
+    cookies: () => createMockCookieStore(),
+  };
+}
+
 export function createCjsNextHeadersExports() {
   return {
     cookies: () => createMockCookieStore(),
@@ -47,8 +53,12 @@ export function createCjsNextHeadersExports() {
   };
 }
 
+function normalizePath(value) {
+  return String(value).replace(/\\/g, '/');
+}
+
 export function isNextHeadersSpecifier(specifier) {
-  const normalized = String(specifier).replace(/\\/g, '/');
+  const normalized = normalizePath(specifier);
   return (
     specifier === 'next/headers' ||
     normalized.endsWith('/next/headers') ||
@@ -56,7 +66,62 @@ export function isNextHeadersSpecifier(specifier) {
   );
 }
 
-export const NEXT_HEADERS_MOCK_SOURCE = `
+/** True when the request targets Next's cookies implementation (dist, src, or internal relative). */
+export function shouldStubNextCookiesModule(request, parent) {
+  const req = normalizePath(request);
+  const parentFile = parent
+    ? normalizePath(parent.filename || parent.id || '')
+    : '';
+
+  if (isNextHeadersSpecifier(request)) {
+    return true;
+  }
+
+  if (
+    req.includes('next/dist/server/request/cookies') ||
+    req.includes('next/src/server/request/cookies')
+  ) {
+    return true;
+  }
+
+  if (req.endsWith('/server/request/cookies') || req.endsWith('/server/request/cookies.js')) {
+    return true;
+  }
+
+  if (
+    (req === './dist/server/request/cookies' || req === './dist/server/request/cookies.js') &&
+    parentFile.includes('/next/')
+  ) {
+    return true;
+  }
+
+  // Do not stub web/spec-extension/cookies (ResponseCookies for NextResponse.json).
+  if (
+    (req === './cookies' || req === './cookies.js') &&
+    (parentFile.includes('/next/dist/server/request/') ||
+      parentFile.includes('/next/src/server/request/'))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isNextCookiesUrl(url) {
+  const normalized = normalizePath(url);
+  if (isNextHeadersSpecifier(url) || normalized.includes('/next/headers.js')) {
+    return true;
+  }
+  if (normalized.includes('/next/dist/server/web/spec-extension/cookies')) {
+    return false;
+  }
+  return (
+    normalized.includes('/next/dist/server/request/cookies') ||
+    normalized.includes('/next/src/server/request/cookies')
+  );
+}
+
+const COOKIES_FN_BODY = `
 const jar = globalThis.${COOKIE_JAR_KEY} ?? (globalThis.${COOKIE_JAR_KEY} = new Map());
 
 function createCookieStore() {
@@ -90,6 +155,11 @@ function createCookieStore() {
 export function cookies() {
   return createCookieStore();
 }
+`;
+
+export const NEXT_COOKIES_MOCK_SOURCE = COOKIES_FN_BODY;
+
+export const NEXT_HEADERS_MOCK_SOURCE = `${COOKIES_FN_BODY}
 
 export function headers() {
   return new Headers();
