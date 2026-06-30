@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { Prisma } from '@prisma/client';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
 import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';

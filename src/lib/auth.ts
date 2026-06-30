@@ -1,3 +1,5 @@
+import 'server-only';
+
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';

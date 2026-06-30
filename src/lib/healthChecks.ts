@@ -3,6 +3,8 @@ import { VOICE_INPUT_SETTINGS } from './constants';
 import { isMaintenanceModeEnabled, validateEnvironment } from './env';
 import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared';
 import { encryptPII, decryptPII } from './encryption';
+import 'server-only';
+
 import { prisma } from './db';
 import { isKvConfigured } from './rate-limit';
 

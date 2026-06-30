@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { createHmac } from 'crypto';
 
 /** Minimum substring length for blind-index RO search tokens. */

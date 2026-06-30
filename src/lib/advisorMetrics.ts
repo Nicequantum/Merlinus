@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { AdvisorPerformanceMetrics, StoryQualityResult } from '@/types';
 import { lineSoldTotal } from '@/lib/repairLineSoldMetrics';
 import { decryptJsonObject } from '@/lib/encryption';

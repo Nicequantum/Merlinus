@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder, StoryQualityResult } from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {

@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { verifyPassword } from './auth';
 import { prisma } from './db';
 

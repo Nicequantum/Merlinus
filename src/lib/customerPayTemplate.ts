@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { appendAuditLogInTransaction } from '@/lib/audit';
 import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
 import { prisma } from '@/lib/db';

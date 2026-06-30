@@ -122,6 +122,19 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('auditMetadataContainsPathname'));
   });
 
+  it('encryption and PII modules are server-only', () => {
+    const encryption = readSrc('src/lib/encryption.ts');
+    const roMapper = readSrc('src/lib/roMapper.ts');
+    const piiRead = readSrc('src/lib/piiFieldRead.ts');
+    const piiSearch = readSrc('src/lib/piiSearchToken.ts');
+    const auth = readSrc('src/lib/auth.ts');
+    assert.ok(encryption.includes("import 'server-only'"));
+    assert.ok(roMapper.includes("import 'server-only'"));
+    assert.ok(piiRead.includes("import 'server-only'"));
+    assert.ok(piiSearch.includes("import 'server-only'"));
+    assert.ok(auth.includes("import 'server-only'"));
+  });
+
   it('client hooks do not import server-only certification modules', () => {
     const useRepairOrders = readSrc('src/hooks/useRepairOrders.ts');
     assert.ok(useRepairOrders.includes('storyCertificationClient'));

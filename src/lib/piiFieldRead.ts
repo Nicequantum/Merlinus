@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { decryptPII, decryptSensitiveText } from '@/lib/encryption';
 
 type RoNumberRow = {

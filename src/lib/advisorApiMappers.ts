@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { AdvisorListItem, AdvisorPerformanceMetrics, AdvisorProfileData } from '@/types';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 

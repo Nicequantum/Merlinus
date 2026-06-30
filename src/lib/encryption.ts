@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'crypto';
 import { logger } from './logger';
 

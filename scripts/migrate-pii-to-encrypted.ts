@@ -263,48 +263,48 @@ export async function migrateServiceAdvisorsS2(): Promise<MigrationStats> {
 async function countPendingS2Rows(): Promise<S2MigrationResults['pendingAfterRun']> {
   const pending = { repairOrders: 0, repairLines: 0, serviceAdvisors: 0 };
 
-  let cursor: string | undefined;
+  let roCursor: string | undefined;
   for (;;) {
     const rows = await prisma.repairOrder.findMany({
       take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      ...(roCursor ? { skip: 1, cursor: { id: roCursor } } : {}),
       orderBy: { id: 'asc' },
       select: { id: true, roNumberEncrypted: true },
     });
     if (rows.length === 0) break;
-    cursor = rows[rows.length - 1]?.id;
+    roCursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
       if (needsEncryptedBackfill(row.roNumberEncrypted)) pending.repairOrders += 1;
     }
     if (rows.length < BATCH_SIZE) break;
   }
 
-  cursor = undefined;
+  let lineCursor: string | undefined;
   for (;;) {
     const rows = await prisma.repairLine.findMany({
       take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      ...(lineCursor ? { skip: 1, cursor: { id: lineCursor } } : {}),
       orderBy: { id: 'asc' },
       select: { id: true, descriptionEncrypted: true },
     });
     if (rows.length === 0) break;
-    cursor = rows[rows.length - 1]?.id;
+    lineCursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
       if (needsEncryptedBackfill(row.descriptionEncrypted)) pending.repairLines += 1;
     }
     if (rows.length < BATCH_SIZE) break;
   }
 
-  cursor = undefined;
+  let advisorCursor: string | undefined;
   for (;;) {
     const rows = await prisma.serviceAdvisor.findMany({
       take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      ...(advisorCursor ? { skip: 1, cursor: { id: advisorCursor } } : {}),
       orderBy: { id: 'asc' },
       select: { id: true, displayNameEncrypted: true },
     });
     if (rows.length === 0) break;
-    cursor = rows[rows.length - 1]?.id;
+    advisorCursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
       if (needsEncryptedBackfill(row.displayNameEncrypted)) pending.serviceAdvisors += 1;
     }

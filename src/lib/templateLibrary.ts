@@ -4,6 +4,8 @@ import {
   encryptOptionalSensitiveText,
   encryptSensitiveText,
 } from '@/lib/encryption';
+import 'server-only';
+
 import { prisma } from '@/lib/db';
 import { getKnowledgeBaseOriginal, listLoadedKnowledgeBaseOriginals } from '@/data/knowledgeBaseOriginals';
 import {

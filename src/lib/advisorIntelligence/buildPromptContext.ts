@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { decryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { prisma } from '@/lib/db';

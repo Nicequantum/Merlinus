@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { prisma } from './db';
 import { logger } from './logger';
 import { readRoNumberFromDb } from './piiFieldRead';

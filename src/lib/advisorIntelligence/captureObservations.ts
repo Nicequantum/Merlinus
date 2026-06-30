@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { Prisma } from '@prisma/client';
 import { encryptPII } from '@/lib/encryption';
 import { prisma } from '@/lib/db';

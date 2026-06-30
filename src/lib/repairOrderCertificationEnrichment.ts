@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { prisma } from './db';
 import { hashWarrantyStory } from './storyHash';
 import type { RepairOrder } from '@/types';
