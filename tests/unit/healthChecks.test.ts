@@ -6,8 +6,10 @@ import {
   aggregateAuthenticatedHealthStatus,
   aggregateHealthStatus,
   buildHealthServicesPayload,
+  resolveAuthenticatedHealthHttpStatus,
   toHealthServiceStatus,
 } from '@/lib/healthChecks';
+import { isProductionEnv } from '@/lib/rate-limit';
 
 const root = resolve(process.cwd());
 
@@ -35,22 +37,36 @@ describe('enterprise health checks', () => {
 
   it('authenticated health returns 503 only for critical failures', () => {
     const originalNodeEnv = process.env.NODE_ENV;
+    const originalVercelEnv = process.env.VERCEL_ENV;
     process.env.NODE_ENV = 'test';
+    delete process.env.VERCEL_ENV;
 
-    assert.equal(
-      aggregateAuthenticatedHealthStatus({
-        database: { status: 'ok' },
-        kv: { status: 'warn' },
-        grok: { status: 'warn' },
-      }),
-      'degraded'
-    );
+    const ciLikeChecks = {
+      database: { status: 'ok' as const },
+      encryption: { status: 'ok' as const },
+      kv: { status: 'warn' as const },
+      grokConfig: { status: 'ok' as const },
+      grok: { status: 'warn' as const },
+      voice: { status: 'ok' as const },
+      maintenance: { status: 'ok' as const },
+    };
+
+    assert.equal(aggregateAuthenticatedHealthStatus(ciLikeChecks), 'degraded');
+    assert.equal(resolveAuthenticatedHealthHttpStatus(ciLikeChecks), 200);
+
     assert.equal(
       aggregateAuthenticatedHealthStatus({
         database: { status: 'error' },
         grok: { status: 'warn' },
       }),
       'error'
+    );
+    assert.equal(
+      resolveAuthenticatedHealthHttpStatus({
+        database: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      503
     );
     assert.equal(
       aggregateAuthenticatedHealthStatus({
@@ -60,8 +76,37 @@ describe('enterprise health checks', () => {
       }),
       'degraded'
     );
+    assert.equal(
+      resolveAuthenticatedHealthHttpStatus({
+        database: { status: 'ok' },
+        encryption: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      200
+    );
+
+    process.env.VERCEL_ENV = 'production';
+    assert.equal(isProductionEnv(), false, 'NODE_ENV=test must not be treated as production');
+    assert.equal(
+      aggregateAuthenticatedHealthStatus({
+        database: { status: 'ok' },
+        kv: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      'degraded'
+    );
+    assert.equal(
+      resolveAuthenticatedHealthHttpStatus({
+        database: { status: 'ok' },
+        kv: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      200
+    );
 
     process.env.NODE_ENV = 'production';
+    delete process.env.VERCEL_ENV;
+    assert.equal(isProductionEnv(), true);
     assert.equal(
       aggregateAuthenticatedHealthStatus({
         database: { status: 'ok' },
@@ -70,8 +115,21 @@ describe('enterprise health checks', () => {
       }),
       'error'
     );
+    assert.equal(
+      resolveAuthenticatedHealthHttpStatus({
+        database: { status: 'ok' },
+        kv: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      503
+    );
 
     process.env.NODE_ENV = originalNodeEnv;
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv;
+    }
   });
 
   it('builds monitoring payload without internal detail strings', () => {
@@ -93,7 +151,7 @@ describe('enterprise health checks', () => {
     const checks = readSrc('src/lib/healthChecks.ts');
     assert.ok(route.includes('buildHealthServicesPayload'));
     assert.ok(route.includes('logUnhealthyServices'));
-    assert.ok(route.includes('aggregateAuthenticatedHealthStatus'));
+    assert.ok(route.includes('resolveAuthenticatedHealthHttpStatus'));
     assert.ok(checks.includes('checkGrokApiConnectivity'));
     assert.ok(checks.includes('checkDatabase'));
     assert.ok(checks.includes('checkKvStore'));

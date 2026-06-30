@@ -270,10 +270,10 @@ export async function checkKvStore(): Promise<DependencyCheck> {
     });
     return { status: 'ok', latencyMs };
   } catch (error) {
-    return {
-      status: 'error',
-      detail: error instanceof Error ? error.message : 'KV store unreachable',
-    };
+    const detail = error instanceof Error ? error.message : 'KV store unreachable';
+    return isProductionEnv()
+      ? { status: 'error', detail }
+      : { status: 'warn', detail: `KV store unreachable — ${detail}` };
   }
 }
 
@@ -350,13 +350,16 @@ export function aggregateHealthStatus(
   return 'ok';
 }
 
+/** Critical deps that map to HTTP 503 on manager /api/health. */
+export function getCriticalHealthServices(): string[] {
+  return isProductionEnv() ? ['database', 'kv'] : ['database'];
+}
+
 /** Manager /api/health — 503 only when critical deps fail (database; KV in production). */
 export function aggregateAuthenticatedHealthStatus(
   checks: Record<string, DependencyCheck>
 ): 'ok' | 'degraded' | 'error' {
-  const criticalServices = isProductionEnv() ? ['database', 'kv'] : ['database'];
-
-  for (const name of criticalServices) {
+  for (const name of getCriticalHealthServices()) {
     if (checks[name]?.status === 'error') {
       return 'error';
     }
@@ -367,4 +370,16 @@ export function aggregateAuthenticatedHealthStatus(
     return 'degraded';
   }
   return 'ok';
+}
+
+/** HTTP status for manager /api/health — always 200 unless a critical dependency failed. */
+export function resolveAuthenticatedHealthHttpStatus(
+  checks: Record<string, DependencyCheck>
+): number {
+  for (const name of getCriticalHealthServices()) {
+    if (checks[name]?.status === 'error') {
+      return 503;
+    }
+  }
+  return 200;
 }

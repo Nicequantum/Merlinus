@@ -3,6 +3,7 @@ import {
   aggregateAuthenticatedHealthStatus,
   buildHealthServicesPayload,
   logUnhealthyServices,
+  resolveAuthenticatedHealthHttpStatus,
   runAuthenticatedHealthChecks,
 } from '@/lib/healthChecks';
 import { getRuntimeConfig } from '@/lib/env';
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
         services: buildHealthServicesPayload(checks),
       };
 
-      const statusCode = status === 'error' ? 503 : 200;
+      const statusCode = resolveAuthenticatedHealthHttpStatus(checks);
       return Response.json(payload, {
         status: statusCode,
         headers: { 'Cache-Control': 'no-store' },

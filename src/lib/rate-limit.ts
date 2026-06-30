@@ -91,8 +91,15 @@ export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL?.trim() && process.env.KV_REST_API_TOKEN?.trim());
 }
 
+/**
+ * Production deployment — excludes test/dev runtimes even when VERCEL_ENV is set (e.g. CI).
+ */
 export function isProductionEnv(): boolean {
-  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const nodeEnv = process.env.NODE_ENV;
+  if (nodeEnv === 'test' || nodeEnv === 'development') {
+    return false;
+  }
+  return nodeEnv === 'production' || process.env.VERCEL_ENV === 'production';
 }
 
 /** Dev-only: weaker per-instance limits when KV is not configured locally. */
