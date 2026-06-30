@@ -4,7 +4,12 @@ import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { getRequestIp } from '@/lib/rate-limit';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
-import { parseRequestBody, applyCustomerPayTemplateSchema } from '@/lib/validation';
+import {
+  applyCustomerPayTemplateSchema,
+  parseRequestBody,
+  parseRouteParams,
+  repairOrderLineParamsSchema,
+} from '@/lib/validation';
 
 /**
  * Instantly applies a Customer Pay pre-written story — no Grok, no quality audit.
@@ -14,7 +19,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id: repairOrderId, lineId: repairLineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id: repairOrderId, lineId: repairLineId } = routeParams.data;
 
   return withAuth(
     request,

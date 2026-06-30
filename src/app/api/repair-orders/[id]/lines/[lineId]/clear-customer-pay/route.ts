@@ -4,13 +4,16 @@ import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import { getRequestIp } from '@/lib/rate-limit';
+import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 /** M1: Dedicated endpoint to clear Customer Pay mode and re-enable warranty AI flows. */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,

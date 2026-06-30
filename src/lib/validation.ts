@@ -272,6 +272,53 @@ export const auditLogQuerySchema = z.object({
   format: z.enum(['json', 'csv']).default('json'),
 });
 
+/** Compact cap for unauthenticated auth bootstrap bodies (login). */
+export const AUTH_JSON_BODY_LIMIT_BYTES = 16_384;
+
+export const entityIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .transform(sanitizeIdentifier)
+  .refine((value) => value.length > 0, { message: 'Invalid id' });
+
+export const routeIdParamsSchema = z.object({
+  id: entityIdSchema,
+});
+
+export const repairOrderLineParamsSchema = z.object({
+  id: entityIdSchema,
+  lineId: entityIdSchema,
+});
+
+export const imagePathnameQuerySchema = z.object({
+  pathname: z.string().min(3).max(512).transform(sanitizeIdentifier),
+});
+
+export const templateListQuerySchema = z.object({
+  category: z.enum(['customer', 'warranty']).optional(),
+});
+
+export const knowledgeBaseListQuerySchema = z.object({
+  category: z.enum(['customer', 'warranty']).optional(),
+});
+
+export const auditLatestQuerySchema = z.object({
+  repairLineId: entityIdSchema,
+});
+
+export const repairOrderListQuerySchema = z.object({
+  scope: z.enum(['today', 'previous']).default('today'),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: safeIdOptional(64),
+  q: z.string().max(120).transform(sanitizeText).optional(),
+});
+
+export const technicianStoriesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().max(80).optional(),
+});
+
 export function parseBody<T>(schema: z.ZodSchema<T>, body: unknown): { data: T } | { error: string } {
   const result = schema.safeParse(body);
   if (!result.success) {
@@ -290,6 +337,30 @@ export async function parseRequestBody<T>(
   if ('error' in raw) return raw;
   const parsed = parseBody(schema, raw.body);
   if ('error' in parsed) {
+    return { error: apiError(VALIDATION_ERROR, 400) };
+  }
+  return { data: parsed.data };
+}
+
+export function parseQueryParams<S extends z.ZodTypeAny>(
+  request: Request,
+  schema: S
+): { data: z.output<S> } | { error: NextResponse } {
+  const raw = Object.fromEntries(new URL(request.url).searchParams.entries());
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    return { error: apiError(VALIDATION_ERROR, 400) };
+  }
+  return { data: parsed.data };
+}
+
+export async function parseRouteParams<S extends z.ZodTypeAny>(
+  schema: S,
+  params: Promise<unknown>
+): Promise<{ data: z.output<S> } | { error: NextResponse }> {
+  const raw = await params;
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
     return { error: apiError(VALIDATION_ERROR, 400) };
   }
   return { data: parsed.data };

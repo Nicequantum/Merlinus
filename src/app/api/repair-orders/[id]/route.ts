@@ -14,7 +14,7 @@ import { apiError, CONFLICT_ERROR, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_
 import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
-import { parseRequestBody, updateRepairOrderSchema } from '@/lib/validation';
+import { parseRequestBody, parseRouteParams, routeIdParamsSchema, updateRepairOrderSchema } from '@/lib/validation';
 import {
   canAccessRepairOrder,
   scopedRepairLineWhere,
@@ -25,7 +25,9 @@ import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
   return withAuth(
     request,
     async (session) => {
@@ -50,7 +52,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
   return withAuth(
     request,
     async (session) => {
@@ -313,7 +317,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
   return withAuth(
     request,
     async (session) => {

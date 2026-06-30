@@ -1,7 +1,7 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
+import { auditLatestQuerySchema, parseQueryParams } from '@/lib/validation';
 
 const WARRANTY_STORY_ACTIONS = ['story.generate', 'story.review', 'story.edit', 'story.certify'] as const;
 const CUSTOMER_PAY_STORY_ACTIONS = [
@@ -11,13 +11,13 @@ const CUSTOMER_PAY_STORY_ACTIONS = [
 ] as const;
 
 export async function GET(request: Request) {
+  const query = parseQueryParams(request, auditLatestQuerySchema);
+  if ('error' in query) return query.error;
+
   return withAuth(
     request,
     async (session) => {
-      const repairLineId = new URL(request.url).searchParams.get('repairLineId')?.trim();
-      if (!repairLineId) {
-        return apiError(VALIDATION_ERROR, 400);
-      }
+      const { repairLineId } = query.data;
 
       const line = await prisma.repairLine.findFirst({
         where: {

@@ -1,9 +1,12 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { parseRouteParams, routeIdParamsSchema } from '@/lib/validation';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,

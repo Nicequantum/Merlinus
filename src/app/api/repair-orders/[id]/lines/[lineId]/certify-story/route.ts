@@ -13,7 +13,7 @@ import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
-import { parseRequestBody, certifyStorySchema } from '@/lib/validation';
+import { certifyStorySchema, parseRequestBody, parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 function namesMatchForCertification(sessionName: string, certifiedByName: string): boolean {
   const normalize = (value: string) =>
@@ -28,7 +28,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,

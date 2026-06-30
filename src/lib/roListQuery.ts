@@ -3,6 +3,7 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
 import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
+import { repairOrderListQuerySchema } from '@/lib/validation';
 
 export type RepairOrderListScope = 'today' | 'previous';
 
@@ -14,20 +15,9 @@ export interface RepairOrderListParams {
   q?: string;
 }
 
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 100;
-
 export function parseRepairOrderListParams(url: URL): RepairOrderListParams {
-  const limitRaw = Number(url.searchParams.get('limit') ?? DEFAULT_PAGE_SIZE);
-  const limit = Math.min(
-    MAX_PAGE_SIZE,
-    Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : DEFAULT_PAGE_SIZE)
-  );
-  const scopeParam = url.searchParams.get('scope')?.trim().toLowerCase();
-  const scope: RepairOrderListScope = scopeParam === 'previous' ? 'previous' : 'today';
-  const cursor = url.searchParams.get('cursor')?.trim() || undefined;
-  const q = url.searchParams.get('q')?.trim() || undefined;
-  return { scope, limit, cursor, q };
+  const raw = Object.fromEntries(url.searchParams.entries());
+  return repairOrderListQuerySchema.parse(raw);
 }
 
 export function buildRepairOrderListWhere(

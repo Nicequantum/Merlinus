@@ -4,10 +4,12 @@ import { hashPassword, revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { parseRequestBody, resetPasswordSchema } from '@/lib/validation';
+import { parseRequestBody, parseRouteParams, resetPasswordSchema, routeIdParamsSchema } from '@/lib/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,

@@ -1,12 +1,12 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
-import { z } from 'zod';
-
-const storiesQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().max(80).optional(),
-});
+import {
+  parseQueryParams,
+  parseRouteParams,
+  routeIdParamsSchema,
+  technicianStoriesQuerySchema,
+} from '@/lib/validation';
 
 function decodeStoryCursor(cursor: string): { certifiedAt: Date; id: string } | null {
   const separator = cursor.lastIndexOf('|');
@@ -24,18 +24,13 @@ function encodeStoryCursor(certifiedAt: Date, id: string): string {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const url = new URL(request.url);
-  const parsed = storiesQuerySchema.safeParse({
-    limit: url.searchParams.get('limit') ?? undefined,
-    cursor: url.searchParams.get('cursor') ?? undefined,
-  });
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
-  if (!parsed.success) {
-    return apiError('Invalid query parameters.', 400);
-  }
-
-  const { limit, cursor } = parsed.data;
+  const query = parseQueryParams(request, technicianStoriesQuerySchema);
+  if ('error' in query) return query.error;
+  const { limit, cursor } = query.data;
   const cursorDecoded = cursor ? decodeStoryCursor(cursor) : null;
   if (cursor && !cursorDecoded) {
     return apiError('Invalid cursor.', 400);

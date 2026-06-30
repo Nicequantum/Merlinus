@@ -1,7 +1,6 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
-import { auditLogQuerySchema, parseBody } from '@/lib/validation';
+import { auditLogQuerySchema, parseQueryParams } from '@/lib/validation';
 
 function parseMetadata(raw: string): Record<string, unknown> {
   try {
@@ -17,16 +16,13 @@ function toCsvValue(value: unknown): string {
 }
 
 export async function GET(request: Request) {
+  const query = parseQueryParams(request, auditLogQuerySchema);
+  if ('error' in query) return query.error;
+
   return withAuth(
     request,
     async (session) => {
-      const params = Object.fromEntries(new URL(request.url).searchParams.entries());
-      const parsed = parseBody(auditLogQuerySchema, params);
-      if ('error' in parsed) {
-        return apiError(VALIDATION_ERROR, 400);
-      }
-
-      const { technicianId, action, from, to, format } = parsed.data;
+      const { technicianId, action, from, to, format } = query.data;
       const where: {
         dealershipId: string;
         technicianId?: string;

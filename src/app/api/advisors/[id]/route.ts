@@ -8,10 +8,12 @@ import { readAdvisorDisplayNameFromDb, readRoNumberFromDb } from '@/lib/piiField
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
-import { parseRequestBody, updateAdvisorSchema } from '@/lib/validation';
+import { parseRequestBody, parseRouteParams, routeIdParamsSchema, updateAdvisorSchema } from '@/lib/validation';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,
@@ -84,7 +86,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,
@@ -146,7 +150,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const routeParams = await parseRouteParams(routeIdParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id } = routeParams.data;
 
   return withAuth(
     request,

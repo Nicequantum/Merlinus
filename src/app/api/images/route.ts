@@ -4,14 +4,18 @@ import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { isAllowedImagePathname } from '@/lib/imageUrls';
 import { logger } from '@/lib/logger';
+import { imagePathnameQuerySchema, parseQueryParams } from '@/lib/validation';
 
 /** M22/M23: images route uses withAuth for consent gate + consistent rate limiting. */
 export async function GET(request: Request) {
+  const query = parseQueryParams(request, imagePathnameQuerySchema);
+  if ('error' in query) return query.error;
+
   return withAuth(
     request,
     async (session) => {
-      const pathname = new URL(request.url).searchParams.get('pathname');
-      if (!pathname || !isAllowedImagePathname(pathname)) {
+      const { pathname } = query.data;
+      if (!isAllowedImagePathname(pathname)) {
         return apiError(NOT_FOUND_ERROR, 404);
       }
 

@@ -9,13 +9,15 @@ import {
   scopedRepairLineWhere,
 } from '@/lib/repairOrderAccess';
 import { mapSoldMetricsFromDb, soldMetricsToDbUpdateFields } from '@/lib/repairLineSoldMetrics';
-import { parseRequestBody, soldMetricsSchema } from '@/lib/validation';
+import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, soldMetricsSchema } from '@/lib/validation';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,

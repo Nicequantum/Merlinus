@@ -20,19 +20,18 @@ import { getRequestIp } from '@/lib/rate-limit';
 import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { createRepairOrderSchema, parseRequestBody } from '@/lib/validation';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
-import {
-  buildRepairOrderListWhere,
-  getTodayStartIso,
-  parseRepairOrderListParams,
-} from '@/lib/roListQuery';
+import { buildRepairOrderListWhere, getTodayStartIso } from '@/lib/roListQuery';
+import { parseQueryParams, repairOrderListQuerySchema } from '@/lib/validation';
 import { createRepairOrderFromScan } from '@/utils/repairOrderFactory';
 
 export async function GET(request: Request) {
+  const query = parseQueryParams(request, repairOrderListQuerySchema);
+  if ('error' in query) return query.error;
+
   return withAuth(
     request,
     async (session) => {
-      const url = new URL(request.url);
-      const params = parseRepairOrderListParams(url);
+      const params = query.data;
       const where = buildRepairOrderListWhere(session, params);
 
       const orders = await prisma.repairOrder.findMany({

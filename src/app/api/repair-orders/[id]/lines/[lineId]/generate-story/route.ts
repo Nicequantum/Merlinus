@@ -15,6 +15,7 @@ import { logPerformance } from '@/lib/perf';
 import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
+import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -23,7 +24,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const { id, lineId } = await params;
+  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
+  if ('error' in routeParams) return routeParams.error;
+  const { id, lineId } = routeParams.data;
 
   return withAuth(
     request,
