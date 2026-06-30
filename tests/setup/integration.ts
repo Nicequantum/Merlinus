@@ -1,6 +1,13 @@
+import { existsSync } from 'node:fs';
 import { createRequire, register } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { config as loadDotenv } from 'dotenv';
+
+const envLocalPath = resolve(process.cwd(), '.env.local');
+if (existsSync(envLocalPath)) {
+  loadDotenv({ path: envLocalPath });
+}
 
 const loaderPath = join(dirname(fileURLToPath(import.meta.url)), 'server-only-loader.mjs');
 register(pathToFileURL(loaderPath).href, import.meta.url);

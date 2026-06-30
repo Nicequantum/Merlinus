@@ -21,7 +21,7 @@
     "db:studio": "prisma studio",
     "test": "tsx --import ./tests/setup/integration.ts --test tests/unit/**/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.ci.json",
-    "test:integration": "tsx --import ./tests/setup/integration.ts --env-file=.env.local --test tests/integration/**/*.test.ts",
+    "test:integration": "tsx --import ./tests/setup/integration.ts --test tests/integration/**/*.test.ts",
     "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
     "generate:icons": "node scripts/generate-app-icons.mjs",
     "postinstall": "prisma generate && npm run setup:tesseract"
