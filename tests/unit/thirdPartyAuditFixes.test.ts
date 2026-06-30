@@ -55,6 +55,32 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('503'));
   });
 
+  it('critical paths use structured logging instead of raw console.error', () => {
+    const clientLog = readSrc('src/lib/clientLog.ts');
+    const env = readSrc('src/lib/env.ts');
+    const criticalPaths = [
+      'src/components/BenzTechApp.tsx',
+      'src/components/BenzTechAuthenticatedApp.tsx',
+      'src/hooks/useRepairOrders.ts',
+      'src/hooks/repairOrders/useROStoryWorkflow.ts',
+      'src/hooks/repairOrders/useROScan.ts',
+      'src/app/error.tsx',
+      'src/components/LineView.tsx',
+      'src/components/AppProviders.tsx',
+      'src/components/ErrorBoundary.tsx',
+    ];
+
+    assert.ok(clientLog.includes('JSON.stringify(entry)'));
+    assert.ok(clientLog.includes("service: 'merlinus-client'"));
+    assert.ok(env.includes("logger.error('env.validation_failed'"));
+    assert.ok(env.includes("logger.warn('env.validation_warning'"));
+
+    for (const relativePath of criticalPaths) {
+      const src = readSrc(relativePath);
+      assert.equal(src.includes('console.error'), false, `${relativePath} must not use console.error`);
+    }
+  });
+
   it('technician UI paths do not use console.log for debug noise', () => {
     const technicianPaths = [
       'src/components/LineView.tsx',

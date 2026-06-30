@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
+import { clientLog } from '@/lib/clientLog';
 
 export default function Error({
   error,
@@ -11,7 +12,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('[Merlinus] route error:', error);
+    clientLog.error('route.error', { error: error.message, digest: error.digest, stack: error.stack });
     Sentry.captureException(error);
   }, [error]);
 

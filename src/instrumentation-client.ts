@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
+import { clientLog } from '@/lib/clientLog';
 import { getSentryDsn } from '@/lib/sentryInit';
 
 const dsn = getSentryDsn();
@@ -13,7 +14,7 @@ if (dsn) {
       debug: false,
     });
   } catch (error) {
-    console.error('[Merlinus] Sentry client init failed — continuing without telemetry', error);
+    clientLog.error('telemetry.sentry_init_failed', error);
   }
 }
 

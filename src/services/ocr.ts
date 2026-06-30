@@ -1,4 +1,5 @@
 import Tesseract from 'tesseract.js';
+import { clientLog } from '@/lib/clientLog';
 
 /** Default per-recognize() ceiling (diagnostics / legacy paths). */
 const OCR_TIMEOUT_MS = 120_000;
@@ -243,7 +244,7 @@ async function preprocessFull(file: File): Promise<Blob> {
     ctx.putImageData(imageData, 0, 0);
     return await canvasToBlob(canvas);
   } catch (e) {
-    console.warn('Full preprocess failed, using original', e);
+    clientLog.warn('ocr.preprocess_full_failed', e);
     return file;
   } finally {
     URL.revokeObjectURL(img.src);
@@ -300,7 +301,7 @@ export async function preprocessImageForOCR(
     if (mode === 'screenshot') return await preprocessScreenshot(file);
     return await preprocessFast(file);
   } catch (e) {
-    console.warn('Preprocess failed, using original image', e);
+    clientLog.warn('ocr.preprocess_failed', e);
     return file;
   }
 }
@@ -442,7 +443,7 @@ async function prepareRoScanSource(file: File): Promise<File> {
   try {
     return await downscaleImageSource(file, RO_SCAN_MAX_DIM, file.name || 'ro-scan.png');
   } catch (error) {
-    console.warn('RO scan downscale failed, using original image', error);
+    clientLog.warn('ocr.ro_scan_downscale_failed', error);
     return file;
   }
 }

@@ -10,7 +10,7 @@ function useUnhandledRejectionLogging(): void {
   useEffect(() => {
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
-      clientLog.error('[Merlinus] Unhandled promise rejection', {
+      clientLog.error('client.unhandled_rejection', {
         reason: reason instanceof Error ? reason.message : reason,
         stack: reason instanceof Error ? reason.stack : undefined,
       });

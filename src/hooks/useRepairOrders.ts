@@ -219,7 +219,7 @@ export function useRepairOrders({
         }
         toast.success('Repair order deleted');
       } catch (e) {
-        console.error('[Merlin] Delete repair order failed', e);
+        clientLog.error('ro.delete_failed', e);
         toast.error(e instanceof Error ? e.message : 'Delete failed');
       }
     },
@@ -501,7 +501,7 @@ export function useRepairOrders({
         await saveROImmediate({ ...latestRO, repairLines: updatedLines });
         toast.success('Diagnostic photo deleted');
       } catch (error: unknown) {
-        console.error('[Merlin] Delete diagnostic photo failed', error);
+        clientLog.error('ro.delete_diagnostic_photo_failed', error);
         toast.error(error instanceof Error ? error.message : 'Failed to delete diagnostic photo');
       }
     },
@@ -540,7 +540,7 @@ export function useRepairOrders({
         });
         toast.success('Xentry photo deleted');
       } catch (error: unknown) {
-        console.error('[Merlin] Delete Xentry photo failed', error);
+        clientLog.error('ro.delete_xentry_photo_failed', error);
         toast.error(error instanceof Error ? error.message : 'Failed to delete Xentry photo');
       }
     },

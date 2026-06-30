@@ -3,6 +3,8 @@
  * Called at Node startup (instrumentation) and before production builds (scripts/validate-env.mjs).
  */
 
+import { logger } from '@/lib/logger';
+
 const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
 
 const RECOMMENDED_ENV_VARS = ['GROK_API_KEY', 'BLOB_READ_WRITE_TOKEN'] as const;
@@ -105,14 +107,14 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
 
   if (!valid) {
     const message = `Missing required environment variables: ${missing.join(', ')}`;
-    console.error(`[merlin:env] ${message}`);
+    logger.error('env.validation_failed', { missing });
     if (options.throwOnError) {
       throw new Error(message);
     }
   }
 
   for (const warning of warnings) {
-    console.warn(`[merlin:env] ${warning}`);
+    logger.warn('env.validation_warning', { warning });
   }
 
   return { missing, warnings, valid };

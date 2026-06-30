@@ -1,3 +1,5 @@
+import { clientLog } from '@/lib/clientLog';
+
 export async function compressImageForUpload(file: File, maxDim = 1600, quality = 0.72): Promise<File> {
   if (!file.type.startsWith('image/')) return file;
 
@@ -24,7 +26,7 @@ export async function compressImageForUpload(file: File, maxDim = 1600, quality 
     const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
   } catch (e) {
-    console.warn('Image compression failed, uploading original', e);
+    clientLog.warn('image.compression_failed', e);
     return file;
   } finally {
     URL.revokeObjectURL(img.src);
