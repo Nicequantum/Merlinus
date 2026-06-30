@@ -13,30 +13,38 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  message: string;
+  /** Sentry event id for support correlation — never the raw exception message. */
+  supportReference?: string;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, message: '' };
+  state: State = { hasError: false };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, message: error.message || 'Something went wrong' };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     clientLog.error('Merlinus error boundary', { scope: this.props.scope, error, info });
+    let supportReference: string | undefined;
     try {
-      Sentry.captureException(error, {
+      const eventId = Sentry.captureException(error, {
         extra: { componentStack: info.componentStack, scope: this.props.scope },
       });
+      if (typeof eventId === 'string' && eventId.trim()) {
+        supportReference = eventId.trim();
+      }
     } catch {
       // Telemetry must never mask the in-app recovery UI.
+    }
+    if (supportReference) {
+      this.setState({ supportReference });
     }
     toast.error('An unexpected error occurred. You can try again.');
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false, message: '' });
+    this.setState({ hasError: false, supportReference: undefined });
   };
 
   render() {
@@ -49,7 +57,15 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-sm text-benz-secondary mb-2 leading-relaxed">
               Something unexpected happened{scopeLabel}. Your typed notes are still on the repair order.
             </p>
-            <p className="text-xs text-benz-muted mb-5">{this.state.message}</p>
+            <p className="text-xs text-benz-muted mb-5 leading-relaxed">
+              Try again or return home. If this keeps happening, contact your manager or IT support.
+              {this.state.supportReference ? (
+                <>
+                  {' '}
+                  Reference: <span className="font-mono">{this.state.supportReference}</span>
+                </>
+              ) : null}
+            </p>
             <div className="flex flex-col gap-2.5">
               <button
                 type="button"

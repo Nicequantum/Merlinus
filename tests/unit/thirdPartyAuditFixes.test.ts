@@ -55,6 +55,15 @@ describe('Third-party audit hardening', () => {
     assert.ok(src.includes('503'));
   });
 
+  it('ErrorBoundary does not expose raw error messages to users', () => {
+    const src = readSrc('src/components/ErrorBoundary.tsx');
+    assert.equal(src.includes('error.message'), false);
+    assert.equal(src.includes('this.state.message'), false);
+    assert.ok(src.includes('Sentry.captureException'));
+    assert.ok(src.includes('supportReference'));
+    assert.ok(src.includes('contact your manager or IT support'));
+  });
+
   it('Grok errors do not echo response bodies', () => {
     const src = readSrc('src/lib/grok.ts');
     assert.ok(src.includes('grok.api_error'));
