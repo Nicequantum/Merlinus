@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { SESSION_COOKIE } from '../../src/lib/auth';
+import { COOKIE_JAR_KEY, getCookieJar } from './nextHeadersMock.mjs';
 
-const cookieJar = new Map<string, string>();
+const SESSION_COOKIE = 'benz_tech_session';
 
 const nodeModule = createRequire(import.meta.url)('node:module') as typeof import('node:module') & {
   _load: (request: string, parent: object | null, isMain: boolean) => unknown;
@@ -19,25 +19,6 @@ function isBlobModule(request: string): boolean {
 }
 
 nodeModule._load = function criticalPathMocks(request, parent, isMain) {
-  if (request === 'next/headers') {
-    return {
-      cookies: async () => ({
-        get: (name: string) => {
-          const value = cookieJar.get(name);
-          return value === undefined ? undefined : { name, value };
-        },
-        set: (name: string, value: string) => {
-          cookieJar.set(name, value);
-        },
-        delete: (name: string) => {
-          cookieJar.delete(name);
-        },
-        has: (name: string) => cookieJar.has(name),
-        getAll: () => [...cookieJar.entries()].map(([name, value]) => ({ name, value })),
-      }),
-    };
-  }
-
   if (isBlobModule(request)) {
     return {
       fetchPrivateBlobAsDataUrl: async () => 'data:image/png;base64,aW50ZWdyYXRpb24=',
@@ -52,9 +33,11 @@ nodeModule._load = function criticalPathMocks(request, parent, isMain) {
 };
 
 export function getMockSessionCookie(): string | undefined {
-  return cookieJar.get(SESSION_COOKIE);
+  return getCookieJar().get(SESSION_COOKIE);
 }
 
 export function clearCriticalPathMocks(): void {
-  cookieJar.clear();
+  getCookieJar().clear();
 }
+
+export { COOKIE_JAR_KEY };
