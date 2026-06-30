@@ -16,7 +16,11 @@ import { createSessionToken } from '../../src/lib/auth';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
-import { clearCriticalPathMocks, getMockSessionCookie } from '../setup/criticalPathMocks';
+import {
+  clearCriticalPathMocks,
+  getMockSessionCookie,
+  runWithNextRouteContext,
+} from '../setup/criticalPathMocks';
 
 const prisma = new PrismaClient();
 
@@ -159,12 +163,14 @@ describe('critical path HTTP routes', () => {
       where: { action: 'auth.login', technicianId, dealershipId },
     });
 
-    const response = await postLogin(
+    const response = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d7Number: techD7, password: techPassword }),
-      })
+      }),
+      '/api/auth/login/route',
+      (request) => postLogin(request)
     );
 
     const { status, body } = await readJsonResponse<{
@@ -184,12 +190,14 @@ describe('critical path HTTP routes', () => {
   });
 
   test('POST /api/auth/login rejects invalid credentials', async () => {
-    const response = await postLogin(
+    const response = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d7Number: 'D7TECH001', password: 'wrong-password-value' }),
-      })
+      }),
+      '/api/auth/login/route',
+      (request) => postLogin(request)
     );
     const { status } = await readJsonResponse(response);
     assert.equal(status, 401);
@@ -201,7 +209,11 @@ describe('critical path HTTP routes', () => {
       body: { imagePathnames: [extractPathname] },
     });
 
-    const response = await postExtract(request);
+    const response = await runWithNextRouteContext(
+      request,
+      '/api/repair-orders/extract/route',
+      (req) => postExtract(req)
+    );
     const { status, body } = await readJsonResponse<{
       roNumber?: string;
       customerName?: string;
@@ -228,9 +240,14 @@ describe('critical path HTTP routes', () => {
       },
     });
 
-    const response = await postGenerateStory(request, {
-      params: Promise.resolve({ id: testRoId, lineId: testLineId }),
-    });
+    const response = await runWithNextRouteContext(
+      request,
+      '/api/repair-orders/[id]/lines/[lineId]/generate-story/route',
+      (req) =>
+        postGenerateStory(req, {
+          params: Promise.resolve({ id: testRoId, lineId: testLineId }),
+        })
+    );
     const { status, body } = await readJsonResponse<{
       warrantyStory?: string;
       error?: string;

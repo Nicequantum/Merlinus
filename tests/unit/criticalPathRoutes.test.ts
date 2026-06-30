@@ -57,5 +57,6 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /ro\.extract|repair-orders\/extract/);
     assert.match(src, /story\.generate/);
     assert.match(src, /criticalPathMocks/);
+    assert.match(src, /runWithNextRouteContext/);
   });
 });

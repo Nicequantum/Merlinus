@@ -1,12 +1,20 @@
-import { getCookieJar } from './nextHeadersMock.mjs';
+import { LAST_REQUEST_STORE_KEY, runWithNextRouteContext } from './nextRouteContext.mjs';
 
 const SESSION_COOKIE = 'benz_tech_session';
 
-/** Re-export helpers; all module stubs are registered in integration.ts before tests load. */
+type RequestStoreRef = {
+  mutableCookies?: { get: (name: string) => { value: string } | undefined };
+};
+
 export function getMockSessionCookie(): string | undefined {
-  return getCookieJar().get(SESSION_COOKIE);
+  const store = (globalThis as typeof globalThis & Record<string, unknown>)[
+    LAST_REQUEST_STORE_KEY
+  ] as RequestStoreRef | undefined;
+  return store?.mutableCookies?.get(SESSION_COOKIE)?.value;
 }
 
 export function clearCriticalPathMocks(): void {
-  getCookieJar().clear();
+  delete (globalThis as typeof globalThis & Record<string, unknown>)[LAST_REQUEST_STORE_KEY];
 }
+
+export { runWithNextRouteContext };

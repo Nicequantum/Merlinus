@@ -1,17 +1,15 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { existsSync } from 'node:fs';
 import { createRequire, register } from 'node:module';
+
+/** Next.js reads globalThis.AsyncLocalStorage at module init — required for route context in Node tests. */
+if (!globalThis.AsyncLocalStorage) {
+  (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage =
+    AsyncLocalStorage;
+}
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
-import {
-  COOKIE_JAR_KEY,
-  createCjsCookiesModuleExports,
-  createCjsNextHeadersExports,
-  getCookieJar,
-  shouldStubNextCookiesModule,
-} from './nextHeadersMock.mjs';
-
-getCookieJar();
 
 const envLocalPath = resolve(process.cwd(), '.env.local');
 if (existsSync(envLocalPath)) {
@@ -30,7 +28,7 @@ function isBlobModule(request: string): boolean {
   );
 }
 
-/** tsx resolves route deps via CJS require — stub before any route/auth import. */
+/** Stub server-only and blob for direct route imports in Node — cookies use nextRouteContext instead. */
 const nodeModule = createRequire(import.meta.url)('node:module') as typeof import('node:module') & {
   _load: (request: string, parent: object | null, isMain: boolean) => unknown;
 };
@@ -42,14 +40,6 @@ nodeModule._load = function integrationModuleStubs(
 ) {
   if (request === 'server-only') {
     return {};
-  }
-
-  if (shouldStubNextCookiesModule(request, parent)) {
-    const normalized = String(request).replace(/\\/g, '/');
-    if (normalized.includes('headers') || normalized === 'next/headers' || normalized.endsWith('/next/headers.js')) {
-      return createCjsNextHeadersExports();
-    }
-    return createCjsCookiesModuleExports();
   }
 
   if (isBlobModule(request)) {
@@ -64,5 +54,3 @@ nodeModule._load = function integrationModuleStubs(
 
   return originalLoad.call(this, request, parent, isMain);
 };
-
-export { COOKIE_JAR_KEY, getCookieJar };
