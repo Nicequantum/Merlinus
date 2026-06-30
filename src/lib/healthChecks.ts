@@ -4,14 +4,52 @@ import { isMaintenanceModeEnabled, validateEnvironment } from './env';
 import { getExposedPublicGrokEnvKeys, getGrokApiKey } from './grokApiKey.shared';
 import { encryptPII, decryptPII } from './encryption';
 import { prisma } from './db';
-import { isKvConfigured } from './rate-limit';
+import { isKvConfigured, isProductionEnv } from './rate-limit';
+import { logger } from './logger';
+
+/** Lightweight Grok reachability probe — models list only (no token spend). */
+const GROK_MODELS_URL = 'https://api.x.ai/v1/models';
+const GROK_CONNECTIVITY_TIMEOUT_MS = 8_000;
 
 export type DependencyStatus = 'ok' | 'warn' | 'error';
 
 export interface DependencyCheck {
   status: DependencyStatus;
   latencyMs?: number;
+  /** Internal diagnostics — never returned from /api/health (logged server-side only). */
   detail?: string;
+}
+
+export interface HealthServiceStatus {
+  status: DependencyStatus;
+  latencyMs?: number;
+}
+
+export function toHealthServiceStatus(check: DependencyCheck): HealthServiceStatus {
+  return check.latencyMs !== undefined
+    ? { status: check.status, latencyMs: check.latencyMs }
+    : { status: check.status };
+}
+
+export function buildHealthServicesPayload(
+  checks: Record<string, DependencyCheck>
+): Record<string, HealthServiceStatus> {
+  return Object.fromEntries(
+    Object.entries(checks).map(([name, check]) => [name, toHealthServiceStatus(check)])
+  );
+}
+
+export function logUnhealthyServices(checks: Record<string, DependencyCheck>): void {
+  for (const [name, check] of Object.entries(checks)) {
+    if (check.status === 'error' || check.status === 'warn') {
+      logger.warn('health.service_check', {
+        service: name,
+        status: check.status,
+        latencyMs: check.latencyMs,
+        detail: check.detail,
+      });
+    }
+  }
 }
 
 async function timed<T>(fn: () => Promise<T>): Promise<{ result: T; latencyMs: number }> {
@@ -110,9 +148,7 @@ export async function checkBlobStorage(): Promise<DependencyCheck> {
   }
 }
 
-/**
- * C5: Configuration-only Grok check — no live API calls from /api/health (cost + leakage risk).
- */
+/** Validates Grok API key configuration (no network call). */
 export async function checkGrokApi(): Promise<DependencyCheck> {
   const exposedPublicKeys = getExposedPublicGrokEnvKeys();
   if (exposedPublicKeys.length > 0) {
@@ -131,6 +167,59 @@ export async function checkGrokApi(): Promise<DependencyCheck> {
       return { status: 'warn', detail: 'GROK_API_KEY not configured — AI features disabled' };
     }
     return { status: 'error', detail: 'Grok API key configuration invalid' };
+  }
+}
+
+/** Live Grok API connectivity via models list (no completion tokens consumed). */
+export async function checkGrokApiConnectivity(): Promise<DependencyCheck> {
+  const exposedPublicKeys = getExposedPublicGrokEnvKeys();
+  if (exposedPublicKeys.length > 0) {
+    return {
+      status: 'error',
+      detail: 'Frontend xAI env vars detected — use server-only GROK_API_KEY',
+    };
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = getGrokApiKey();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'GROK_API_KEY not configured';
+    if (message.includes('not configured')) {
+      return { status: 'warn', detail: 'GROK_API_KEY not configured — connectivity probe skipped' };
+    }
+    return { status: 'error', detail: 'Grok API key configuration invalid' };
+  }
+
+  const startedAt = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GROK_CONNECTIVITY_TIMEOUT_MS);
+    try {
+      const response = await fetch(GROK_MODELS_URL, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      const latencyMs = Date.now() - startedAt;
+      if (!response.ok) {
+        return {
+          status: 'warn',
+          latencyMs,
+          detail: `Grok API returned HTTP ${response.status}`,
+        };
+      }
+      return { status: 'ok', latencyMs, detail: 'Grok API reachable' };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Grok API unreachable';
+    const latencyMs = Date.now() - startedAt;
+    if (message.toLowerCase().includes('abort')) {
+      return { status: 'warn', latencyMs, detail: 'Grok API connectivity probe timed out' };
+    }
+    return { status: 'warn', latencyMs, detail: message };
   }
 }
 
@@ -156,10 +245,16 @@ export async function checkAdvisorIntelligence(): Promise<DependencyCheck> {
 
 export async function checkKvStore(): Promise<DependencyCheck> {
   if (!isKvConfigured()) {
-    return {
-      status: 'warn',
-      detail: 'KV_REST_API_URL/TOKEN not configured — using in-memory rate limit fallback',
-    };
+    return isProductionEnv()
+      ? {
+          status: 'error',
+          detail:
+            'KV_REST_API_URL/TOKEN not configured — production rate limiting fails closed (HTTP 503)',
+        }
+      : {
+          status: 'warn',
+          detail: 'KV_REST_API_URL/TOKEN not configured — dev uses in-memory rate limit fallback',
+        };
   }
   try {
     const { latencyMs } = await timed(async () => {
@@ -228,18 +323,22 @@ export async function runAllHealthChecks(): Promise<Record<string, DependencyChe
   return { environment, database, encryption, session, blob, grok, kv, voice, maintenance, advisorIntelligence };
 }
 
-/** C5: Minimal manager health matrix — no env var names or dependency error strings in API output. */
+/**
+ * Manager-authenticated enterprise health matrix — probes Database, KV, Encryption, and Grok API.
+ * Error details are logged server-side only; API returns status + latency per service.
+ */
 export async function runAuthenticatedHealthChecks(): Promise<Record<string, DependencyCheck>> {
   const voice = checkVoiceInput();
   const maintenance = checkMaintenanceMode();
-  const [database, encryption, grok, kv] = await Promise.all([
+  const [database, encryption, kv, grokConfig, grok] = await Promise.all([
     checkDatabase(),
     checkEncryption(),
-    checkGrokApi(),
     checkKvStore(),
+    checkGrokApi(),
+    checkGrokApiConnectivity(),
   ]);
 
-  return { database, encryption, grok, kv, voice, maintenance };
+  return { database, encryption, kv, grokConfig, grok, voice, maintenance };
 }
 
 export function aggregateHealthStatus(
@@ -248,5 +347,24 @@ export function aggregateHealthStatus(
   const statuses = Object.values(checks).map((c) => c.status);
   if (statuses.some((s) => s === 'error')) return 'error';
   if (statuses.some((s) => s === 'warn')) return 'degraded';
+  return 'ok';
+}
+
+/** Manager /api/health — 503 only when critical deps fail (database; KV in production). */
+export function aggregateAuthenticatedHealthStatus(
+  checks: Record<string, DependencyCheck>
+): 'ok' | 'degraded' | 'error' {
+  const criticalServices = isProductionEnv() ? ['database', 'kv'] : ['database'];
+
+  for (const name of criticalServices) {
+    if (checks[name]?.status === 'error') {
+      return 'error';
+    }
+  }
+
+  const statuses = Object.values(checks).map((c) => c.status);
+  if (statuses.some((s) => s === 'error' || s === 'warn')) {
+    return 'degraded';
+  }
   return 'ok';
 }

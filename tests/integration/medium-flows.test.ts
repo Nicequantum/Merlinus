@@ -104,9 +104,16 @@ describe('medium-priority route flows', () => {
 
     const request = buildAuthenticatedRequest('http://localhost/api/health', managerToken);
     const response = await getHealth(request);
-    const { status, body } = await readJsonResponse<{ services?: { voice?: string } }>(response);
+    const { status, body } = await readJsonResponse<{
+      services?: Record<string, { status: string; latencyMs?: number }>;
+    }>(response);
     assert.equal(status, 200);
-    assert.equal(body.services?.voice, 'ok');
+    assert.equal(body.services?.voice?.status, 'ok');
+    assert.equal(body.services?.database?.status, 'ok');
+    assert.equal(body.services?.encryption?.status, 'ok');
+    assert.ok(body.services?.kv);
+    assert.ok(body.services?.grok);
+    assert.ok(body.services?.grokConfig);
   });
 
   test('M4 security-status requires manager session', async () => {

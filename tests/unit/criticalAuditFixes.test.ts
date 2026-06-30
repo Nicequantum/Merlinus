@@ -46,12 +46,14 @@ describe('Critical audit fixes (C1–C7)', () => {
     assert.ok(src.includes('requireManager: true'));
   });
 
-  it('C5: health is authenticated and Grok is config-only', () => {
+  it('C5: health is authenticated and avoids costly Grok completion probes', () => {
     const healthRoute = readSrc('src/app/api/health/route.ts');
     const healthChecks = readSrc('src/lib/healthChecks.ts');
     assert.ok(healthRoute.includes('withAuth('));
     assert.ok(healthRoute.includes('runAuthenticatedHealthChecks'));
-    assert.equal(healthChecks.includes('api.x.ai/v1/chat/completions'), false);
+    assert.ok(healthChecks.includes('checkGrokApiConnectivity'));
+    assert.ok(healthChecks.includes('buildHealthServicesPayload'));
+    assert.equal(healthChecks.includes('chat/completions'), false);
   });
 
   it('C6: voice session coordinator is wired', () => {

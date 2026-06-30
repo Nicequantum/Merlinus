@@ -91,7 +91,7 @@ export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL?.trim() && process.env.KV_REST_API_TOKEN?.trim());
 }
 
-function isProductionEnv(): boolean {
+export function isProductionEnv(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
 }
 
