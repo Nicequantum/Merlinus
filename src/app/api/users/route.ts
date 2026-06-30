@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { hashPassword } from '@/lib/auth';
 import { internalEmailForD7 } from '@/lib/d7Number';
 import { prisma } from '@/lib/db';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import {
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
             entityType: 'service_advisor',
             entityId: result.advisor.id,
             metadata: {
-              displayName: result.advisor.displayName,
+              displayName: readAdvisorDisplayNameFromDb(result.advisor),
               advisorCode: result.advisor.advisorCode,
               manual: true,
               reactivated: result.reactivated,

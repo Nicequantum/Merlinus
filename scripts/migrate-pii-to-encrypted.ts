@@ -1,40 +1,21 @@
 /**
- * S2 — Backfill encrypted columns for dual-storage PII fields.
+ * S2 / Phase 5 — Maintain encrypted PII columns and search tokens.
  *
- * SAFETY (non-breaking by design):
- *   • Writes ONLY to *Encrypted columns (roNumberEncrypted, descriptionEncrypted,
- *     displayNameEncrypted, serviceAdvisorNameEncrypted).
- *   • Plaintext columns (roNumber, description, displayName) are NEVER modified or removed.
- *   • Application search, reads, and UI continue using existing dual-storage paths unchanged.
- *   • Idempotent: already-encrypted rows are skipped; safe to re-run until pending = 0.
+ * Post-Phase-5: plaintext twin columns (roNumber, description, displayName) are dropped.
+ * This script re-encrypts legacy plaintext-in-encrypted-column rows and backfills
+ * roNumberSearchTokens where missing. Idempotent — safe to re-run until pending = 0.
  *
- * ROLLBACK (one command):
- *   Restore the pre-migration database backup. This script does not delete data.
- *   Do NOT rotate ENCRYPTION_KEY without a planned key-migration procedure.
- *
- * RECOMMENDED WORKFLOW (production):
- *   1. npm run db:migrate-pii-safe     # dry-run first — preview counts, zero writes
- *   2. npm run db:migrate-pii            # execute backfill (batched)
- *   3. Re-run step 2 until pendingAfterRun is 0
- *   4. Spot-check RO/advisor in UI; npm run validate:pre-rollout
+ * ROLLBACK: restore pre-migration database backup.
  *
  * Usage:
- *   npm run db:migrate-pii-safe          # dry-run (preferred entry point)
- *   npm run db:migrate-pii               # execute backfill
- *   DRY_RUN=true npm run db:migrate-pii  # dry-run via env (Unix shells)
- *   npx tsx scripts/migrate-pii-to-encrypted.ts --dry-run
- *   REENCRYPT_BATCH_SIZE=50 npm run db:migrate-pii
+ *   npm run db:migrate-pii-safe
+ *   npm run db:migrate-pii
  *
  * Requires: DATABASE_URL and ENCRYPTION_KEY (min 32 chars).
- *
- * See prisma/schema.prisma "PII PLAINTEXT MIGRATION PLAN" for phased cutover.
  */
-import { PrismaClient, type RepairLine, type ServiceAdvisor } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { fileURLToPath } from 'node:url';
-import {
-  isLikelyEncryptedPayload,
-  migratePlaintextToEncrypted,
-} from '../src/lib/encryption';
+import { isLikelyEncryptedPayload, migratePlaintextToEncrypted } from '../src/lib/encryption';
 import { readRoNumberFromDb } from '../src/lib/piiFieldRead';
 import { buildRoNumberSearchTokens } from '../src/lib/piiSearchToken';
 
@@ -69,11 +50,14 @@ export interface S2MigrationResults {
   };
 }
 
-function resolveEncryptedFromDualStorage(encrypted: string, plaintext: string): string | null {
-  const source = encrypted?.trim() ? encrypted : plaintext;
-  if (!source?.trim()) return null;
-  // Idempotent: migratePlaintextToEncrypted returns input unchanged when already encrypted.
-  const next = migratePlaintextToEncrypted(source);
+function needsEncryptedBackfill(encrypted: string): boolean {
+  if (!encrypted?.trim()) return true;
+  return !isLikelyEncryptedPayload(encrypted);
+}
+
+function resolveEncryptedColumn(encrypted: string): string | null {
+  if (!encrypted?.trim()) return null;
+  const next = migratePlaintextToEncrypted(encrypted);
   if (!next || next === encrypted) return null;
   return next;
 }
@@ -100,7 +84,6 @@ export async function migrateRepairOrdersS2(): Promise<MigrationStats> {
       orderBy: { id: 'asc' },
       select: {
         id: true,
-        roNumber: true,
         roNumberEncrypted: true,
         roNumberSearchTokens: true,
         serviceAdvisorNameEncrypted: true,
@@ -117,11 +100,10 @@ export async function migrateRepairOrdersS2(): Promise<MigrationStats> {
       scanned += 1;
       const data: Record<string, string | string[]> = {};
 
-      const roNumberEnc = resolveEncryptedFromDualStorage(row.roNumberEncrypted, row.roNumber);
+      const roNumberEnc = resolveEncryptedColumn(row.roNumberEncrypted);
       if (roNumberEnc) data.roNumberEncrypted = roNumberEnc;
 
       const roNumberValue = readRoNumberFromDb({
-        roNumber: row.roNumber,
         roNumberEncrypted: (data.roNumberEncrypted as string | undefined) ?? row.roNumberEncrypted,
       });
       if (roNumberValue) {
@@ -136,7 +118,6 @@ export async function migrateRepairOrdersS2(): Promise<MigrationStats> {
         }
       }
 
-      // serviceAdvisorNameEncrypted has no plaintext twin column — only re-encrypt if stored as legacy plaintext.
       if (row.serviceAdvisorNameEncrypted?.trim()) {
         const advisorEnc = migratePlaintextToEncrypted(row.serviceAdvisorNameEncrypted);
         if (advisorEnc !== row.serviceAdvisorNameEncrypted) {
@@ -183,7 +164,6 @@ export async function migrateRepairLinesS2(): Promise<MigrationStats> {
       orderBy: { id: 'asc' },
       select: {
         id: true,
-        description: true,
         descriptionEncrypted: true,
       },
     });
@@ -196,7 +176,7 @@ export async function migrateRepairLinesS2(): Promise<MigrationStats> {
 
     for (const row of rows) {
       scanned += 1;
-      const descriptionEnc = resolveEncryptedFromDualStorage(row.descriptionEncrypted, row.description);
+      const descriptionEnc = resolveEncryptedColumn(row.descriptionEncrypted);
       if (!descriptionEnc) {
         skipped += 1;
         batchSkipped += 1;
@@ -239,7 +219,6 @@ export async function migrateServiceAdvisorsS2(): Promise<MigrationStats> {
       orderBy: { id: 'asc' },
       select: {
         id: true,
-        displayName: true,
         displayNameEncrypted: true,
       },
     });
@@ -252,7 +231,7 @@ export async function migrateServiceAdvisorsS2(): Promise<MigrationStats> {
 
     for (const row of rows) {
       scanned += 1;
-      const displayNameEnc = resolveEncryptedFromDualStorage(row.displayNameEncrypted, row.displayName);
+      const displayNameEnc = resolveEncryptedColumn(row.displayNameEncrypted);
       if (!displayNameEnc) {
         skipped += 1;
         batchSkipped += 1;
@@ -281,13 +260,6 @@ export async function migrateServiceAdvisorsS2(): Promise<MigrationStats> {
   return { scanned, updated, skipped };
 }
 
-function needsS2Backfill(encrypted: string, plaintext: string): boolean {
-  if (!plaintext?.trim()) return false;
-  if (!encrypted?.trim()) return true;
-  return !isLikelyEncryptedPayload(encrypted);
-}
-
-/** Full-table batched scan — rows still needing *Encrypted backfill. */
 async function countPendingS2Rows(): Promise<S2MigrationResults['pendingAfterRun']> {
   const pending = { repairOrders: 0, repairLines: 0, serviceAdvisors: 0 };
 
@@ -297,46 +269,44 @@ async function countPendingS2Rows(): Promise<S2MigrationResults['pendingAfterRun
       take: BATCH_SIZE,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { id: 'asc' },
-      select: { id: true, roNumber: true, roNumberEncrypted: true },
+      select: { id: true, roNumberEncrypted: true },
     });
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
-      if (needsS2Backfill(row.roNumberEncrypted, row.roNumber)) pending.repairOrders += 1;
+      if (needsEncryptedBackfill(row.roNumberEncrypted)) pending.repairOrders += 1;
     }
     if (rows.length < BATCH_SIZE) break;
   }
 
   cursor = undefined;
   for (;;) {
-    const rows: Pick<RepairLine, 'id' | 'description' | 'descriptionEncrypted'>[] =
-      await prisma.repairLine.findMany({
-        take: BATCH_SIZE,
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-        orderBy: { id: 'asc' },
-        select: { id: true, description: true, descriptionEncrypted: true },
-      });
+    const rows = await prisma.repairLine.findMany({
+      take: BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
+      select: { id: true, descriptionEncrypted: true },
+    });
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
-      if (needsS2Backfill(row.descriptionEncrypted, row.description)) pending.repairLines += 1;
+      if (needsEncryptedBackfill(row.descriptionEncrypted)) pending.repairLines += 1;
     }
     if (rows.length < BATCH_SIZE) break;
   }
 
   cursor = undefined;
   for (;;) {
-    const rows: Pick<ServiceAdvisor, 'id' | 'displayName' | 'displayNameEncrypted'>[] =
-      await prisma.serviceAdvisor.findMany({
-        take: BATCH_SIZE,
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-        orderBy: { id: 'asc' },
-        select: { id: true, displayName: true, displayNameEncrypted: true },
-      });
+    const rows = await prisma.serviceAdvisor.findMany({
+      take: BATCH_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: 'asc' },
+      select: { id: true, displayNameEncrypted: true },
+    });
     if (rows.length === 0) break;
     cursor = rows[rows.length - 1]?.id;
     for (const row of rows) {
-      if (needsS2Backfill(row.displayNameEncrypted, row.displayName)) pending.serviceAdvisors += 1;
+      if (needsEncryptedBackfill(row.displayNameEncrypted)) pending.serviceAdvisors += 1;
     }
     if (rows.length < BATCH_SIZE) break;
   }
@@ -375,7 +345,7 @@ async function main(): Promise<void> {
   console.log(
     DRY_RUN
       ? '[migrate-pii] DRY RUN — no database writes; reporting rows that WOULD be updated'
-      : '[migrate-pii] EXECUTE — backfilling *Encrypted columns from plaintext twins (batched)'
+      : '[migrate-pii] EXECUTE — maintaining encrypted PII columns and search tokens (batched)'
   );
   console.log(`[migrate-pii] batch size: ${BATCH_SIZE}`);
   if (!DRY_RUN) {
@@ -397,7 +367,7 @@ async function main(): Promise<void> {
         '[migrate-pii] Run npm run db:migrate-pii to execute after reviewing counts above.'
       );
     } else {
-      console.log('[migrate-pii] No pending S2 backfill rows — database is already up to date.');
+      console.log('[migrate-pii] No pending encrypted backfill rows — database is up to date.');
     }
     return;
   }
@@ -407,7 +377,7 @@ async function main(): Promise<void> {
       '[migrate-pii] Some rows still need backfill — re-run npm run db:migrate-pii until pendingAfterRun is 0.'
     );
   } else {
-    console.log('[migrate-pii] S2 backfill complete — all pending counts are 0.');
+    console.log('[migrate-pii] Encrypted PII maintenance complete — all pending counts are 0.');
   }
 }
 

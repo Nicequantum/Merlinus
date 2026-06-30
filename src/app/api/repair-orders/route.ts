@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         include: {
           repairLines: true,
           technician: { select: { name: true } },
-          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
+          serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: params.limit + 1,
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
                 create: input.repairLines.map((line) => repairLineToDbFields(line)),
               },
             },
-            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } } },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayNameEncrypted: true } } },
           });
 
           const capture = data.serviceAdvisorName
@@ -215,7 +215,7 @@ export async function POST(request: Request) {
 
           const createdRo = await tx.repairOrder.findUniqueOrThrow({
             where: { id: ro.id },
-            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } } },
+            include: { repairLines: true, serviceAdvisor: { select: { id: true, displayNameEncrypted: true } } },
           });
 
           return { created: createdRo, advisorCapture: capture };

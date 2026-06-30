@@ -56,7 +56,7 @@ describe('roMapper sensitive field encryption', () => {
 
     assert.notEqual(fields.xentryOcrTextsEncrypted, JSON.stringify(sampleRo.xentryOcrTexts));
     assert.ok(fields.xentryOcrTextsEncrypted.length > 0);
-    assert.equal(fields.roNumber, '');
+    assert.equal('roNumber' in fields, false);
     assert.ok(Array.isArray(fields.roNumberSearchTokens));
     assert.ok(fields.roNumberSearchTokens.length > 0);
   });
@@ -73,7 +73,7 @@ describe('roMapper sensitive field encryption', () => {
     assert.ok(fields.warrantyStoryEncrypted && fields.warrantyStoryEncrypted.length > 0);
     assert.ok(fields.extractedDataEncrypted.length > 0);
     assert.equal('storyQualityAuditEncrypted' in fields, false);
-    assert.equal(fields.description, '');
+    assert.equal('description' in fields, false);
   });
 
   test('repairLineToDbFields encrypts persisted story quality audits when provided', () => {
@@ -105,7 +105,6 @@ describe('roMapper sensitive field encryption', () => {
 
     const mappedRo = dbToRepairOrder({
       id: 'ro-1',
-      roNumber: '',
       roNumberEncrypted: roFields.roNumberEncrypted,
       roNumberSearchTokens: roFields.roNumberSearchTokens,
       technicianId: 'tech-1',
@@ -132,7 +131,6 @@ describe('roMapper sensitive field encryption', () => {
           id: sampleLine.id,
           repairOrderId: 'ro-1',
           lineNumber: sampleLine.lineNumber,
-          description: '',
           descriptionEncrypted: lineFields.descriptionEncrypted,
           customerConcernEncrypted: lineFields.customerConcernEncrypted,
           technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
@@ -158,7 +156,7 @@ describe('roMapper sensitive field encryption', () => {
     assert.equal(mappedLine.storyQualityAudit, null);
   });
 
-  test('dbToRepairOrder reads roNumber from encrypted column when plaintext is empty', () => {
+  test('dbToRepairOrder reads roNumber from encrypted column', () => {
     const roFields = repairOrderToDbFields({
       roNumber: sampleRo.roNumber,
       vehicle: sampleRo.vehicle,
@@ -169,7 +167,6 @@ describe('roMapper sensitive field encryption', () => {
 
     const mapped = dbToRepairOrder({
       id: 'ro-encrypted-only',
-      roNumber: '',
       roNumberEncrypted: roFields.roNumberEncrypted,
       roNumberSearchTokens: roFields.roNumberSearchTokens,
       technicianId: 'tech-1',
@@ -214,7 +211,6 @@ describe('roMapper sensitive field encryption', () => {
       id: sampleLine.id,
       repairOrderId: 'ro-1',
       lineNumber: sampleLine.lineNumber,
-      description: sampleLine.description,
       descriptionEncrypted: lineFields.descriptionEncrypted,
       customerConcernEncrypted: lineFields.customerConcernEncrypted,
       technicianNotesEncrypted: lineFields.technicianNotesEncrypted,

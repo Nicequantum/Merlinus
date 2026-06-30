@@ -132,15 +132,21 @@ describe('Third-party audit hardening', () => {
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
   });
 
-  it('PII dual-storage fields write encrypted-only in Merlinus v2', () => {
+  it('PII Phase 5 uses encrypted-only storage in Merlinus v2', () => {
+    const schema = readSrc('prisma/schema.prisma');
     const roMapper = readSrc('src/lib/roMapper.ts');
     const resolveAdvisor = readSrc('src/lib/advisorIntelligence/resolveAdvisor.ts');
-    assert.ok(roMapper.includes("roNumber: ''"));
+    assert.equal(schema.includes('roNumber                   String'), false);
+    assert.equal(schema.includes('description               String'), false);
+    assert.ok(schema.includes('roNumberEncrypted'));
+    assert.ok(schema.includes('descriptionEncrypted'));
+    assert.ok(roMapper.includes('roNumberEncrypted: encryptPII'));
     assert.ok(roMapper.includes('roNumberSearchTokens: buildRoNumberSearchTokens'));
-    assert.ok(roMapper.includes("description: ''"));
+    assert.equal(roMapper.includes("roNumber: ''"), false);
     assert.ok(resolveAdvisor.includes('displayNameEncrypted: encryptPII'));
     assert.ok(readSrc('src/lib/roListQuery.ts').includes('roNumberSearchTokens'));
     assert.ok(readSrc('src/lib/piiFieldRead.ts').includes('readRoNumberFromDb'));
+    assert.ok(readSrc('prisma/migrations/20250630140000_drop_pii_plaintext_columns/migration.sql').includes('DROP COLUMN'));
   });
 
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {

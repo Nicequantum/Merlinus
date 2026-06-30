@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         where: { id },
         include: {
           repairLines: true,
-          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
+          serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
         },
       });
 
@@ -244,7 +244,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         where: { id },
         include: {
           repairLines: true,
-          serviceAdvisor: { select: { id: true, displayName: true, displayNameEncrypted: true } },
+          serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
         },
       });
 

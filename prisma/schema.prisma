@@ -8,69 +8,25 @@ datasource db {
   directUrl = env("DIRECT_URL") // For Neon: use pooled in DATABASE_URL + direct (non-pooled) in DIRECT_URL for migrations
 }
 
-// ─── PII PLAINTEXT MIGRATION PLAN (audit S2) ─────────────────────────────────
-// Phase 2 [BACKFILL COMPLETE]: *Encrypted columns are canonical for reads; S2 backfill done.
-// ACTIVE dual-storage writes remain for RepairOrder.roNumber and RepairLine.description
-// (see src/lib/roMapper.ts repairOrderToDbFields / repairLineToDbFields). Plaintext
-// columns are still written at create/update until Phase 4 write cutover.
+// ─── PII ENCRYPTION AT REST (Merlinus v2.0 — Phase 5 complete) ───────────────
+// Dual-storage plaintext columns (roNumber, description, displayName) were dropped
+// in migration 20250630140000_drop_pii_plaintext_columns. Encrypted columns are the
+// sole source of truth for reads and writes.
 //
-// ── Dual-storage fields (plaintext + encrypted both written until Phase 4) ────
-// RepairOrder.roNumber
-//   → roNumberEncrypted (canonical for decrypt-first reads)
-//   WRITE: src/lib/roMapper.ts — roNumber and roNumberEncrypted both written
-//   READ:  src/lib/roMapper.ts dbToRepairOrder (decrypt first, plaintext fallback)
-//   SEARCH: src/lib/roListQuery.ts buildRepairOrderListWhere (contains on roNumber)
-//   CLIENT: src/hooks/repairOrders/roListUtils.ts matchesROSearch (in-memory filter)
+// RepairOrder.roNumberEncrypted + roNumberSearchTokens (blind-index search)
+// RepairLine.descriptionEncrypted
+// ServiceAdvisor.displayNameEncrypted
+// RepairOrder.serviceAdvisorNameEncrypted
 //
-// RepairLine.description
-//   → descriptionEncrypted (canonical for decrypt-first reads)
-//   WRITE: src/lib/roMapper.ts — description and descriptionEncrypted both written
-//   READ:  src/lib/roMapper.ts dbToRepairLine (decrypt first, plaintext fallback)
+// ── Plaintext-only fields (future encryption candidates) ──────────────────────
+// ServiceAdvisorAlias.aliasText
+// AdvisorWritingProfile.profileData
+// Technician.name / email (auth identity)
+// TechnicianCertifiedStory.roNumber (operational denormalized index, not customer PII)
+// AuditLog.metadata.roNumber (hash-chain operational identifier)
+// Template.title / description (non-customer catalog metadata)
 //
-// RepairOrder.serviceAdvisorName (denormalized, encrypted-only at rest)
-//   → serviceAdvisorNameEncrypted
-//   READ/WRITE: src/lib/roMapper.ts
-//
-// ServiceAdvisor.displayName
-//   → displayNameEncrypted (canonical, backfill complete)
-//   READ:  src/app/api/advisors/*.ts, dbToRepairOrder serviceAdvisor join
-//
-// ── Plaintext-only fields (no encrypted twin yet — future schema work) ────────
-// ServiceAdvisorAlias.aliasText          — advisor alias strings (fingerprint used for match)
-// AdvisorWritingProfile.profileData      — JSON writing-style samples (may contain complaint text)
-// Technician.name / email              — auth identity (separate from RO PII scope)
-// AuditLog.metadata.roNumber             — operational identifier in hash-chain audit (not customer PII)
-// Template.title / description           — non-customer template catalog metadata
-//
-// Already encrypted-only at rest (no S2 dual-storage gap):
-//   customerNameEncrypted, complaintsEncrypted, vinEncrypted, customerConcernEncrypted,
-//   technicianNotesEncrypted, warrantyStoryEncrypted, xentryOcrTextsEncrypted,
-//   extractedDataEncrypted, complaintTextEncrypted, contentEncrypted, knowledge base *Encrypted
-//
-// ── Phased cutover (non-breaking) ─────────────────────────────────────────────
-// Phase 1 [COMPLETE] — dual-write introduced encrypted twins for RO/advisor fields
-//
-// Phase 2 [BACKFILL COMPLETE] — backfill finished; dual-storage writes still active
-//   • npm run db:migrate-pii-safe / db:migrate-pii / db:reencrypt completed
-//   • *Encrypted columns are canonical for reads; roNumber/description still dual-written
-//
-// Phase 3 [IN PROGRESS — Merlinus v2.0]
-//   • dbToRepairOrder / dbToRepairLine: encrypted-first reads (plaintext fallback during migration)
-//   • dbToRepairOrder: decrypt ServiceAdvisor.displayNameEncrypted on join
-//   • RepairOrder.roNumberSearchTokens (HMAC blind index) for list/search queries
-//   • roListQuery: query tokens instead of plaintext roNumber contains
-//
-// Phase 4 [WRITE CUTOVER — Merlinus v2.0]
-//   • resolveAdvisor.ts + serviceAdvisorManagement: write displayNameEncrypted; retire plaintext displayName
-//   • roMapper: stop writing RepairOrder.roNumber and RepairLine.description plaintext
-//   • Dashboard/advisor APIs: read from encrypted columns first
-//
-// Phase 5 [SCHEMA CLEANUP — one release after Phase 4]
-//   • Drop plaintext columns: roNumber, description, displayName (Prisma migration)
-//   • Add encrypted columns for aliasText / profileData if still needed
-//   • Final npm run db:migrate-pii + db:reencrypt on restored backups only
-//
-// Rollback: restore pre-migration database backup. Do not rotate ENCRYPTION_KEY without
+// Rollback: restore pre-Phase-5 database backup. Do not rotate ENCRYPTION_KEY without
 // a planned key-migration procedure. See docs/Reencryption-Runbook.md.
 
 /** M11: enforce technician/manager at the database layer. */
@@ -130,11 +86,9 @@ model Technician {
 
 model RepairOrder {
   id                         String       @id @default(cuid())
-  /** S2 legacy: read-only for list/search until Phase 5 drop. Canonical: roNumberEncrypted (Phase 2 complete). */
-  roNumber                   String
-  /** M7: encrypted RO number — canonical value at rest (Phase 2 backfill complete). */
+  /** Encrypted RO number — sole source of truth at rest. */
   roNumberEncrypted          String       @default("")
-  /** Phase 3: HMAC blind-index tokens for RO search without querying plaintext roNumber. */
+  /** HMAC blind-index tokens for RO search without decrypting roNumberEncrypted. */
   roNumberSearchTokens       String[]     @default([])
   technicianId               String
   technician                 Technician   @relation(fields: [technicianId], references: [id])
@@ -163,7 +117,6 @@ model RepairOrder {
 
   @@index([technicianId])
   @@index([dealershipId])
-  @@index([roNumber])
   @@index([roNumberSearchTokens], type: Gin)
   @@index([serviceAdvisorId])
 }
@@ -174,9 +127,7 @@ model ServiceAdvisor {
   id              String   @id @default(cuid())
   dealershipId    String
   dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
-  /** S2 legacy: read-only for UI until Phase 5 drop. Canonical: displayNameEncrypted (Phase 2 complete). */
-  displayName     String
-  /** M7: encrypted advisor display name — canonical at rest (Phase 2 backfill complete). */
+  /** Encrypted advisor display name — sole source of truth at rest. */
   displayNameEncrypted String @default("")
   nameFingerprint String
   advisorCode     String?
@@ -255,9 +206,7 @@ model RepairLine {
   repairOrderId             String
   repairOrder               RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
   lineNumber                Int
-  /** S2 legacy: read-only fallback until Phase 5 drop. Canonical: descriptionEncrypted (Phase 2 complete). */
-  description               String
-  /** M7: encrypted line description — canonical at rest (Phase 2 backfill complete). */
+  /** Encrypted line description — sole source of truth at rest. */
   descriptionEncrypted      String      @default("")
   customerConcernEncrypted  String      @default("")
   technicianNotesEncrypted  String      @default("")

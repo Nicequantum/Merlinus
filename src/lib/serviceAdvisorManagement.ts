@@ -61,7 +61,6 @@ export async function createManualServiceAdvisor(
         data: {
           deletedAt: null,
           status: 'active',
-          displayName: '',
           displayNameEncrypted: encryptPII(displayName),
           advisorCode: input.advisorCode?.trim() || existing.advisorCode,
           lastSeenAt: new Date(),
@@ -78,7 +77,6 @@ export async function createManualServiceAdvisor(
       where: { id: existing.id },
       data: {
         status: 'active',
-        displayName: '',
         displayNameEncrypted: encryptPII(displayName),
         advisorCode: input.advisorCode?.trim() || existing.advisorCode,
         lastSeenAt: new Date(),
@@ -90,7 +88,6 @@ export async function createManualServiceAdvisor(
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
-      displayName: '',
       displayNameEncrypted: encryptPII(displayName),
       nameFingerprint,
       advisorCode: input.advisorCode?.trim() || null,

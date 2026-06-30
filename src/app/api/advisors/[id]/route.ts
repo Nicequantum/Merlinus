@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               vehicleModel: true,
               observedAt: true,
               complaintTextEncrypted: true,
-              repairOrder: { select: { roNumber: true, roNumberEncrypted: true } },
+              repairOrder: { select: { roNumberEncrypted: true } },
             },
           },
         },

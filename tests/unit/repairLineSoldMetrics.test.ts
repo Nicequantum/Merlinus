@@ -35,7 +35,6 @@ describe('repairLineSoldMetrics', () => {
       id: 'line-1',
       repairOrderId: 'ro-1',
       lineNumber: 1,
-      description: 'Brake service',
       descriptionEncrypted: '',
       customerConcernEncrypted: '',
       technicianNotesEncrypted: '',

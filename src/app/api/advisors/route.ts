@@ -1,4 +1,5 @@
 import { writeAuditLog } from '@/lib/audit';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { mapAdvisorListItem } from '@/lib/advisorApiMappers';
 import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
           entityType: 'service_advisor',
           entityId: advisor.id,
           metadata: {
-            displayName: advisor.displayName,
+            displayName: readAdvisorDisplayNameFromDb(advisor),
             advisorCode: advisor.advisorCode,
             manual: true,
             reactivated,

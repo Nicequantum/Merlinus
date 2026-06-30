@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { logger } from './logger';
+import { readRoNumberFromDb } from './piiFieldRead';
 
 export interface RecordCertifiedStoryInput {
   dealershipId: string;
@@ -89,10 +90,12 @@ export async function backfillCertifiedStoriesFromAudit(dealershipId: string): P
       repairOrderIds.length > 0
         ? await prisma.repairOrder.findMany({
             where: { id: { in: repairOrderIds }, dealershipId },
-            select: { id: true, roNumber: true },
+            select: { id: true, roNumberEncrypted: true },
           })
         : [];
-    const roNumberById = new Map(repairOrders.map((ro) => [ro.id, ro.roNumber]));
+    const roNumberById = new Map(
+      repairOrders.map((ro) => [ro.id, readRoNumberFromDb(ro)] as const)
+    );
 
     for (const log of certifyLogs) {
       if (existingIds.has(log.id) || !log.technicianId || !log.entityId) continue;

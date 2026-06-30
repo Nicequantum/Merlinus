@@ -138,8 +138,6 @@ export async function resolveServiceAdvisor(
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
-      // Phase 4: plaintext retired — column retained until Phase 5 schema drop.
-      displayName: '',
       displayNameEncrypted: encryptPII(advisorLabel),
       nameFingerprint,
       roCount: incrementRoCount ? 1 : 0,

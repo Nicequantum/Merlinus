@@ -96,7 +96,7 @@ export function imageAttachmentsToJson(images?: ImageAttachment[]): string {
 
 type DbROWithAdvisor = DbRO & {
   repairLines: DbLine[];
-  serviceAdvisor?: { id: string; displayName: string; displayNameEncrypted?: string } | null;
+  serviceAdvisor?: { id: string; displayNameEncrypted?: string } | null;
 };
 
 export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
@@ -225,8 +225,6 @@ export function repairOrderToDbFields(
   const roNumber = input.roNumber.trim();
 
   return {
-    // Phase 4: plaintext retired — column retained until Phase 5 schema drop.
-    roNumber: '',
     roNumberEncrypted: encryptPII(roNumber),
     roNumberSearchTokens: buildRoNumberSearchTokens(roNumber),
     vinEncrypted: encryptPII(input.vehicle.vin),
@@ -249,8 +247,6 @@ export function repairOrderToDbFields(
 export function repairLineToDbFields(line: RepairLine) {
   return {
     lineNumber: line.lineNumber,
-    // Phase 4: plaintext retired — column retained until Phase 5 schema drop.
-    description: '',
     descriptionEncrypted: encryptSensitiveText(line.description),
     customerConcernEncrypted: encryptPII(line.customerConcern),
     technicianNotesEncrypted: encryptSensitiveText(line.technicianNotes),

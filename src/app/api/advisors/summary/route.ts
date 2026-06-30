@@ -25,7 +25,6 @@ export async function GET(request: Request) {
             take: 8,
             select: {
               id: true,
-              displayName: true,
               displayNameEncrypted: true,
               roCount: true,
               lastSeenAt: true,

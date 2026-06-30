@@ -3,7 +3,6 @@ import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 
 type AdvisorWithProfile = {
   id: string;
-  displayName: string;
   displayNameEncrypted?: string;
   advisorCode: string | null;
   status: string;

@@ -1,4 +1,5 @@
 import { decryptPII } from '@/lib/encryption';
+import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { prisma } from '@/lib/db';
 
 export interface AdvisorProfileData {
@@ -137,7 +138,7 @@ export async function loadAdvisorPromptContext(
 
   return {
     serviceAdvisorId: advisor.id,
-    displayName: advisor.displayName,
+    displayName: readAdvisorDisplayNameFromDb(advisor),
     observationCount: advisor.profile.observationCount,
     profileData: parseProfileData(advisor.profile.profileData),
     sampleComplaints,
