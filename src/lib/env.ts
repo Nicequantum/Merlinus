@@ -3,6 +3,7 @@
  * Called at Node startup (instrumentation) and before production builds (scripts/validate-env.mjs).
  */
 
+import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
 
 const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
@@ -19,6 +20,8 @@ const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN']
 export interface EnvironmentValidationResult {
   missing: string[];
   warnings: string[];
+  /** NEXT_PUBLIC_* xAI keys — security violation; must be deleted from all environments. */
+  forbiddenPublicKeys: string[];
   valid: boolean;
 }
 
@@ -108,13 +111,19 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  if (isTruthyEnv(process.env.NEXT_PUBLIC_GROK_API_KEY) || isTruthyEnv(process.env.NEXT_PUBLIC_XAI_API_KEY)) {
-    warnings.push('Remove NEXT_PUBLIC_* xAI keys — use server-only GROK_API_KEY');
+  const forbiddenPublicKeys = getExposedPublicGrokEnvKeys();
+
+  const valid = missing.length === 0 && forbiddenPublicKeys.length === 0;
+
+  if (forbiddenPublicKeys.length > 0) {
+    const message = `Forbidden public xAI API keys detected: ${forbiddenPublicKeys.join(', ')}. Delete them from Vercel and use server-only GROK_API_KEY.`;
+    logger.error('env.validation_forbidden_public_keys', { forbiddenPublicKeys });
+    if (options.throwOnError) {
+      throw new Error(message);
+    }
   }
 
-  const valid = missing.length === 0;
-
-  if (!valid) {
+  if (missing.length > 0) {
     const message = `Missing required environment variables: ${missing.join(', ')}`;
     logger.error('env.validation_failed', { missing });
     if (options.throwOnError) {
@@ -126,7 +135,7 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     logger.warn('env.validation_warning', { warning });
   }
 
-  return { missing, warnings, valid };
+  return { missing, warnings, forbiddenPublicKeys, valid };
 }
 
 /** Stricter validation used by `npm run build` — fails on missing required vars. */

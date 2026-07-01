@@ -26,6 +26,16 @@ describe('environment validation', () => {
     process.env.SESSION_SECRET = saved.SESSION_SECRET;
   });
 
+  test('fails validation when forbidden NEXT_PUBLIC_GROK_API_KEY is set', () => {
+    const saved = process.env.NEXT_PUBLIC_GROK_API_KEY;
+    process.env.NEXT_PUBLIC_GROK_API_KEY = 'xai-exposed-key';
+    const result = validateEnvironment({ throwOnError: false, production: true });
+    assert.ok(result.forbiddenPublicKeys.includes('NEXT_PUBLIC_GROK_API_KEY'));
+    assert.equal(result.valid, false);
+    if (saved === undefined) delete process.env.NEXT_PUBLIC_GROK_API_KEY;
+    else process.env.NEXT_PUBLIC_GROK_API_KEY = saved;
+  });
+
   test('requires BLOB_READ_WRITE_TOKEN in production for scanning', () => {
     const saved = {
       BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,

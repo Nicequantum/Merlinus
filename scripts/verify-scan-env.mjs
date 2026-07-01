@@ -11,6 +11,11 @@ import { resolve } from 'node:path';
 
 const PREFIX = '[merlin:scan-env]';
 const SCANNING_REQUIRED = ['BLOB_READ_WRITE_TOKEN', 'GROK_API_KEY'];
+const FORBIDDEN_PUBLIC_GROK_KEYS = [
+  'NEXT_PUBLIC_GROK_API_KEY',
+  'NEXT_PUBLIC_XAI_API_KEY',
+  'NEXT_PUBLIC_XAI_KEY',
+];
 
 const VERCEL_BLOB_SETUP = [
   'Vercel Dashboard → your Merlinus project → Storage tab',
@@ -44,6 +49,13 @@ loadDotEnvFile('.env.production');
 
 const isProduction =
   process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+const exposedPublicGrokKeys = FORBIDDEN_PUBLIC_GROK_KEYS.filter((key) => process.env[key]?.trim());
+if (exposedPublicGrokKeys.length > 0) {
+  console.error(`${PREFIX} FORBIDDEN public xAI keys: ${exposedPublicGrokKeys.join(', ')}`);
+  console.error(`${PREFIX} Delete these from Vercel. Use server-only GROK_API_KEY only.`);
+  process.exit(1);
+}
+
 const missing = SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
 
 if (missing.length === 0) {

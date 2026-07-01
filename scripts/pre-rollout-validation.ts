@@ -37,6 +37,7 @@ import {
   isMaintenanceModeEnabled,
   validateEnvironment,
 } from '../src/lib/env';
+import { getExposedPublicGrokEnvKeys } from '../src/lib/grokApiKey.shared';
 import { PrismaClient } from '@prisma/client';
 import { isKvConfigured, RATE_LIMITS } from '../src/lib/rate-limit';
 import { SYSTEM_PROMPT, buildWarrantyStoryUserMessage } from '../src/prompts/warrantyStory';
@@ -279,9 +280,20 @@ async function checkEnvironment(): Promise<void> {
     record('Environment', 'Grok vision for RO/Xentry scanning', 'pass', 'GROK_API_KEY configured');
   }
 
-  const blockingWarnings = env.warnings.filter(
-    (w) => w.includes('NEXT_PUBLIC_*') || w.includes('shorter than')
-  );
+  const exposedPublicGrokKeys = getExposedPublicGrokEnvKeys();
+  if (exposedPublicGrokKeys.length > 0) {
+    record(
+      'Environment',
+      'Forbidden public xAI API keys',
+      'fail',
+      `Delete ${exposedPublicGrokKeys.join(', ')} from Vercel — use server-only GROK_API_KEY`,
+      true
+    );
+  } else {
+    record('Environment', 'Forbidden public xAI API keys', 'pass', 'No NEXT_PUBLIC_* xAI keys detected');
+  }
+
+  const blockingWarnings = env.warnings.filter((w) => w.includes('shorter than'));
   if (blockingWarnings.length === 0 && env.warnings.length === 0) {
     record('Environment', 'Environment warnings', 'pass', 'No configuration warnings');
   } else if (blockingWarnings.length > 0) {
@@ -1260,10 +1272,16 @@ async function checkSecurityAndConfig(): Promise<void> {
     record('Security', 'Sensitive route authentication', 'fail', `Routes without withAuth: ${unauthenticated.join(', ')}`);
   }
 
-  if (!process.env.NEXT_PUBLIC_GROK_API_KEY && !process.env.NEXT_PUBLIC_XAI_API_KEY) {
-    record('Security', 'Grok API key exposure', 'pass', 'No NEXT_PUBLIC_* xAI keys detected');
+  const securityExposedKeys = getExposedPublicGrokEnvKeys();
+  if (securityExposedKeys.length === 0) {
+    record('Security', 'Grok API key exposure', 'pass', 'No NEXT_PUBLIC_* xAI keys — GROK_API_KEY is server-only');
   } else {
-    record('Security', 'Grok API key exposure', 'fail', 'Remove NEXT_PUBLIC_GROK_API_KEY / NEXT_PUBLIC_XAI_API_KEY');
+    record(
+      'Security',
+      'Grok API key exposure',
+      'fail',
+      `Remove forbidden keys: ${securityExposedKeys.join(', ')} — use GROK_API_KEY only`
+    );
   }
 }
 
