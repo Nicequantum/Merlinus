@@ -95,6 +95,7 @@ export async function recomputeAdvisorProfile(serviceAdvisorId: string, client: 
     extractionHints: [],
   };
 
+  // S2 PLAINTEXT WRITE: profileData JSON may contain complaint phrasing samples — encrypted at rest via profileDataEncrypted.
   const profileDataEncrypted = encryptJsonObject(profileData);
 
   await client.advisorWritingProfile.upsert({

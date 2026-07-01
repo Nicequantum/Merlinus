@@ -51,7 +51,7 @@ const PII_WRITE_GUARDS = [
   {
     file: 'src/lib/advisorIntelligence/recomputeProfile.ts',
     region: 'advisorWritingProfile.upsert',
-    requiredSnippets: ['profileDataEncrypted', 'encryptJsonObject'],
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'profileDataEncrypted', 'encryptJsonObject'],
   },
 ];
 

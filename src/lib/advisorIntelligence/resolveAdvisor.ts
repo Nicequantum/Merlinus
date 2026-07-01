@@ -145,6 +145,7 @@ export async function resolveServiceAdvisor(
       roCount: incrementRoCount ? 1 : 0,
       aliases: {
         create: {
+          // S2 PLAINTEXT WRITE: aliasText has no encrypted twin column yet (see schema migration plan).
           aliasText: displayName || rawName.trim(),
           aliasFingerprint: nameFingerprint,
         },
