@@ -1,4 +1,4 @@
-import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
+import { fetchPrivateBlobAsVisionDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractROFromImages } from '@/lib/grok';
@@ -11,7 +11,7 @@ import { RATE_LIMITS } from '@/lib/rate-limit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
 /** Must match RO_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
-export const maxDuration = 190;
+export const maxDuration = 130;
 
 export async function POST(request: Request) {
   return withAuth(
@@ -25,28 +25,41 @@ export async function POST(request: Request) {
 
       const pathnames = parsed.data.imagePathnames.map((ref) => extractPathnameFromImageRef(ref) || ref);
 
-      for (const pathname of pathnames) {
-        if (!isAllowedImagePathname(pathname)) {
+      const accessResults = await Promise.all(
+        pathnames.map(async (pathname) => {
+          if (!isAllowedImagePathname(pathname)) {
+            return { pathname, ok: false as const, reason: 'invalid' as const };
+          }
+          const allowed = await userCanAccessImage(session, pathname);
+          if (!allowed) {
+            return { pathname, ok: false as const, reason: 'denied' as const };
+          }
+          return { pathname, ok: true as const };
+        })
+      );
+
+      const denied = accessResults.find((result) => !result.ok);
+      if (denied && !denied.ok) {
+        if (denied.reason === 'invalid') {
           logger.warn('ro.extract.invalid_pathname', {
-            pathname,
+            pathname: denied.pathname,
             technicianId: session.technicianId,
           });
           return apiError(FORBIDDEN_ERROR, 403);
         }
-        const allowed = await userCanAccessImage(session, pathname);
-        if (!allowed) {
-          logger.warn('ro.extract.image_access_denied', {
-            pathname,
-            technicianId: session.technicianId,
-            dealershipId: session.dealershipId,
-          });
-          return apiError(IMAGE_ACCESS_ERROR, 403);
-        }
+        logger.warn('ro.extract.image_access_denied', {
+          pathname: denied.pathname,
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+        });
+        return apiError(IMAGE_ACCESS_ERROR, 403);
       }
 
       let imageDataUrls: string[];
       try {
-        imageDataUrls = await Promise.all(pathnames.map((pathname) => fetchPrivateBlobAsDataUrl(pathname)));
+        imageDataUrls = await Promise.all(
+          pathnames.map((pathname) => fetchPrivateBlobAsVisionDataUrl(pathname))
+        );
       } catch (error) {
         const mapped = mapBlobRouteError(error, 'fetch');
         logger.error('ro.extract.blob_fetch_failed', {

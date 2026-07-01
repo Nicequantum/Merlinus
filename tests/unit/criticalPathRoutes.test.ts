@@ -27,7 +27,7 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /blockServiceAdvisorAi/);
     assert.match(src, /imagePathnamesSchema/);
     assert.match(src, /userCanAccessImage/);
-    assert.match(src, /fetchPrivateBlobAsDataUrl/);
+    assert.match(src, /fetchPrivateBlobAsVisionDataUrl/);
     assert.match(src, /extractROFromImages/);
     assert.match(src, /rateLimitKey: 'ro\.extract'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);

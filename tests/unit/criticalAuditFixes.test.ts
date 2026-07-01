@@ -27,10 +27,22 @@ describe('Critical audit fixes (C1–C7)', () => {
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.generate'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.score'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.review'));
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.edit'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('customerPayTemplateApplied'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('auth.login'));
     const auditSrc = readSrc('src/lib/audit.ts');
     assert.ok(auditSrc.includes('CRITICAL_AUDIT_ACTIONS.has(input.action)'));
+  });
+
+  it('C3b: story.edit audits before repairLine.update with before/after hashes', () => {
+    const src = readSrc('src/app/api/repair-orders/[id]/route.ts');
+    const auditIdx = src.indexOf("action: 'story.edit'");
+    const updateIdx = src.indexOf('repairLine.update');
+    assert.ok(auditIdx !== -1 && updateIdx !== -1);
+    assert.ok(auditIdx < updateIdx);
+    assert.ok(src.includes('appendAuditLogInTransaction'));
+    assert.ok(src.includes('previousStoryHash'));
+    assert.ok(src.includes('hashWarrantyStory'));
   });
 
   it('C3: generate-story audits before repairLine.update', () => {

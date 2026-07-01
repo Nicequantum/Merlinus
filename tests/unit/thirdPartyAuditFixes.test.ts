@@ -126,12 +126,17 @@ describe('Third-party audit hardening', () => {
     const consent = readSrc('src/app/api/consent/route.ts');
     const disclaimer = readSrc('src/app/api/legal-disclaimer/route.ts');
     const certify = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts');
+    const roPut = readSrc('src/app/api/repair-orders/[id]/route.ts');
     assert.ok(consent.includes('prisma.$transaction'));
     assert.ok(consent.includes('appendAuditLogInTransaction'));
     assert.ok(disclaimer.includes('prisma.$transaction'));
     assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
     assert.ok(certify.includes('prisma.$transaction'));
     assert.ok(certify.includes('appendAuditLogInTransaction'));
+    assert.ok(roPut.includes('appendAuditLogInTransaction'));
+    assert.ok(roPut.includes("action: 'story.edit'"));
+    assert.ok(roPut.includes('previousStoryHash'));
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.edit'));
   });
 
   it('service advisors are blocked from customer-pay template routes', () => {

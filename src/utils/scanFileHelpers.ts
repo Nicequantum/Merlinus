@@ -3,7 +3,8 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 const MAX_PDF_PAGES = 12;
-const PDF_RENDER_SCALE = 2;
+/** Slightly lower scale — upload compression + Grok vision still read complaint columns. */
+const PDF_RENDER_SCALE = 1.5;
 
 type PdfJsModule = typeof import('pdfjs-dist');
 

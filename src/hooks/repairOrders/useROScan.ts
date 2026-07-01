@@ -4,7 +4,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
-import { formatScanApiError } from '@/lib/scanPipeline';
+import { formatScanApiError, isStrongGrokExtraction } from '@/lib/scanPipeline';
 import { runFastRoScanOcr, warmupOcrWorker } from '@/services/ocr';
 import type { PendingImage, RepairOrder } from '@/types';
 import {
@@ -26,7 +26,7 @@ import {
   combineVmiPages,
 } from '@/utils/scanDocumentClassifier';
 import { extractVmiWarrantyInfo, mergeVehicleWarrantyInfo } from '@/utils/vmiExtractor';
-import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
+import { uploadRoScanAttachments } from '@/utils/uploadHelpers';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 
 interface UseROScanOptions {
@@ -169,10 +169,7 @@ export function useROScan({
         void warmupOcrWorker().catch((error) => {
           clientLog.warn('OCR worker warmup failed', error);
         });
-        const attachments = await uploadFilesAsAttachments(
-          images.map((img) => img.file),
-          'roimg'
-        );
+        const attachments = await uploadRoScanAttachments(images.map((img) => img.file));
         if (!isActiveSession()) return;
 
         const imagePathnames = attachments.map((a) => a.pathname);
@@ -223,7 +220,7 @@ export function useROScan({
         };
 
         setOcrProgress(35);
-        setScanStatusMessage('Starting on-device OCR and AI vision in parallel…');
+        setScanStatusMessage('AI vision extraction started (on-device OCR runs as fallback)…');
         const ocrPromise = runClientOcr().catch((error) => {
           clientLog.error('ro.scan.ocr_failed', error);
           return emptyOcrResult();
@@ -242,9 +239,21 @@ export function useROScan({
         });
 
         setOcrProgress(42);
-        setScanStatusMessage('AI vision extraction in progress (OCR continues in parallel)…');
+        setScanStatusMessage('AI vision extraction in progress…');
 
-        const [ocrResult, grokExtracted] = await Promise.all([ocrPromise, grokPromise]);
+        const grokExtracted = await grokPromise;
+        if (!isActiveSession()) return;
+
+        let ocrResult: ClientOcrResult;
+        if (isStrongGrokExtraction(grokExtracted)) {
+          setOcrProgress(78);
+          setScanStatusMessage('AI vision complete — finalizing repair order…');
+          ocrResult = emptyOcrResult();
+          void ocrPromise;
+        } else {
+          setScanStatusMessage('AI vision inconclusive — finishing on-device OCR…');
+          ocrResult = await ocrPromise;
+        }
         if (!isActiveSession()) return;
 
         const ocrText = ocrResult.combinedText;

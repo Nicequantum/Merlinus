@@ -3,12 +3,12 @@ import { clientLog } from '@/lib/clientLog';
 
 /** Default per-recognize() ceiling (diagnostics / legacy paths). */
 const OCR_TIMEOUT_MS = 120_000;
-/** Per-pass budget for RO scan — quality-first; technicians can wait during test drives. */
-export const RO_SCAN_PASS_TIMEOUT_MS = 300_000;
-/** High-resolution RO scan frames for accurate VIN / complaint column reads. */
-export const RO_SCAN_MAX_DIM = 2000;
+/** Per-pass budget for RO scan OCR fallback — Grok vision is the primary path. */
+export const RO_SCAN_PASS_TIMEOUT_MS = 90_000;
+/** OCR fallback resolution — Grok vision handles fine detail. */
+export const RO_SCAN_MAX_DIM = 1600;
 /** Downscale retry target when a pass hits the timeout on very large photos. */
-const RO_SCAN_RETRY_MAX_DIM = 1600;
+const RO_SCAN_RETRY_MAX_DIM = 1280;
 const MAX_DIM_FAST = 1600;
 const MAX_DIM_FULL = 2200;
 const MAX_DIM_SCREENSHOT = 2400;

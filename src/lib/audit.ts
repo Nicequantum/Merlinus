@@ -71,6 +71,7 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'story.generate',
   'story.score',
   'story.review',
+  'story.edit',
   'story.certify',
   'customerPayTemplateApplied',
 ]);

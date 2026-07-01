@@ -249,7 +249,13 @@ export async function extractROFromImages(imageDataUrls: string[]) {
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    { temperature: 0.05, max_tokens: 2800, timeoutMs: RO_EXTRACT_GROK_MS, perfLabel: 'grok.ro.extract' }
+    {
+      temperature: 0.05,
+      max_tokens: 2200,
+      timeoutMs: RO_EXTRACT_GROK_MS,
+      perfLabel: 'grok.ro.extract',
+      reasoningEffort: 'none',
+    }
   );
   return parseStructuredROText(extractedText);
 }

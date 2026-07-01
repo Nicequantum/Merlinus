@@ -1,4 +1,5 @@
 import { get, put } from '@vercel/blob';
+import { bufferToVisionDataUrl } from './visionImagePrep';
 import { networkRetryDelayMs, sleep } from './networkErrors';
 import { buildImageProxyUrl, isAllowedImagePathname } from './imageUrls';
 
@@ -62,6 +63,21 @@ export async function fetchPrivateBlobAsDataUrl(pathname: string): Promise<strin
   const base64 = Buffer.from(bytes).toString('base64');
   const contentType = result.blob.contentType || 'image/png';
   return `data:${contentType};base64,${base64}`;
+}
+
+/** Vision-optimized fetch — downscales and JPEG-encodes before Grok base64 upload. */
+export async function fetchPrivateBlobAsVisionDataUrl(pathname: string): Promise<string> {
+  if (!isAllowedImagePathname(pathname)) {
+    throw new Error('Invalid image pathname');
+  }
+
+  const result = await get(pathname, { access: 'private', token: getBlobToken() });
+  if (!result) {
+    throw new Error('Image not found in blob storage');
+  }
+  const bytes = Buffer.from(await new Response(result.stream).arrayBuffer());
+  const contentType = result.blob.contentType || 'image/jpeg';
+  return bufferToVisionDataUrl(bytes, contentType);
 }
 
 export async function streamPrivateBlob(pathname: string) {
