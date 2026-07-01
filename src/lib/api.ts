@@ -160,10 +160,19 @@ export const api = {
 
   me: () => apiFetch<{ session: TechnicianSession | null }>('/api/auth/me'),
 
-  acceptConsent: () => apiFetch<{ consentAt: string }>('/api/consent', { method: 'POST' }),
+  acceptConsent: () =>
+    apiFetch<{
+      consentAt: string;
+      consentVersion: string;
+      session: TechnicianSession;
+    }>('/api/consent', { method: 'POST' }),
 
   acceptLegalDisclaimer: () =>
-    apiFetch<{ legalDisclaimerAt: string; legalDisclaimerVersion: string }>('/api/legal-disclaimer', {
+    apiFetch<{
+      legalDisclaimerAt: string;
+      legalDisclaimerVersion: string;
+      session: TechnicianSession;
+    }>('/api/legal-disclaimer', {
       method: 'POST',
     }),
 

@@ -17,7 +17,7 @@ import {
 import { clientLog } from '@/lib/clientLog';
 import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
-import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION, type TechnicianSession } from '@/types';
+import type { TechnicianSession } from '@/types';
 
 const BenzTechAuthenticatedApp = dynamic(
   () =>
@@ -99,15 +99,7 @@ export function BenzTechApp() {
           setConsentLoading(true);
           try {
             const accepted = await acceptConsentSession();
-            setSession((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    consentAt: accepted.consentAt,
-                    consentVersion: accepted.consentVersion ?? CONSENT_VERSION,
-                  }
-                : prev
-            );
+            setSession(accepted);
           } catch (error: unknown) {
             clientLog.error('compliance.consent_accept_failed', error);
             toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
@@ -127,16 +119,8 @@ export function BenzTechApp() {
           setLegalDisclaimerLoading(true);
           try {
             const accepted = await acceptLegalDisclaimerSession();
-            setSession((prev) => {
-              if (!prev) return prev;
-              cacheLegalDisclaimerLocally(prev.technicianId);
-              return {
-                ...prev,
-                legalDisclaimerAt: accepted.legalDisclaimerAt,
-                legalDisclaimerVersion:
-                  accepted.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
-              };
-            });
+            cacheLegalDisclaimerLocally(accepted.technicianId);
+            setSession(accepted);
           } catch (error: unknown) {
             clientLog.error('compliance.legal_disclaimer_accept_failed', error);
             toast.error(

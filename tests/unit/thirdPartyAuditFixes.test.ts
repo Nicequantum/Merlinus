@@ -268,9 +268,13 @@ describe('Third-party audit hardening', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.ok(shell.includes('needsConsent'));
     assert.ok(shell.includes('needsLegalDisclaimer'));
-    assert.ok(shell.includes('consentVersion'));
-    assert.ok(shell.includes('legalDisclaimerVersion'));
+    assert.ok(shell.includes('acceptConsentSession'));
+    assert.ok(shell.includes('setSession(accepted)'));
+    const useSession = readSrc('src/hooks/useSession.ts');
+    assert.ok(useSession.includes('consentVersion'));
+    assert.ok(useSession.includes('legalDisclaimerVersion'));
     assert.ok(readSrc('src/lib/complianceSession.ts').includes('CONSENT_VERSION'));
+    assert.ok(readSrc('src/lib/sessionRefresh.ts').includes('complianceFieldsDiffer'));
     const scoreRoute = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts');
     const certifyRoute = readSrc(
       'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'

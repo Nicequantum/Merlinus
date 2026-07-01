@@ -157,7 +157,7 @@ function readSessionTokenFromRequest(request?: Request): string | undefined {
   return match?.[1];
 }
 
-export async function getSession(request?: Request): Promise<SessionPayload | null> {
+async function readSessionToken(request?: Request): Promise<string | undefined> {
   let token: string | undefined;
 
   try {
@@ -170,12 +170,27 @@ export async function getSession(request?: Request): Promise<SessionPayload | nu
   if (!token) {
     token = readSessionTokenFromRequest(request);
   }
-  if (!token) return null;
 
-  const tokenPayload = await verifySessionToken(token);
-  if (!tokenPayload) return null;
+  return token;
+}
 
-  return resolveSessionPayload(tokenPayload);
+export async function getSessionContext(request?: Request): Promise<{
+  session: SessionPayload | null;
+  jwtPayload: SessionPayload | null;
+}> {
+  const token = await readSessionToken(request);
+  if (!token) return { session: null, jwtPayload: null };
+
+  const jwtPayload = await verifySessionToken(token);
+  if (!jwtPayload) return { session: null, jwtPayload: null };
+
+  const session = await resolveSessionPayload(jwtPayload);
+  return { session, jwtPayload };
+}
+
+export async function getSession(request?: Request): Promise<SessionPayload | null> {
+  const { session } = await getSessionContext(request);
+  return session;
 }
 
 export async function requireSession(): Promise<SessionPayload> {

@@ -23,6 +23,7 @@
     "test": "tsx --import ./tests/setup/preload.mjs --test tests/unit/**/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.ci.json",
     "test:integration": "tsx --import ./tests/setup/preload.mjs --test tests/integration/**/*.test.ts",
+    "test:e2e": "tsx --import ./tests/setup/preload.mjs --test tests/integration/technician-journey.test.ts",
     "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
     "generate:icons": "node scripts/generate-app-icons.mjs",
     "postinstall": "prisma generate && npm run setup:tesseract"

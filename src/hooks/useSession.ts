@@ -39,16 +39,37 @@ export function useSession() {
   }, []);
 
   const acceptConsent = useCallback(async () => {
-    const { consentAt } = await api.acceptConsent();
-    setSession((prev) => (prev ? { ...prev, consentAt } : prev));
+    const result = await api.acceptConsent();
+    if (result.session) {
+      setSession(result.session);
+      return;
+    }
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            consentAt: result.consentAt,
+            consentVersion: result.consentVersion,
+          }
+        : prev
+    );
   }, []);
 
   const acceptLegalDisclaimer = useCallback(async () => {
-    const { legalDisclaimerAt } = await api.acceptLegalDisclaimer();
+    const result = await api.acceptLegalDisclaimer();
+    if (result.session) {
+      cacheLegalDisclaimerLocally(result.session.technicianId);
+      setSession(result.session);
+      return;
+    }
     setSession((prev) => {
       if (!prev) return prev;
       cacheLegalDisclaimerLocally(prev.technicianId);
-      return { ...prev, legalDisclaimerAt };
+      return {
+        ...prev,
+        legalDisclaimerAt: result.legalDisclaimerAt,
+        legalDisclaimerVersion: result.legalDisclaimerVersion,
+      };
     });
   }, []);
 
