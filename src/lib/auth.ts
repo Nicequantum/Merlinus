@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import type { NextResponse } from 'next/server';
 import { normalizeD7Number } from './d7Number';
 import { isTechnicianAccountActive } from './technicianAccounts';
 import { prisma } from './db';
@@ -80,17 +81,6 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: SESSION_MAX_AGE,
-    path: '/',
-  });
-}
-
 function sessionCookieOptions(maxAge: number) {
   return {
     httpOnly: true,
@@ -100,6 +90,16 @@ function sessionCookieOptions(maxAge: number) {
     path: '/',
     ...(maxAge === 0 ? { expires: new Date(0) } : {}),
   };
+}
+
+/** Attach session cookie to a Route Handler response (required — cookies().set() alone is dropped). */
+export function applySessionCookieToResponse(response: NextResponse, token: string): void {
+  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(SESSION_MAX_AGE));
+}
+
+export async function setSessionCookie(token: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions(SESSION_MAX_AGE));
 }
 
 export async function clearSessionCookie(): Promise<void> {

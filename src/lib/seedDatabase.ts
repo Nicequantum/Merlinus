@@ -11,6 +11,67 @@ const seedOnboarding = {
   legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
 };
 
+interface SeedAccountInput {
+  d7Number: string;
+  legacyEmail: string;
+  name: string;
+  passwordHash: string;
+  role: 'manager' | 'technician';
+  isAdmin: boolean;
+  dealershipId: string;
+}
+
+/**
+ * Upsert the canonical D7 account and retire legacy email duplicates without D7 unique collisions.
+ */
+async function upsertSeedAccount(input: SeedAccountInput): Promise<void> {
+  const canonicalEmail = internalEmailForD7(input.d7Number);
+
+  const account = await prisma.technician.upsert({
+    where: { d7Number: input.d7Number },
+    update: {
+      email: canonicalEmail,
+      name: input.name,
+      passwordHash: input.passwordHash,
+      role: input.role,
+      isAdmin: input.isAdmin,
+      isActive: true,
+      deletedAt: null,
+      dealershipId: input.dealershipId,
+      ...seedOnboarding,
+    },
+    create: {
+      d7Number: input.d7Number,
+      email: canonicalEmail,
+      name: input.name,
+      passwordHash: input.passwordHash,
+      role: input.role,
+      isAdmin: input.isAdmin,
+      isActive: true,
+      dealershipId: input.dealershipId,
+      ...seedOnboarding,
+    },
+  });
+
+  const legacyDuplicate = await prisma.technician.findFirst({
+    where: {
+      email: input.legacyEmail,
+      id: { not: account.id },
+    },
+  });
+
+  if (legacyDuplicate) {
+    await prisma.technician.update({
+      where: { id: legacyDuplicate.id },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+        sessionVersion: { increment: 1 },
+      },
+    });
+  }
+}
+
 function requireEnv(name: string, minLength = 1): string {
   const value = process.env[name]?.trim();
   if (!value || value.length < minLength) {
@@ -49,88 +110,25 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
   const legacyManagerEmail = (process.env.ADMIN_SEED_EMAIL?.trim() || 'admin@dealership.com').toLowerCase();
   const legacyTechEmail = (process.env.TECH_SEED_EMAIL?.trim() || 'tech@dealership.com').toLowerCase();
 
-  const legacyManager = await prisma.technician.findFirst({ where: { email: legacyManagerEmail } });
-  if (legacyManager && legacyManager.d7Number !== managerD7) {
-    await prisma.technician.update({
-      where: { id: legacyManager.id },
-      data: {
-        d7Number: managerD7,
-        email: internalEmailForD7(managerD7),
-        passwordHash: managerPasswordHash,
-        role: 'manager',
-        isAdmin: true,
-        isActive: true,
-        deletedAt: null,
-        dealershipId: dealership.id,
-        ...seedOnboarding,
-      },
-    });
-  } else {
-    await prisma.technician.upsert({
-      where: { d7Number: managerD7 },
-      update: {
-        passwordHash: managerPasswordHash,
-        role: 'manager',
-        isAdmin: true,
-        isActive: true,
-        deletedAt: null,
-        dealershipId: dealership.id,
-        email: internalEmailForD7(managerD7),
-        ...seedOnboarding,
-      },
-      create: {
-        d7Number: managerD7,
-        email: internalEmailForD7(managerD7),
-        name: 'Service Manager',
-        passwordHash: managerPasswordHash,
-        role: 'manager',
-        isAdmin: true,
-        isActive: true,
-        dealershipId: dealership.id,
-        ...seedOnboarding,
-      },
-    });
-  }
+  await upsertSeedAccount({
+    d7Number: managerD7,
+    legacyEmail: legacyManagerEmail,
+    name: 'Service Manager',
+    passwordHash: managerPasswordHash,
+    role: 'manager',
+    isAdmin: true,
+    dealershipId: dealership.id,
+  });
 
-  const legacyTech = await prisma.technician.findFirst({ where: { email: legacyTechEmail } });
-  if (legacyTech && legacyTech.d7Number !== techD7) {
-    await prisma.technician.update({
-      where: { id: legacyTech.id },
-      data: {
-        d7Number: techD7,
-        email: internalEmailForD7(techD7),
-        passwordHash: techPasswordHash,
-        role: 'technician',
-        isActive: true,
-        deletedAt: null,
-        dealershipId: dealership.id,
-        ...seedOnboarding,
-      },
-    });
-  } else {
-    await prisma.technician.upsert({
-      where: { d7Number: techD7 },
-      update: {
-        passwordHash: techPasswordHash,
-        role: 'technician',
-        isActive: true,
-        deletedAt: null,
-        dealershipId: dealership.id,
-        email: internalEmailForD7(techD7),
-        ...seedOnboarding,
-      },
-      create: {
-        d7Number: techD7,
-        email: internalEmailForD7(techD7),
-        name: 'Alex Technician',
-        passwordHash: techPasswordHash,
-        role: 'technician',
-        isActive: true,
-        dealershipId: dealership.id,
-        ...seedOnboarding,
-      },
-    });
-  }
+  await upsertSeedAccount({
+    d7Number: techD7,
+    legacyEmail: legacyTechEmail,
+    name: 'Alex Technician',
+    passwordHash: techPasswordHash,
+    role: 'technician',
+    isAdmin: false,
+    dealershipId: dealership.id,
+  });
 
   const library = await seedTemplateLibraryIfEmpty();
 

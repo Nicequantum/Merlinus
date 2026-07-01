@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
-import { createSessionToken, loginTechnician, setSessionCookie } from '@/lib/auth';
+import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
 import { apiError, handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
@@ -24,7 +24,6 @@ export async function POST(request: Request) {
     }
 
     const token = await createSessionToken(session);
-    await setSessionCookie(token);
 
     await writeAuditLog({
       action: 'auth.login',
@@ -34,6 +33,7 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ session });
+    applySessionCookieToResponse(response, token);
     logApiWriteRequest({
       routeKey: 'auth.login',
       method: request.method,

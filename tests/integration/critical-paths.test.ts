@@ -12,15 +12,11 @@ import { PrismaClient } from '@prisma/client';
 import { POST as postLogin } from '../../src/app/api/auth/login/route';
 import { POST as postExtract } from '../../src/app/api/repair-orders/extract/route';
 import { POST as postGenerateStory } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route';
-import { createSessionToken } from '../../src/lib/auth';
+import { createSessionToken, SESSION_COOKIE } from '../../src/lib/auth';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
-import {
-  clearCriticalPathMocks,
-  getMockSessionCookie,
-  runWithNextRouteContext,
-} from '../setup/criticalPathMocks';
+import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
 const prisma = new PrismaClient();
 
@@ -154,6 +150,38 @@ describe('critical path HTTP routes', () => {
     await prisma.$disconnect();
   });
 
+  test('POST /api/auth/login succeeds for seeded service manager', async () => {
+    const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
+    const managerPassword = process.env.ADMIN_SEED_PASSWORD?.trim();
+    assert.ok(managerPassword, 'ADMIN_SEED_PASSWORD must be set for integration tests');
+
+    const manager = await prisma.technician.findUnique({ where: { d7Number: managerD7 } });
+    assert.ok(manager, 'Seed service manager required — run npm run db:seed first');
+    assert.equal(manager.role, 'manager');
+
+    const response = await runWithNextRouteContext(
+      new Request('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ d7Number: managerD7, password: managerPassword }),
+      }),
+      '/api/auth/login/route',
+      (req) => postLogin(req)
+    );
+
+    const { status, body } = await readJsonResponse<{
+      session?: { technicianId: string; d7Number: string; role: string; consentAt?: string | null };
+      error?: string;
+    }>(response);
+
+    assert.equal(status, 200, `manager login failed: ${JSON.stringify(body)}`);
+    assert.equal(body.session?.technicianId, manager.id);
+    assert.equal(body.session?.d7Number, managerD7);
+    assert.equal(body.session?.role, 'manager');
+    const sessionCookie = response.cookies.get(SESSION_COOKIE);
+    assert.ok(sessionCookie?.value, 'manager login should set session cookie on response');
+  });
+
   test('POST /api/auth/login succeeds with valid credentials and audit trail', async () => {
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
     const techPassword = process.env.TECH_SEED_PASSWORD?.trim();
@@ -163,12 +191,14 @@ describe('critical path HTTP routes', () => {
       where: { action: 'auth.login', technicianId, dealershipId },
     });
 
-    const response = await postLogin(
+    const response = await runWithNextRouteContext(
       new Request('http://localhost/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d7Number: techD7, password: techPassword }),
-      })
+      }),
+      '/api/auth/login/route',
+      (req) => postLogin(req)
     );
 
     const { status, body } = await readJsonResponse<{
@@ -179,7 +209,8 @@ describe('critical path HTTP routes', () => {
     assert.equal(status, 200);
     assert.equal(body.session?.technicianId, technicianId);
     assert.equal(body.session?.d7Number, techD7);
-    assert.ok(getMockSessionCookie(), 'login should set session cookie');
+    const sessionCookie = response.cookies.get(SESSION_COOKIE);
+    assert.ok(sessionCookie?.value, 'login should set session cookie on response');
 
     const auditAfter = await prisma.auditLog.count({
       where: { action: 'auth.login', technicianId, dealershipId },

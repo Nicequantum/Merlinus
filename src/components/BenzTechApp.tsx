@@ -77,7 +77,15 @@ export function BenzTechApp() {
     setSessionPhase('anonymous');
   }, []);
 
-  // Login paints on first paint (SSR + CSR) until a session is confirmed.
+  if (sessionPhase === 'checking') {
+    return (
+      <LoadingScreen
+        label="Checking session"
+        sublabel="Verifying your dealership sign-in…"
+      />
+    );
+  }
+
   if (sessionPhase !== 'authenticated' || !session) {
     return <LoginView onLogin={login} />;
   }
