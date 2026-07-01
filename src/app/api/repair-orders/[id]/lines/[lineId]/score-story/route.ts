@@ -11,6 +11,7 @@ import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { PROMPT_VERSION } from '@/prompts/version';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
@@ -74,8 +75,10 @@ export async function POST(
         return apiError(mappedError.message, mappedError.status);
       }
 
+      const storyHash = hashWarrantyStory(warrantyStory);
+
       await writeAuditLog({
-        action: 'story.review',
+        action: 'story.score',
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
         entityType: 'repairLine',
@@ -87,7 +90,7 @@ export async function POST(
           promptVersion: PROMPT_VERSION,
           qualityScore: quality.score,
           qualityGrade: quality.grade,
-          scoreOnly: true,
+          storyHash,
         },
         ipAddress: getRequestIp(request),
       });
@@ -110,7 +113,7 @@ export async function POST(
         metadata: {
           qualityScore: quality.score,
           qualityGrade: quality.grade,
-          scoreOnly: true,
+          storyHash,
           promptVersion: PROMPT_VERSION,
         },
       });

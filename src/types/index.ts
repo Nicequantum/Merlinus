@@ -438,6 +438,7 @@ export const AUDIT_ACTIONS = [
   'ro.update',
   'ro.delete',
   'story.generate',
+  'story.score',
   'story.review',
   'story.edit',
   'story.certify',

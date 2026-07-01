@@ -9,6 +9,8 @@ import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { buildStoryCertificationDbFields } from '@/lib/storyCertification';
+import { logger } from '@/lib/logger';
+import { validateStoryCertificationPrerequisites } from '@/lib/storyCertificationGate';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
@@ -71,21 +73,25 @@ export async function POST(
         return apiError('Customer Pay stories do not require technician certification.', 400);
       }
 
-      const hasGenerateAudit = await prisma.auditLog.findFirst({
-        where: {
-          dealershipId: session.dealershipId,
-          entityType: 'repairLine',
-          entityId: lineId,
-          action: 'story.generate',
-        },
-        select: { id: true },
+      const { text: warrantyStory } = sanitizeForCDKWithMeta(rawStory);
+
+      const gate = await validateStoryCertificationPrerequisites({
+        dealershipId: session.dealershipId,
+        repairLineId: lineId,
+        warrantyStory,
       });
-      if (!hasGenerateAudit) {
-        return apiError('Only AI-generated warranty stories require technician certification.', 400);
+      if (!gate.ok) {
+        logger.warn('story.certify.gate_rejected', {
+          repairOrderId: id,
+          lineId,
+          technicianId: session.technicianId,
+          reason: gate.reason,
+          storyHash: gate.storyHash,
+        });
+        return apiError(gate.message, 400);
       }
 
-      const { text: warrantyStory } = sanitizeForCDKWithMeta(rawStory);
-      const storyHash = hashWarrantyStory(warrantyStory);
+      const storyHash = gate.storyHash ?? hashWarrantyStory(warrantyStory);
       const certifiedAt = new Date();
 
       const auditLogId = await prisma.$transaction(async (tx) => {

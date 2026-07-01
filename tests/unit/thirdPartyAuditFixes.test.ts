@@ -246,7 +246,14 @@ describe('Third-party audit hardening', () => {
     assert.ok(shell.includes('consentVersion'));
     assert.ok(shell.includes('legalDisclaimerVersion'));
     assert.ok(readSrc('src/lib/complianceSession.ts').includes('CONSENT_VERSION'));
-    assert.ok(readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts').includes('parseFailed'));
+    const scoreRoute = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts');
+    const certifyRoute = readSrc(
+      'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'
+    );
+    assert.ok(scoreRoute.includes('parseFailed'));
+    assert.ok(scoreRoute.includes("action: 'story.score'"));
+    assert.equal(scoreRoute.includes('scoreOnly'), false);
+    assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisites'));
   });
 
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {

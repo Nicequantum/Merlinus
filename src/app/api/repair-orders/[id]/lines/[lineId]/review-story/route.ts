@@ -11,6 +11,7 @@ import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { logger } from '@/lib/logger';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
@@ -78,6 +79,7 @@ export async function POST(
       }
 
       const quality = { ...review, scoredAgainstStory: warrantyStory };
+      const storyHash = hashWarrantyStory(warrantyStory);
 
       await writeAuditLog({
         action: 'story.review',
@@ -92,6 +94,8 @@ export async function POST(
           promptVersion: PROMPT_VERSION,
           qualityScore: quality.score,
           qualityGrade: quality.grade,
+          storyHash,
+          reviewMode: 'coaching',
         },
         ipAddress: getRequestIp(request),
       });
@@ -114,6 +118,8 @@ export async function POST(
         metadata: {
           qualityScore: quality.score,
           qualityGrade: quality.grade,
+          storyHash,
+          reviewMode: 'coaching',
           promptVersion: PROMPT_VERSION,
         },
       });
