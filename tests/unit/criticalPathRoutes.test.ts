@@ -17,6 +17,7 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /loginTechnician/);
     assert.match(src, /applySessionCookieToResponse/);
     assert.match(src, /action: 'auth\.login'/);
+    assert.match(src, /entityId: session\.technicianId/);
     assert.match(src, /logApiWriteRequest/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });

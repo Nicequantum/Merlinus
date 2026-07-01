@@ -152,6 +152,7 @@ describe('technician journey (E2E integration)', () => {
   });
 
   test('full journey from login through story certification', async () => {
+    const journeyStartedAt = new Date();
     const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
 
     const loginResponse = await runWithNextRouteContext(
@@ -306,7 +307,7 @@ describe('technician journey (E2E integration)', () => {
       where: {
         dealershipId,
         technicianId,
-        entityId: { in: [technicianId, testLineId, testRoId] },
+        createdAt: { gte: journeyStartedAt },
         action: {
           in: [
             'auth.login',
