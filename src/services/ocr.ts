@@ -472,6 +472,21 @@ async function runRoScanOcrPass(
 }
 
 /**
+ * Fast single-pass RO OCR — used when Grok vision runs in parallel (fallback / merge only).
+ */
+export async function runFastRoScanOcr(
+  file: File,
+  onProgress?: (p: number) => void
+): Promise<MultiPassOcrResult> {
+  const scanSource = await prepareRoScanSource(file);
+  const pass1 = await runRoScanOcrPass(scanSource, onProgress, 0, 100);
+  return {
+    passes: [{ mode: 'color', text: pass1 }],
+    mergedText: pass1,
+  };
+}
+
+/**
  * Three-pass RO OCR: color → high-contrast B&W → enhanced contrast.
  * All preprocessing runs in parallel; each pass retries once at lower resolution on timeout.
  */

@@ -45,7 +45,7 @@ import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
 import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
-import { uploadFileAsAttachment } from '@/utils/uploadHelpers';
+import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
   session: TechnicianSession | null;
@@ -83,6 +83,7 @@ export function useRepairOrders({
   const roRef = useRef<RepairOrder | null>(null);
   const openingROInFlightRef = useRef<string | null>(null);
   const scanInFlightRef = useRef(false);
+  const xentryInFlightRef = useRef(false);
   const generateStorySeqRef = useRef(0);
   const storyGenerationInFlightRef = useRef(false);
   const scoreStorySeqRef = useRef(0);
@@ -414,31 +415,54 @@ export function useRepairOrders({
   }, [flushPendingSave, navigateView, persistRO]);
 
   const processXentryImages = useCallback(
-    async (files: File[], existingImages: ImageAttachment[], existingOcr: string[], existingExtracted: ExtractedData) => {
+    async (
+      files: File[],
+      existingImages: ImageAttachment[],
+      existingOcr: string[],
+      existingExtracted: ExtractedData,
+      onUploadComplete?: (snapshot: {
+        newImgs: ImageAttachment[];
+        allImages: ImageAttachment[];
+        updatedOcrTexts: string[];
+        updatedExtracted: ExtractedData;
+      }) => Promise<void>
+    ) => {
+      setOcrProgress(5);
+      const newImgs = await uploadFilesAsAttachments(files, 'ximg');
       let updatedExtracted = normalizeExtractedData(existingExtracted);
-      let updatedOcrTexts = existingOcr;
-      const newImgs: ImageAttachment[] = [];
+      let updatedOcrTexts = [
+        ...existingOcr,
+        ...files.map(() => '[Analyzing diagnostic photo…]'),
+      ];
+      const allImages = [...existingImages, ...newImgs];
+
+      if (onUploadComplete) {
+        await onUploadComplete({ newImgs, allImages, updatedOcrTexts, updatedExtracted });
+      }
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        setOcrProgress(Math.round((i / files.length) * 20));
-        const attachment = await uploadFileAsAttachment(file, 'ximg');
-        newImgs.push(attachment);
+        const attachment = newImgs[i]!;
+        const ocrIndex = existingOcr.length + i;
         try {
           const result = await analyzeXentryImage(file, attachment, (p) =>
-            setOcrProgress(Math.round(20 + ((i + p / 100) / files.length) * 80))
+            setOcrProgress(Math.round(15 + ((i + p / 100) / files.length) * 85))
           );
           updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
-          updatedOcrTexts = [...updatedOcrTexts, result.text];
+          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
+            idx === ocrIndex ? result.text : text
+          );
         } catch (err) {
           clientLog.warn('Xentry analysis failed for one image', err);
-          updatedOcrTexts = [...updatedOcrTexts, '[Analysis failed for this image]'];
+          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
+            idx === ocrIndex ? '[Analysis failed for this image]' : text
+          );
         }
       }
 
-      return { newImgs, updatedExtracted, updatedOcrTexts, allImages: [...existingImages, ...newImgs] };
+      return { newImgs, updatedExtracted, updatedOcrTexts, allImages };
     },
-    [analyzeXentryImage, setOcrProgress]
+    [setOcrProgress]
   );
 
   const deleteLineXentryImage = useCallback(
@@ -514,19 +538,31 @@ export function useRepairOrders({
 
   const addXentryPhotos = useCallback(
     (lineId: string) => {
+      if (xentryInFlightRef.current) {
+        toast.message('Diagnostic photo upload already in progress…');
+        return;
+      }
+
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
-      input.multiple = true;
-      input.setAttribute('capture', 'environment');
+      input.capture = 'environment';
+      input.multiple = false;
       input.onchange = async (e) => {
         const files = Array.from((e.target as HTMLInputElement).files || []);
         if (files.length === 0 || !currentRO) return;
+        if (xentryInFlightRef.current) {
+          toast.message('Diagnostic photo upload already in progress…');
+          return;
+        }
+
+        xentryInFlightRef.current = true;
         flushPendingSave();
-        onOcrStart();
+        onOcrStart('Uploading diagnostic photo…');
         const latestRO = roRef.current;
         const lineForExtract = latestRO?.repairLines.find((l) => l.id === lineId);
         if (!latestRO || !lineForExtract) {
+          xentryInFlightRef.current = false;
           onOcrFinish();
           return;
         }
@@ -535,19 +571,41 @@ export function useRepairOrders({
             files,
             lineForExtract.xentryImages || [],
             lineForExtract.xentryOcrTexts || [],
-            lineForExtract.extractedData || emptyExtractedData()
+            lineForExtract.extractedData || emptyExtractedData(),
+            async (uploaded) => {
+              const snapshot = roRef.current;
+              if (!snapshot) return;
+              const updatedLines = snapshot.repairLines.map((l) =>
+                l.id === lineId
+                  ? {
+                      ...l,
+                      xentryImages: uploaded.allImages,
+                      xentryOcrTexts: uploaded.updatedOcrTexts,
+                      extractedData: uploaded.updatedExtracted,
+                    }
+                  : l
+              );
+              await saveROImmediate({ ...snapshot, repairLines: updatedLines });
+            }
           );
-          const updatedLines = latestRO.repairLines.map((l) =>
+          const finalRO = roRef.current;
+          if (!finalRO) return;
+          const updatedLines = finalRO.repairLines.map((l) =>
             l.id === lineId
-              ? { ...l, xentryImages: result.allImages, xentryOcrTexts: result.updatedOcrTexts, extractedData: result.updatedExtracted }
+              ? {
+                  ...l,
+                  xentryImages: result.allImages,
+                  xentryOcrTexts: result.updatedOcrTexts,
+                  extractedData: result.updatedExtracted,
+                }
               : l
           );
-          const updated = { ...latestRO, repairLines: updatedLines };
-          await saveROImmediate(updated);
-          toast.success(`${files.length} diagnostic photo(s) analyzed`);
+          await saveROImmediate({ ...finalRO, repairLines: updatedLines });
+          toast.success(`${files.length} diagnostic photo(s) saved`);
         } catch (err) {
           toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
         } finally {
+          xentryInFlightRef.current = false;
           onOcrFinish();
         }
       };
@@ -558,18 +616,30 @@ export function useRepairOrders({
 
   const addROXentryPhotos = useCallback(() => {
     if (!currentRO) return;
+    if (xentryInFlightRef.current) {
+      toast.message('Xentry photo upload already in progress…');
+      return;
+    }
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.multiple = true;
-    input.setAttribute('capture', 'environment');
+    input.capture = 'environment';
+    input.multiple = false;
     input.onchange = async (e) => {
       const files = Array.from((e.target as HTMLInputElement).files || []);
       if (files.length === 0 || !currentRO) return;
+      if (xentryInFlightRef.current) {
+        toast.message('Xentry photo upload already in progress…');
+        return;
+      }
+
+      xentryInFlightRef.current = true;
       flushPendingSave();
-      onOcrStart();
+      onOcrStart('Uploading Xentry photo…');
       const latestRO = roRef.current;
       if (!latestRO) {
+        xentryInFlightRef.current = false;
         onOcrFinish();
         return;
       }
@@ -579,11 +649,38 @@ export function useRepairOrders({
           files,
           latestRO.xentryImages || [],
           latestRO.xentryOcrTexts || [],
-          firstLine?.extractedData || emptyExtractedData()
+          firstLine?.extractedData || emptyExtractedData(),
+          async (uploaded) => {
+            const snapshot = roRef.current;
+            if (!snapshot) return;
+            let updatedLines = snapshot.repairLines;
+            const line0 = snapshot.repairLines[0];
+            if (line0) {
+              updatedLines = snapshot.repairLines.map((l, idx) =>
+                idx === 0
+                  ? {
+                      ...l,
+                      xentryImages: [...(l.xentryImages || []), ...uploaded.newImgs],
+                      xentryOcrTexts: uploaded.updatedOcrTexts,
+                      extractedData: uploaded.updatedExtracted,
+                    }
+                  : l
+              );
+            }
+            await saveROImmediate({
+              ...snapshot,
+              xentryImages: uploaded.allImages,
+              xentryOcrTexts: uploaded.updatedOcrTexts,
+              repairLines: updatedLines,
+            });
+          }
         );
-        let updatedLines = latestRO.repairLines;
-        if (firstLine) {
-          updatedLines = latestRO.repairLines.map((l, idx) =>
+        const finalRO = roRef.current;
+        if (!finalRO) return;
+        let updatedLines = finalRO.repairLines;
+        const line0 = finalRO.repairLines[0];
+        if (line0) {
+          updatedLines = finalRO.repairLines.map((l, idx) =>
             idx === 0
               ? {
                   ...l,
@@ -595,15 +692,16 @@ export function useRepairOrders({
           );
         }
         await saveROImmediate({
-          ...latestRO,
+          ...finalRO,
           xentryImages: result.allImages,
           xentryOcrTexts: result.updatedOcrTexts,
           repairLines: updatedLines,
         });
-        toast.success(`${files.length} Xentry photo(s) analyzed`);
+        toast.success(`${files.length} Xentry photo(s) saved`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
       } finally {
+        xentryInFlightRef.current = false;
         onOcrFinish();
       }
     };

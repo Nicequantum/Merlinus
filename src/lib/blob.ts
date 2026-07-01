@@ -1,5 +1,8 @@
 import { get, put } from '@vercel/blob';
+import { networkRetryDelayMs, sleep } from './networkErrors';
 import { buildImageProxyUrl, isAllowedImagePathname } from './imageUrls';
+
+const BLOB_PUT_MAX_ATTEMPTS = 3;
 
 function getBlobToken(): string {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -20,17 +23,30 @@ export async function uploadImageToBlob(
   contentType: string
 ): Promise<UploadedBlobImage> {
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const blob = await put(`benz-tech/${Date.now()}-${safeName}`, buffer, {
-    access: 'private',
-    contentType,
-    token: getBlobToken(),
-    addRandomSuffix: false,
-  });
+  const key = `benz-tech/${Date.now()}-${safeName}`;
+  let lastError: unknown;
 
-  return {
-    pathname: blob.pathname,
-    url: buildImageProxyUrl(blob.pathname),
-  };
+  for (let attempt = 0; attempt < BLOB_PUT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const blob = await put(key, buffer, {
+        access: 'private',
+        contentType,
+        token: getBlobToken(),
+        addRandomSuffix: false,
+      });
+
+      return {
+        pathname: blob.pathname,
+        url: buildImageProxyUrl(blob.pathname),
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt === BLOB_PUT_MAX_ATTEMPTS - 1) break;
+      await sleep(networkRetryDelayMs(attempt));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Blob upload failed');
 }
 
 export async function fetchPrivateBlobAsDataUrl(pathname: string): Promise<string> {

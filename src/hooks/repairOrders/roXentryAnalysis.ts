@@ -9,6 +9,16 @@ import {
   parseDiagnosticExtraction,
 } from '@/utils/diagnosticParser';
 
+function hasDiagnosticContent(data: Partial<ExtractedData>): boolean {
+  if (data.codes?.length) return true;
+  if (data.faultCodes?.length) return true;
+  if (data.measurements?.length) return true;
+  if (data.guidedTests?.length) return true;
+  if (data.components?.length) return true;
+  if (data.circuits?.length) return true;
+  return false;
+}
+
 export async function analyzeXentryImage(
   file: File,
   attachment: ImageAttachment,
@@ -25,6 +35,11 @@ export async function analyzeXentryImage(
     onProgress(50);
   } catch (err) {
     clientLog.warn('Grok diagnostic extraction failed, falling back to OCR', err);
+  }
+
+  if (hasDiagnosticContent(extracted)) {
+    onProgress(100);
+    return { text: text.trim() || formatExtractionAsOcrText(extracted), extracted };
   }
 
   try {

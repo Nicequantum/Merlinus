@@ -23,8 +23,10 @@ import type {
 } from '@/types';
 import {
   isNetworkFailure,
+  isRetriableHttpStatus,
   networkRetryDelayMs,
   NETWORK_RETRY_MAX_ATTEMPTS,
+  parseRetryAfterMs,
   sleep,
 } from '@/lib/networkErrors';
 import {
@@ -69,10 +71,23 @@ async function fetchWithNetworkRetry(
       timeoutMs && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
 
     try {
-      return await fetch(path, {
+      const res = await fetch(path, {
         ...init,
         signal: controller.signal,
       });
+
+      if (
+        !res.ok &&
+        isRetriableHttpStatus(res.status) &&
+        attempt < NETWORK_RETRY_MAX_ATTEMPTS
+      ) {
+        const retryAfterMs =
+          res.status === 429 ? parseRetryAfterMs(res.headers.get('Retry-After')) : undefined;
+        await sleep(retryAfterMs ?? networkRetryDelayMs(attempt));
+        continue;
+      }
+
+      return res;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new ApiError(`Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s`, 408);

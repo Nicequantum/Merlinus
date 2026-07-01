@@ -4,7 +4,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
-import { runMultiPassOCR, warmupOcrWorker } from '@/services/ocr';
+import { runFastRoScanOcr, warmupOcrWorker } from '@/services/ocr';
 import type { PendingImage, RepairOrder } from '@/types';
 import {
   extractCustomerName,
@@ -193,14 +193,12 @@ export function useROScan({
           for (let i = 0; i < images.length; i++) {
             if (!isActiveSession()) return emptyOcrResult();
             const img = images[i];
-            setScanStatusMessage(
-              `Reading page ${i + 1} of ${images.length} (3-pass OCR: color, B&W, enhanced)…`
-            );
+            setScanStatusMessage(`Reading page ${i + 1} of ${images.length} (on-device OCR)…`);
             setOcrProgress(Math.round(30 + (i / images.length) * 15));
 
             let ocrResult;
             try {
-              ocrResult = await runMultiPassOCR(img.file, (p) => {
+              ocrResult = await runFastRoScanOcr(img.file, (p) => {
                 if (!isActiveSession()) return;
                 setOcrProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35));
               });
