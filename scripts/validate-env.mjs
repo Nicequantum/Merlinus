@@ -76,6 +76,12 @@ if (isProduction) {
     process.exit(1);
   }
 
+  if (process.env.ALLOW_BOOTSTRAP?.trim().toLowerCase() === 'true') {
+    console.warn(
+      '[merlin:build] ALLOW_BOOTSTRAP is set but /api/setup/seed is permanently disabled in production.'
+    );
+  }
+
   const missingProd = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingProd.length > 0) {
     console.error(

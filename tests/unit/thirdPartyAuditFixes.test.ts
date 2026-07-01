@@ -117,6 +117,26 @@ describe('Third-party audit hardening', () => {
     assert.equal(src.includes('errBody'), true);
   });
 
+  it('bootstrap seed is hard-disabled in production with audit logging', () => {
+    const middleware = readSrc('src/middleware.ts');
+    const seedRoute = readSrc('src/app/api/setup/seed/route.ts');
+    const env = readSrc('src/lib/env.ts');
+    assert.ok(middleware.includes('denyBootstrapSeedInProduction'));
+    assert.ok(seedRoute.includes('isBootstrapSeedAllowed'));
+    assert.ok(seedRoute.includes('logBootstrapSeedBlockedAttempt'));
+    assert.equal(seedRoute.includes('ALLOW_BOOTSTRAP'), false);
+    assert.ok(env.includes('ALLOW_BOOTSTRAP is set in production'));
+  });
+
+  it('unified route errors replace generic fallback for critical routes', () => {
+    const errors = readSrc('src/lib/errors.ts');
+    const mapper = readSrc('src/lib/routeErrorMapper.ts');
+    assert.ok(errors.includes('mapRouteError'));
+    assert.ok(mapper.includes('mapAuditRouteFailure'));
+    assert.ok(mapper.includes('mapDatabaseConnectionError'));
+    assert.equal(errors.includes('return apiError(GENERIC_ERROR, 500)'), false);
+  });
+
   it('service advisors are blocked from Grok extraction routes', () => {
     assert.ok(readSrc('src/app/api/diagnostics/extract/route.ts').includes('blockServiceAdvisorAi'));
     assert.ok(readSrc('src/app/api/repair-orders/extract/route.ts').includes('blockServiceAdvisorAi'));

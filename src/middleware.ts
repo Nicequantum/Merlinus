@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { BASE_SECURITY_HEADERS, CONTENT_SECURITY_POLICY } from '../security-policy.mjs';
+import {
+  BOOTSTRAP_PRODUCTION_BLOCKED_MESSAGE,
+  BOOTSTRAP_SEED_PATH,
+  logBootstrapSeedBlockedAttempt,
+} from './lib/bootstrapGuard';
+import { isProductionRuntime } from './lib/productionRuntime';
 import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeaders';
 
 /** M12 CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'. */
@@ -34,8 +40,24 @@ function denyCrossOriginApi(request: NextRequest): NextResponse | null {
   return denied;
 }
 
+function denyBootstrapSeedInProduction(request: NextRequest): NextResponse | null {
+  if (!isProductionRuntime()) return null;
+  if (request.nextUrl.pathname !== BOOTSTRAP_SEED_PATH) return null;
+
+  logBootstrapSeedBlockedAttempt({ request, layer: 'middleware' });
+  const denied = new NextResponse(
+    JSON.stringify({ error: BOOTSTRAP_PRODUCTION_BLOCKED_MESSAGE }),
+    { status: 403, headers: { 'Content-Type': 'application/json' } }
+  );
+  applySecurityHeaders(denied.headers, BASE_SECURITY_HEADERS);
+  return denied;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const bootstrapDenied = denyBootstrapSeedInProduction(request);
+  if (bootstrapDenied) return bootstrapDenied;
 
   const crossOriginDenied = denyCrossOriginApi(request);
   if (crossOriginDenied) return crossOriginDenied;

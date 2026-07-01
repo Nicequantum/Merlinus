@@ -113,6 +113,12 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
 
   const forbiddenPublicKeys = getExposedPublicGrokEnvKeys();
 
+  if (isProduction && isTruthyEnv(process.env.ALLOW_BOOTSTRAP)) {
+    warnings.push(
+      'ALLOW_BOOTSTRAP is set in production but bootstrap seed is permanently disabled — remove this variable'
+    );
+  }
+
   const valid = missing.length === 0 && forbiddenPublicKeys.length === 0;
 
   if (forbiddenPublicKeys.length > 0) {
