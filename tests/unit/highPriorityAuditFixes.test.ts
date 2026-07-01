@@ -85,8 +85,9 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.equal(seedDb.includes('changeme123'), false);
     assert.equal(seedSec.includes('changeme123'), false);
     assert.equal(seedSec.includes('DEFAULT_TECH_SEED_PASSWORD'), false);
-    assert.ok(seedDb.includes('DOCUMENTED_DEV_SEED_PASSWORD'));
-    assert.ok(seedDb.includes('resolveSeedPassword'));
+    assert.ok(seedDb.includes('CANONICAL_SEED_PASSWORD'));
+    assert.ok(seedDb.includes('ensureCanonicalSeedAccount'));
+    assert.ok(seedDb.includes('PRIMARY_MANAGER_D7'));
   });
 
   it('H12: noise monitor throttled to 4Hz', () => {

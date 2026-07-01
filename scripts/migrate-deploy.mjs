@@ -30,6 +30,13 @@ try {
     env: process.env,
   });
   console.log('[merlin:migrate] Migrations applied successfully');
+
+  console.log('[merlin:migrate] Ensuring canonical seed accounts (D7HARRIH / password123)...');
+  execSync('npm run db:seed', {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  console.log('[merlin:migrate] Seed accounts verified');
 } catch (error) {
   console.error('[merlin:migrate] Migration deploy failed');
   process.exit(typeof error.status === 'number' ? error.status : 1);

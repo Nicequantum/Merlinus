@@ -1,8 +1,16 @@
 import bcrypt from 'bcryptjs';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
-import { internalEmailForD7 } from './d7Number';
+import { internalEmailForD7, normalizeD7Number } from './d7Number';
 import { prisma } from './db';
 import { seedTemplateLibraryIfEmpty } from './templateLibrary';
+
+/** Canonical seed credentials — login works immediately after db:seed or deploy auto-seed. */
+export const PRIMARY_MANAGER_D7 = 'D7HARRIH';
+export const PRIMARY_TECH_D7 = 'D7TECH001';
+export const CANONICAL_SEED_PASSWORD = 'password123';
+
+/** @deprecated Use CANONICAL_SEED_PASSWORD */
+export const DOCUMENTED_DEV_SEED_PASSWORD = CANONICAL_SEED_PASSWORD;
 
 const seedOnboarding = {
   consentAt: new Date(),
@@ -21,77 +29,112 @@ interface SeedAccountInput {
   dealershipId: string;
 }
 
+async function retireTechnician(id: string): Promise<void> {
+  await prisma.technician.update({
+    where: { id },
+    data: {
+      isActive: false,
+      deletedAt: new Date(),
+      sessionVersion: { increment: 1 },
+    },
+  });
+}
+
+function pickPrimaryCandidate(
+  candidates: Array<{ id: string; d7Number: string; email: string; createdAt: Date }>,
+  d7: string,
+  canonicalEmail: string,
+  legacyEmail: string
+) {
+  const byD7 = candidates.find((c) => c.d7Number === d7);
+  if (byD7) return byD7;
+
+  const byCanonicalEmail = candidates.find((c) => c.email === canonicalEmail);
+  if (byCanonicalEmail) return byCanonicalEmail;
+
+  const normalizedLegacyEmail = legacyEmail.toLowerCase();
+  const byLegacyEmail = candidates.find((c) => c.email === normalizedLegacyEmail);
+  if (byLegacyEmail) return byLegacyEmail;
+
+  if (candidates.length === 1) return candidates[0];
+
+  return [...candidates].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null;
+}
+
 /**
- * Upsert the canonical D7 account and retire legacy email duplicates without D7 unique collisions.
+ * Ensure a single canonical D7 account exists — merges legacy email / migration-derived D7 rows.
  */
-async function upsertSeedAccount(input: SeedAccountInput): Promise<void> {
-  const canonicalEmail = internalEmailForD7(input.d7Number);
+async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void> {
+  const d7 = normalizeD7Number(input.d7Number);
+  const canonicalEmail = internalEmailForD7(d7);
+  const legacyEmail = input.legacyEmail.toLowerCase();
 
-  const account = await prisma.technician.upsert({
-    where: { d7Number: input.d7Number },
-    update: {
-      email: canonicalEmail,
-      name: input.name,
-      passwordHash: input.passwordHash,
-      role: input.role,
-      isAdmin: input.isAdmin,
-      isActive: true,
-      deletedAt: null,
-      dealershipId: input.dealershipId,
-      ...seedOnboarding,
-    },
-    create: {
-      d7Number: input.d7Number,
-      email: canonicalEmail,
-      name: input.name,
-      passwordHash: input.passwordHash,
-      role: input.role,
-      isAdmin: input.isAdmin,
-      isActive: true,
-      dealershipId: input.dealershipId,
-      ...seedOnboarding,
-    },
-  });
+  const selectFields = { id: true, d7Number: true, email: true, createdAt: true } as const;
 
-  const legacyDuplicate = await prisma.technician.findFirst({
+  let candidates = await prisma.technician.findMany({
     where: {
-      email: input.legacyEmail,
-      id: { not: account.id },
+      OR: [{ d7Number: d7 }, { email: canonicalEmail }, { email: legacyEmail }],
     },
+    select: selectFields,
   });
 
-  if (legacyDuplicate) {
-    await prisma.technician.update({
-      where: { id: legacyDuplicate.id },
-      data: {
-        isActive: false,
-        deletedAt: new Date(),
-        sessionVersion: { increment: 1 },
+  if (candidates.length === 0) {
+    candidates = await prisma.technician.findMany({
+      where: {
+        dealershipId: input.dealershipId,
+        role: input.role,
+        isActive: true,
+        deletedAt: null,
       },
+      select: selectFields,
     });
   }
-}
 
-/** Documented dev default — see .env.example; override in production before go-live. */
-export const DOCUMENTED_DEV_SEED_PASSWORD = 'password123';
+  const accountData = {
+    d7Number: d7,
+    email: canonicalEmail,
+    name: input.name,
+    passwordHash: input.passwordHash,
+    role: input.role,
+    isAdmin: input.isAdmin,
+    isActive: true,
+    deletedAt: null,
+    dealershipId: input.dealershipId,
+    ...seedOnboarding,
+  };
 
-function requireEnv(name: string, minLength = 1): string {
-  const value = process.env[name]?.trim();
-  if (!value || value.length < minLength) {
-    throw new Error(
-      `${name} must be set${minLength > 1 ? ` (min ${minLength} characters)` : ''} before running db:seed.`
-    );
+  const primary = pickPrimaryCandidate(candidates, d7, canonicalEmail, legacyEmail);
+
+  if (primary) {
+    const d7Holder = await prisma.technician.findUnique({ where: { d7Number: d7 } });
+    if (d7Holder && d7Holder.id !== primary.id) {
+      await retireTechnician(d7Holder.id);
+    }
+
+    await prisma.technician.update({
+      where: { id: primary.id },
+      data: accountData,
+    });
+
+    for (const duplicate of candidates) {
+      if (duplicate.id !== primary.id) {
+        await retireTechnician(duplicate.id);
+      }
+    }
+    return;
   }
-  return value;
-}
 
-function resolveSeedPassword(name: 'ADMIN_SEED_PASSWORD' | 'TECH_SEED_PASSWORD'): string {
-  const value = process.env[name]?.trim();
-  if (value && value.length >= 8) return value;
-  const productionDeploy =
-    process.env.NODE_ENV === 'production' && process.env.VERCEL_ENV === 'production';
-  if (productionDeploy) return requireEnv(name, 8);
-  return DOCUMENTED_DEV_SEED_PASSWORD;
+  const created = await prisma.technician.upsert({
+    where: { d7Number: d7 },
+    update: accountData,
+    create: accountData,
+  });
+
+  for (const duplicate of candidates) {
+    if (duplicate.id !== created.id) {
+      await retireTechnician(duplicate.id);
+    }
+  }
 }
 
 export interface SeedResult {
@@ -102,10 +145,9 @@ export interface SeedResult {
 }
 
 export async function runDatabaseSeed(): Promise<SeedResult> {
-  const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
-  const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-  const managerPassword = resolveSeedPassword('ADMIN_SEED_PASSWORD');
-  const techPassword = resolveSeedPassword('TECH_SEED_PASSWORD');
+  const managerD7 = normalizeD7Number(process.env.ADMIN_SEED_D7?.trim() || PRIMARY_MANAGER_D7);
+  const techD7 = normalizeD7Number(process.env.TECH_SEED_D7?.trim() || PRIMARY_TECH_D7);
+  const passwordHash = await bcrypt.hash(CANONICAL_SEED_PASSWORD, 12);
 
   const dealership = await prisma.dealership.upsert({
     where: { id: 'seed-dealership' },
@@ -116,27 +158,24 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
     },
   });
 
-  const managerPasswordHash = await bcrypt.hash(managerPassword, 12);
-  const techPasswordHash = await bcrypt.hash(techPassword, 12);
-
   const legacyManagerEmail = (process.env.ADMIN_SEED_EMAIL?.trim() || 'admin@dealership.com').toLowerCase();
   const legacyTechEmail = (process.env.TECH_SEED_EMAIL?.trim() || 'tech@dealership.com').toLowerCase();
 
-  await upsertSeedAccount({
+  await ensureCanonicalSeedAccount({
     d7Number: managerD7,
     legacyEmail: legacyManagerEmail,
     name: 'Service Manager',
-    passwordHash: managerPasswordHash,
+    passwordHash,
     role: 'manager',
     isAdmin: true,
     dealershipId: dealership.id,
   });
 
-  await upsertSeedAccount({
+  await ensureCanonicalSeedAccount({
     d7Number: techD7,
     legacyEmail: legacyTechEmail,
     name: 'Alex Technician',
-    passwordHash: techPasswordHash,
+    passwordHash,
     role: 'technician',
     isAdmin: false,
     dealershipId: dealership.id,

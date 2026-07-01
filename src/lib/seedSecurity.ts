@@ -2,11 +2,12 @@ import 'server-only';
 
 import { verifyPassword } from './auth';
 import { prisma } from './db';
+import { CANONICAL_SEED_PASSWORD, PRIMARY_MANAGER_D7, PRIMARY_TECH_D7 } from './seedDatabase';
 
 function getSeedD7Numbers(): { managerD7: string; techD7: string } {
   return {
-    managerD7: (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase(),
-    techD7: (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase(),
+    managerD7: (process.env.ADMIN_SEED_D7?.trim() || PRIMARY_MANAGER_D7).toUpperCase(),
+    techD7: (process.env.TECH_SEED_D7?.trim() || PRIMARY_TECH_D7).toUpperCase(),
   };
 }
 
@@ -18,8 +19,6 @@ export interface SeedSecurityStatus {
 
 export async function checkSeedPasswordSecurity(): Promise<SeedSecurityStatus> {
   const { managerD7, techD7 } = getSeedD7Numbers();
-  const techSeedPassword = process.env.TECH_SEED_PASSWORD?.trim();
-
   const accounts = await prisma.technician.findMany({
     where: { d7Number: { in: [managerD7, techD7] } },
     select: { d7Number: true, passwordHash: true, role: true },
@@ -29,27 +28,18 @@ export async function checkSeedPasswordSecurity(): Promise<SeedSecurityStatus> {
   const warnings: string[] = [];
 
   for (const account of accounts) {
-    if (account.d7Number === techD7 && techSeedPassword) {
-      const matchesTechSeed = await verifyPassword(techSeedPassword, account.passwordHash);
-      if (matchesTechSeed) {
-        accountsUsingDefaults.push(account.d7Number);
-        warnings.push(
-          'Technician account password still matches TECH_SEED_PASSWORD — change it before production use.'
-        );
-      }
-    }
+    const matchesCanonicalSeed = await verifyPassword(CANONICAL_SEED_PASSWORD, account.passwordHash);
+    if (!matchesCanonicalSeed) continue;
 
+    accountsUsingDefaults.push(account.d7Number);
     if (account.d7Number === managerD7) {
-      const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD;
-      if (adminSeedPassword) {
-        const matchesSeed = await verifyPassword(adminSeedPassword, account.passwordHash);
-        if (matchesSeed) {
-          accountsUsingDefaults.push(account.d7Number);
-          warnings.push(
-            'Manager account password matches ADMIN_SEED_PASSWORD — change it before production use.'
-          );
-        }
-      }
+      warnings.push(
+        'Manager account password still matches the canonical seed password — change it before production use.'
+      );
+    } else if (account.d7Number === techD7) {
+      warnings.push(
+        'Technician account password still matches the canonical seed password — change it before production use.'
+      );
     }
   }
 
