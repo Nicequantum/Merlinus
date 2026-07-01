@@ -79,11 +79,33 @@ describe('High priority audit fixes (H1–H15)', () => {
     assert.ok(readSrc('src/lib/roListQuery.ts').includes("'previous'"));
   });
 
-  it('H11: no hardcoded changeme123 in seed sources', () => {
+  it('H16: repair order list uses summary DTO without full line decryption', () => {
+    const listRoute = readSrc('src/app/api/repair-orders/route.ts');
+    const mapper = readSrc('src/lib/roMapper.ts');
+    assert.ok(listRoute.includes('dbToRepairOrderSummary'));
+    assert.equal(listRoute.includes('dbToRepairOrder(ro)'), false);
+    assert.ok(mapper.includes('hasWarrantyStory'));
+    assert.ok(mapper.includes('firstComplaintPreview'));
+  });
+
+  it('H17: encryption keys split for AES and HMAC search', () => {
+    const enc = readSrc('src/lib/encryption.ts');
+    const search = readSrc('src/lib/piiSearchToken.ts');
+    const env = readSrc('src/lib/env.ts');
+    assert.ok(enc.includes('DATA_ENCRYPTION_KEY'));
+    assert.equal(enc.includes('process.env.ENCRYPTION_KEY'), false);
+    assert.ok(search.includes('SEARCH_HMAC_KEY'));
+    assert.ok(env.includes('DATA_ENCRYPTION_KEY'));
+    assert.ok(env.includes('SEARCH_HMAC_KEY'));
+  });
+
+  it('H11: no hardcoded changeme123 or password123 in seed sources', () => {
     const seedDb = readSrc('src/lib/seedDatabase.ts');
     const seedSec = readSrc('src/lib/seedSecurity.ts');
     assert.equal(seedDb.includes('changeme123'), false);
     assert.equal(seedSec.includes('changeme123'), false);
+    assert.equal(seedDb.includes('password123'), false);
+    assert.equal(seedSec.includes('password123'), false);
     assert.equal(seedSec.includes('DEFAULT_TECH_SEED_PASSWORD'), false);
     assert.ok(seedDb.includes('CANONICAL_SEED_PASSWORD'));
     assert.ok(seedDb.includes('ensureCanonicalSeedAccount'));

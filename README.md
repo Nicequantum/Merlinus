@@ -254,7 +254,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) after configuring environment variables.
 
-**Default seed login (service manager):** D7 `D7HARRIH` / password `password123` (from `.env.example`). Rotate via Settings before production go-live.
+**Default seed login (service manager):** D7 `D7HARRIH` / password from `.env.example` (`Oceanic1735!`). Rotate via Settings before production go-live.
 
 ### Environment variables
 
@@ -262,12 +262,13 @@ Open [http://localhost:3000](http://localhost:3000) after configuring environmen
 |----------|----------|---------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `SESSION_SECRET` | Yes | Session signing key (`openssl rand -base64 32`) |
-| `ENCRYPTION_KEY` | Yes | AES-256-GCM key — 64 hex chars (`openssl rand -hex 32`) |
+| `DATA_ENCRYPTION_KEY` | Yes | AES-256-GCM key for PII at rest — 64 hex chars (`openssl rand -hex 32`) |
+| `SEARCH_HMAC_KEY` | Yes | HMAC key for RO blind-index search — 64 hex chars, must differ from `DATA_ENCRYPTION_KEY` |
 | `GROK_API_KEY` | For AI | xAI API key (server-side only) |
 | `BLOB_READ_WRITE_TOKEN` | For uploads | Private diagnostic image storage |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Distributed rate limiting |
 | `MERLIN_MAINTENANCE_MODE` | Optional | `true` pauses AI routes during maintenance |
-| `ADMIN_SEED_PASSWORD` / `TECH_SEED_PASSWORD` | For seed | Default `password123` in `.env.example` — rotate before go-live |
+| `ADMIN_SEED_PASSWORD` / `TECH_SEED_PASSWORD` | For seed | Default in `.env.example` — rotate before go-live |
 
 Build-time validation runs automatically via `npm run validate:env` (also part of `npm run build`).
 
@@ -319,7 +320,7 @@ curl -s https://your-dealership-url/api/status | jq '.version, .buildCommit, .ma
 
 **Infrastructure**
 - [ ] Pre-rollout validation passes (`npm run validate:pre-rollout`)
-- [ ] `DATABASE_URL`, `SESSION_SECRET`, `ENCRYPTION_KEY` set and validated (`npm run validate:env`)
+- [ ] `DATABASE_URL`, `SESSION_SECRET`, `DATA_ENCRYPTION_KEY`, `SEARCH_HMAC_KEY` set and validated (`npm run validate:env`)
 - [ ] `GROK_API_KEY` configured server-side (no `NEXT_PUBLIC_*` xAI keys)
 - [ ] `KV_REST_API_URL` + `KV_REST_API_TOKEN` set for distributed rate limiting
 - [ ] `BLOB_READ_WRITE_TOKEN` set for diagnostic image uploads

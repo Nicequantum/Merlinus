@@ -3,10 +3,10 @@
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { RepairOrderList } from '@/components/RepairOrderList';
-import type { RepairOrder } from '@/types';
+import type { RepairOrderSummary } from '@/types';
 
 interface PreviousRepairOrdersSectionProps {
-  repairOrders: RepairOrder[];
+  repairOrders: RepairOrderSummary[];
   expanded: boolean;
   onToggle: () => void;
   loading: boolean;
@@ -14,7 +14,7 @@ interface PreviousRepairOrdersSectionProps {
   hasMore: boolean;
   onLoadMore: () => void;
   openingROId: string | null;
-  onOpenRO: (ro: RepairOrder) => void;
+  onOpenRO: (ro: RepairOrderSummary) => void;
   onDeleteRO?: (id: string) => void;
 }
 

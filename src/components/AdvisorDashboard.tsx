@@ -13,7 +13,7 @@ import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
-import type { RepairLineSoldMetrics, RepairOrder, TechnicianSession } from '@/types';
+import type { RepairLineSoldMetrics, RepairOrder, RepairOrderSummary, TechnicianSession } from '@/types';
 
 interface AdvisorDashboardProps {
   session: TechnicianSession;
@@ -21,7 +21,7 @@ interface AdvisorDashboardProps {
   onLogout: () => Promise<void>;
 }
 
-function formatVehicle(ro: RepairOrder) {
+function formatVehicle(ro: RepairOrder | RepairOrderSummary) {
   return [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
 }
 
@@ -195,7 +195,7 @@ function SoldMetricsForm({
 }
 
 export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorDashboardProps) {
-  const [repairOrders, setRepairOrders] = useState<RepairOrder[]>([]);
+  const [repairOrders, setRepairOrders] = useState<RepairOrderSummary[]>([]);
   const [selectedRoId, setSelectedRoId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RepairOrder | null>(null);
   const [loading, setLoading] = useState(true);

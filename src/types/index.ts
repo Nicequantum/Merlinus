@@ -114,6 +114,28 @@ export interface RepairOrder {
   technicianName?: string;
 }
 
+/** Lightweight line shape for RO list views — no decrypted PII or story text. */
+export interface RepairLineSummary {
+  id: string;
+  lineNumber: number;
+  isCustomerPay?: boolean;
+  hasWarrantyStory: boolean;
+  soldMetrics?: RepairLineSoldMetrics;
+}
+
+/** Lightweight RO shape for list/search endpoints — avoids decrypting every line field. */
+export interface RepairOrderSummary {
+  id: string;
+  roNumber: string;
+  vehicle: Pick<VehicleInfo, 'year' | 'make' | 'model'>;
+  firstComplaintPreview?: string;
+  repairLines: RepairLineSummary[];
+  createdAt?: string;
+  updatedAt?: string;
+  technicianId?: string;
+  technicianName?: string;
+}
+
 export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors' | 'technicians';
 
 export type TemplateCategory = 'customer' | 'warranty';

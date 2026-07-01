@@ -60,11 +60,18 @@ function pass(message) {
 }
 
 function checkProductionSecrets() {
-  const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
-  if (!encryptionKey || encryptionKey.length < 32) {
-    fail('ENCRYPTION_KEY is missing or shorter than 32 characters');
+  const dataEncryptionKey = process.env.DATA_ENCRYPTION_KEY?.trim();
+  if (!dataEncryptionKey || dataEncryptionKey.length < 32) {
+    fail('DATA_ENCRYPTION_KEY is missing or shorter than 32 characters');
   } else {
-    pass('ENCRYPTION_KEY is configured');
+    pass('DATA_ENCRYPTION_KEY is configured');
+  }
+
+  const searchHmacKey = process.env.SEARCH_HMAC_KEY?.trim();
+  if (!searchHmacKey || searchHmacKey.length < 32) {
+    fail('SEARCH_HMAC_KEY is missing or shorter than 32 characters');
+  } else {
+    pass('SEARCH_HMAC_KEY is configured');
   }
 
   const kvUrl = process.env.KV_REST_API_URL?.trim();

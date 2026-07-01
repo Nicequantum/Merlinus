@@ -194,8 +194,8 @@ model AdvisorWritingProfile {
   serviceAdvisorId String         @unique
   serviceAdvisor   ServiceAdvisor @relation(fields: [serviceAdvisorId], references: [id], onDelete: Cascade)
   profileVersion   Int            @default(1)
-  /** S2: advisor profile JSON may contain writing-style samples — encrypt or redact in Phase 3. */
-  profileData      String         @default("{}")
+  /** Encrypted advisor writing-profile JSON — may contain complaint phrasing samples. */
+  profileDataEncrypted String     @default("{}")
   observationCount Int            @default(0)
   lastComputedAt   DateTime?
   updatedAt        DateTime       @updatedAt

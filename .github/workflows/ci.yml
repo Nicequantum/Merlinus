@@ -29,7 +29,8 @@ jobs:
     env:
       NODE_ENV: test
       SESSION_SECRET: ci-test-session-secret-min-32-chars
-      ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      DATA_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      SEARCH_HMAC_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
       BLOB_READ_WRITE_TOKEN: ci-blob-token
@@ -37,8 +38,8 @@ jobs:
       KV_REST_API_TOKEN: ci-kv-token
       GROK_API_KEY: ci-grok-key
       NEXT_PUBLIC_SENTRY_DSN: https://fake@o0.ingest.sentry.io/0
-      ADMIN_SEED_PASSWORD: password123
-      TECH_SEED_PASSWORD: password123
+      ADMIN_SEED_PASSWORD: Oceanic1735!
+      TECH_SEED_PASSWORD: Oceanic1735!
 
     steps:
       - name: Checkout

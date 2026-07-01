@@ -3,14 +3,14 @@
 import { Loader2 } from 'lucide-react';
 import { PreviousRepairOrdersSection } from '@/components/PreviousRepairOrdersSection';
 import { RepairOrderList } from '@/components/RepairOrderList';
-import type { RepairOrder } from '@/types';
+import type { RepairOrderSummary } from '@/types';
 
 interface RepairOrderHomeListsProps {
   searchTerm: string;
   searchLoading: boolean;
-  searchResults: RepairOrder[];
-  todayROs: RepairOrder[];
-  previousROs: RepairOrder[];
+  searchResults: RepairOrderSummary[];
+  todayROs: RepairOrderSummary[];
+  previousROs: RepairOrderSummary[];
   previousExpanded: boolean;
   onTogglePrevious: () => void;
   previousLoading: boolean;
@@ -18,7 +18,7 @@ interface RepairOrderHomeListsProps {
   previousHasMore: boolean;
   onLoadMorePrevious: () => void;
   openingROId: string | null;
-  onOpenRO: (ro: RepairOrder) => void;
+  onOpenRO: (ro: RepairOrderSummary) => void;
   onDeleteRO?: (id: string) => void;
 }
 

@@ -3,8 +3,10 @@ import { describe, test } from 'node:test';
 import { getStartOfDealershipDay, isRepairOrderActiveToday } from '../../src/lib/dealershipDayBoundary';
 import { buildRepairOrderListWhere, parseRepairOrderListParams } from '../../src/lib/roListQuery';
 
-process.env.ENCRYPTION_KEY =
-  process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+process.env.DATA_ENCRYPTION_KEY =
+  process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+process.env.SEARCH_HMAC_KEY =
+  process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
 
 describe('repair order list query', () => {
   test('defaults to today scope with pagination limit', () => {

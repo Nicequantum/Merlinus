@@ -1,6 +1,14 @@
 import 'server-only';
 
-import type { ExtractedData, ImageAttachment, RepairLine, RepairOrder, StoryQualityResult } from '@/types';
+import type {
+  ExtractedData,
+  ImageAttachment,
+  RepairLine,
+  RepairLineSummary,
+  RepairOrder,
+  RepairOrderSummary,
+  StoryQualityResult,
+} from '@/types';
 import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
   decryptComplaintsPayload,
@@ -100,6 +108,55 @@ type DbROWithAdvisor = DbRO & {
   repairLines: DbLine[];
   serviceAdvisor?: { id: string; displayNameEncrypted?: string } | null;
 };
+
+type DbROListRow = DbRO & {
+  repairLines: DbLine[];
+  technician?: { name: string } | null;
+};
+
+function dbToRepairLineSummary(line: DbLine): RepairLineSummary {
+  return {
+    id: line.id,
+    lineNumber: line.lineNumber,
+    isCustomerPay: line.isCustomerPay ?? false,
+    hasWarrantyStory: Boolean(line.warrantyStoryEncrypted?.trim()),
+    soldMetrics: mapSoldMetricsFromDb(
+      line as DbLine & {
+        soldLaborHours?: number | null;
+        soldLaborAmount?: number | null;
+        soldPartsAmount?: number | null;
+        customerApproved?: boolean | null;
+        isAddOn?: boolean | null;
+        soldMetricsUpdatedAt?: Date | null;
+      }
+    ),
+  };
+}
+
+/** List/search DTO — decrypts RO number and first complaint only; lines stay ciphertext-aware. */
+export function dbToRepairOrderSummary(ro: DbROListRow): RepairOrderSummary {
+  const roNumber = readRoNumberFromDb(ro);
+  const complaintsPayload = decryptComplaintsPayload(ro.complaintsEncrypted);
+  const firstComplaintPreview = complaintsPayload.complaints[0]?.trim() || undefined;
+
+  return {
+    id: ro.id,
+    roNumber,
+    vehicle: {
+      year: ro.year,
+      make: ro.make,
+      model: ro.model,
+    },
+    firstComplaintPreview,
+    repairLines: ro.repairLines
+      .sort((a, b) => a.lineNumber - b.lineNumber)
+      .map(dbToRepairLineSummary),
+    createdAt: ro.createdAt.toISOString(),
+    updatedAt: ro.updatedAt.toISOString(),
+    technicianId: ro.technicianId,
+    technicianName: ro.technician?.name,
+  };
+}
 
 export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
   const advisorName = ro.serviceAdvisorNameEncrypted

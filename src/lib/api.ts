@@ -7,6 +7,7 @@ import type {
   DashboardSummary,
   KnowledgeBaseEntry,
   RepairOrder,
+  RepairOrderSummary,
   SaveTemplateFromStoryPayload,
   StoryQualityResult,
   StoryReviewResult,
@@ -195,7 +196,7 @@ export const api = {
     if (params?.q?.trim()) query.set('q', params.q.trim());
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiFetch<{
-      repairOrders: RepairOrder[];
+      repairOrders: RepairOrderSummary[];
       nextCursor?: string | null;
       hasMore?: boolean;
       scope?: 'today' | 'previous' | 'search';

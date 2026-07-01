@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import {
+  dbToRepairLine,
+  dbToRepairOrder,
+  dbToRepairOrderSummary,
+  repairLineToDbFields,
+  repairOrderToDbFields,
+} from '../../src/lib/roMapper';
 import type { RepairLine, RepairOrder, StoryQualityResult } from '../../src/types';
 
 const sampleRo: RepairOrder = {
@@ -41,7 +47,10 @@ const sampleLine: RepairLine = {
 
 describe('roMapper sensitive field encryption', () => {
   before(() => {
-    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+    process.env.DATA_ENCRYPTION_KEY =
+      process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+    process.env.SEARCH_HMAC_KEY =
+      process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
   });
 
   test('repairOrderToDbFields encrypts RO-level OCR text arrays', () => {
@@ -225,5 +234,63 @@ describe('roMapper sensitive field encryption', () => {
     });
     assert.equal(mapped.storyQualityAudit?.score, 91);
     assert.equal(mapped.storyQualityAudit?.scoredAgainstStory, sampleLine.warrantyStory);
+  });
+
+  test('dbToRepairOrderSummary avoids decrypting line PII and story text', () => {
+    const roFields = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: sampleRo.vehicle,
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    });
+    const lineFields = repairLineToDbFields(sampleLine);
+    const summary = dbToRepairOrderSummary({
+      id: 'ro-1',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
+      vinEncrypted: roFields.vinEncrypted,
+      year: sampleRo.vehicle.year,
+      make: sampleRo.vehicle.make,
+      model: sampleRo.vehicle.model,
+      engine: sampleRo.vehicle.engine ?? '',
+      mileageIn: sampleRo.vehicle.mileageIn,
+      mileageOut: sampleRo.vehicle.mileageOut,
+      customerNameEncrypted: roFields.customerNameEncrypted,
+      complaintsEncrypted: roFields.complaintsEncrypted,
+      xentryImageUrls: '[]',
+      xentryOcrTextsEncrypted: '',
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-1',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: lineFields.descriptionEncrypted,
+          customerConcernEncrypted: lineFields.customerConcernEncrypted,
+          technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
+          xentryImageUrls: lineFields.xentryImageUrls,
+          xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+          extractedDataEncrypted: lineFields.extractedDataEncrypted,
+          warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      technician: { name: 'Tech One' },
+    });
+
+    assert.equal(summary.roNumber, sampleRo.roNumber);
+    assert.equal(summary.firstComplaintPreview, sampleRo.complaints[0]);
+    assert.equal(summary.technicianName, 'Tech One');
+    assert.equal(summary.repairLines.length, 1);
+    assert.equal(summary.repairLines[0]?.hasWarrantyStory, true);
+    assert.equal('customerConcern' in (summary.repairLines[0] ?? {}), false);
+    assert.equal('warrantyStory' in (summary.repairLines[0] ?? {}), false);
+    assert.equal('vin' in summary.vehicle, false);
   });
 });

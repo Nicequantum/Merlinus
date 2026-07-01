@@ -1,12 +1,11 @@
 import { isRepairOrderActiveToday } from '@/lib/dealershipDayBoundary';
-import { normalizeExtractedData } from '@/utils/diagnosticParser';
-import type { RepairOrder } from '@/types';
+import type { RepairOrderSummary } from '@/types';
 
 export const PREVIOUS_PAGE_SIZE = 25;
 export const SEARCH_PAGE_SIZE = 50;
 
-export function mergeRepairOrders(...lists: RepairOrder[][]): RepairOrder[] {
-  const map = new Map<string, RepairOrder>();
+export function mergeRepairOrders(...lists: RepairOrderSummary[][]): RepairOrderSummary[] {
+  const map = new Map<string, RepairOrderSummary>();
   for (const list of lists) {
     for (const ro of list) {
       map.set(ro.id, ro);
@@ -15,37 +14,26 @@ export function mergeRepairOrders(...lists: RepairOrder[][]): RepairOrder[] {
   return Array.from(map.values());
 }
 
-export function matchesROSearch(ro: RepairOrder, term: string): boolean {
+export function matchesROSearch(ro: RepairOrderSummary, term: string): boolean {
   const q = term.toLowerCase();
   return (
     ro.roNumber.toLowerCase().includes(q) ||
     (ro.vehicle.make?.toLowerCase().includes(q) ?? false) ||
     (ro.vehicle.model?.toLowerCase().includes(q) ?? false) ||
-    (ro.vehicle.year?.includes(q) ?? false) ||
-    (ro.vehicle.vin?.toLowerCase().includes(q) ?? false)
+    (ro.vehicle.year?.includes(q) ?? false)
   );
 }
 
-export function sortRepairOrdersNewestFirst(orders: RepairOrder[]): RepairOrder[] {
+export function sortRepairOrdersNewestFirst(orders: RepairOrderSummary[]): RepairOrderSummary[] {
   return [...orders].sort((a, b) =>
     (b.updatedAt || b.createdAt || '0') > (a.updatedAt || a.createdAt || '0') ? 1 : -1
   );
 }
 
-export function normalizeRepairOrder(repairOrder: RepairOrder): RepairOrder {
-  return {
-    ...repairOrder,
-    repairLines: repairOrder.repairLines.map((line) => ({
-      ...line,
-      extractedData: normalizeExtractedData(line.extractedData),
-    })),
-  };
-}
-
 export function filterTodayRepairOrders(
-  orders: RepairOrder[],
+  orders: RepairOrderSummary[],
   todayStartIso: string | null
-): RepairOrder[] {
+): RepairOrderSummary[] {
   const active = todayStartIso
     ? orders.filter((ro) => isRepairOrderActiveToday(ro.updatedAt, todayStartIso, ro.createdAt))
     : orders;

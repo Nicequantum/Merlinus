@@ -3,22 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
-import type { RepairOrder, TechnicianSession } from '@/types';
+import type { RepairOrderSummary, TechnicianSession } from '@/types';
 import {
   filterTodayRepairOrders,
   mergeRepairOrders,
-  normalizeRepairOrder,
   PREVIOUS_PAGE_SIZE,
 } from '@/hooks/repairOrders/roListUtils';
 
 /** Today + previous pagination for the repair order home lists. */
 export function useROList(session: TechnicianSession | null) {
-  const [allROs, setAllROs] = useState<RepairOrder[]>([]);
+  const [allROs, setAllROs] = useState<RepairOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [listRetrying, setListRetrying] = useState(false);
   const [todayStartIso, setTodayStartIso] = useState<string | null>(null);
-  const [previousROs, setPreviousROs] = useState<RepairOrder[]>([]);
+  const [previousROs, setPreviousROs] = useState<RepairOrderSummary[]>([]);
   const [previousExpanded, setPreviousExpanded] = useState(false);
   const [previousLoading, setPreviousLoading] = useState(false);
   const [previousLoadingMore, setPreviousLoadingMore] = useState(false);
@@ -52,8 +51,7 @@ export function useROList(session: TechnicianSession | null) {
     setListError(null);
     try {
       const { repairOrders, todayStart } = await api.listRepairOrders({ scope: 'today' });
-      const normalized = repairOrders.map(normalizeRepairOrder);
-      setAllROs(normalized);
+      setAllROs(repairOrders);
       if (todayStart) setTodayStartIso(todayStart);
       setPreviousROs([]);
       setPreviousCursor(null);
@@ -86,9 +84,8 @@ export function useROList(session: TechnicianSession | null) {
           limit: PREVIOUS_PAGE_SIZE,
           cursor: append ? previousCursor ?? undefined : undefined,
         });
-        const normalized = repairOrders.map(normalizeRepairOrder);
-        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, normalized) : normalized));
-        setAllROs((prev) => mergeRepairOrders(prev, normalized));
+        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, repairOrders) : repairOrders));
+        setAllROs((prev) => mergeRepairOrders(prev, repairOrders));
         setPreviousCursor(nextCursor ?? null);
         setPreviousHasMore(Boolean(hasMore));
         if (todayStart) setTodayStartIso(todayStart);

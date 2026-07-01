@@ -15,14 +15,16 @@ describe('environment validation', () => {
   test('reports missing required variables', () => {
     const saved = {
       DATABASE_URL: process.env.DATABASE_URL,
-      ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
+      DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY,
+      SEARCH_HMAC_KEY: process.env.SEARCH_HMAC_KEY,
       SESSION_SECRET: process.env.SESSION_SECRET,
     };
     delete process.env.DATABASE_URL;
     const result = validateEnvironment({ throwOnError: false });
     assert.ok(result.missing.includes('DATABASE_URL'));
     process.env.DATABASE_URL = saved.DATABASE_URL;
-    process.env.ENCRYPTION_KEY = saved.ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = saved.DATA_ENCRYPTION_KEY;
+    process.env.SEARCH_HMAC_KEY = saved.SEARCH_HMAC_KEY;
     process.env.SESSION_SECRET = saved.SESSION_SECRET;
   });
 

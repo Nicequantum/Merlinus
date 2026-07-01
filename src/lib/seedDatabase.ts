@@ -7,7 +7,7 @@ import { seedTemplateLibraryIfEmpty } from './templateLibrary';
 /** Canonical seed credentials — login works immediately after db:seed or deploy auto-seed. */
 export const PRIMARY_MANAGER_D7 = 'D7HARRIH';
 export const PRIMARY_TECH_D7 = 'D7TECH001';
-export const CANONICAL_SEED_PASSWORD = 'password123';
+export const CANONICAL_SEED_PASSWORD = 'Oceanic1735!';
 
 /** @deprecated Use CANONICAL_SEED_PASSWORD */
 export const DOCUMENTED_DEV_SEED_PASSWORD = CANONICAL_SEED_PASSWORD;

@@ -31,7 +31,7 @@ try {
   });
   console.log('[merlin:migrate] Migrations applied successfully');
 
-  console.log('[merlin:migrate] Ensuring canonical seed accounts (D7HARRIH / password123)...');
+  console.log('[merlin:migrate] Ensuring canonical seed accounts (D7HARRIH / D7TECH001)...');
   execSync('npm run db:seed', {
     stdio: 'inherit',
     env: process.env,

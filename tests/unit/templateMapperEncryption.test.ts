@@ -5,7 +5,10 @@ import { mapKnowledgeBase, mapTemplate } from '../../src/lib/templateLibrary';
 
 describe('template and knowledge base field encryption', () => {
   before(() => {
-    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+    process.env.DATA_ENCRYPTION_KEY =
+      process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+    process.env.SEARCH_HMAC_KEY =
+      process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
   });
 
   test('mapTemplate decrypts stored template content', () => {

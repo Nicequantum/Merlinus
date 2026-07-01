@@ -249,7 +249,12 @@ async function checkEnvironment(): Promise<void> {
 
   const env = validateEnvironment({ production: true });
   if (env.valid) {
-    record('Environment', 'Required environment variables', 'pass', 'DATABASE_URL, ENCRYPTION_KEY, SESSION_SECRET present');
+    record(
+      'Environment',
+      'Required environment variables',
+      'pass',
+      'DATABASE_URL, DATA_ENCRYPTION_KEY, SEARCH_HMAC_KEY, SESSION_SECRET present'
+    );
   } else {
     record('Environment', 'Required environment variables', 'fail', `Missing: ${env.missing.join(', ')}`);
   }

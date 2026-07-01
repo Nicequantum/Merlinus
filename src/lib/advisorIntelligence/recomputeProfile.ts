@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
-import { decryptPII } from '@/lib/encryption';
+import { decryptPII, encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
@@ -95,18 +95,19 @@ export async function recomputeAdvisorProfile(serviceAdvisorId: string, client: 
     extractionHints: [],
   };
 
-  // S2 PLAINTEXT WRITE: profileData JSON may contain complaint phrasing samples — encrypt in Phase 3 schema work.
+  const profileDataEncrypted = encryptJsonObject(profileData);
+
   await client.advisorWritingProfile.upsert({
     where: { serviceAdvisorId },
     create: {
       serviceAdvisorId,
       profileVersion: 1,
-      profileData: JSON.stringify(profileData),
+      profileDataEncrypted,
       observationCount: observations.length,
       lastComputedAt: new Date(),
     },
     update: {
-      profileData: JSON.stringify(profileData),
+      profileDataEncrypted,
       observationCount: observations.length,
       lastComputedAt: new Date(),
     },

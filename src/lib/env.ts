@@ -6,7 +6,12 @@
 import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
 
-const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
+const REQUIRED_ENV_VARS = [
+  'DATABASE_URL',
+  'DATA_ENCRYPTION_KEY',
+  'SEARCH_HMAC_KEY',
+  'SESSION_SECRET',
+] as const;
 
 /** Production hard requirement — RO and Xentry scanning cannot work without blob + vision AI. */
 export const PRODUCTION_SCANNING_REQUIRED_ENV_VARS = [
@@ -73,13 +78,26 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
-  if (encryptionKey) {
-    if (encryptionKey.length < 32) {
-      warnings.push('ENCRYPTION_KEY is shorter than 32 characters');
+  const dataEncryptionKey = process.env.DATA_ENCRYPTION_KEY?.trim();
+  if (dataEncryptionKey) {
+    if (dataEncryptionKey.length < 32) {
+      warnings.push('DATA_ENCRYPTION_KEY is shorter than 32 characters');
     }
-    if (!/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-      warnings.push('ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)');
+    if (!/^[0-9a-fA-F]{64}$/.test(dataEncryptionKey)) {
+      warnings.push('DATA_ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)');
+    }
+  }
+
+  const searchHmacKey = process.env.SEARCH_HMAC_KEY?.trim();
+  if (searchHmacKey) {
+    if (searchHmacKey.length < 32) {
+      warnings.push('SEARCH_HMAC_KEY is shorter than 32 characters');
+    }
+    if (!/^[0-9a-fA-F]{64}$/.test(searchHmacKey)) {
+      warnings.push('SEARCH_HMAC_KEY should be 64 hex characters (openssl rand -hex 32)');
+    }
+    if (dataEncryptionKey && searchHmacKey === dataEncryptionKey) {
+      warnings.push('SEARCH_HMAC_KEY must differ from DATA_ENCRYPTION_KEY');
     }
   }
 

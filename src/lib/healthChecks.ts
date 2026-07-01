@@ -100,9 +100,9 @@ export async function checkDatabase(): Promise<DependencyCheck> {
 }
 
 export async function checkEncryption(): Promise<DependencyCheck> {
-  const key = process.env.ENCRYPTION_KEY;
+  const key = process.env.DATA_ENCRYPTION_KEY?.trim();
   if (!key || key.length < 32) {
-    return { status: 'error', detail: 'ENCRYPTION_KEY missing or too short (min 32 chars)' };
+    return { status: 'error', detail: 'DATA_ENCRYPTION_KEY missing or too short (min 32 chars)' };
   }
   try {
     const { latencyMs } = await timed(async () => {

@@ -9,7 +9,8 @@ import {
   awaitRepairOrderSaveQueueWithTimeout,
   enqueueRepairOrderSave,
 } from '@/lib/repairOrderSaveQueue';
-import type { RepairOrder } from '@/types';
+import { repairOrderToSummary } from '@/utils/repairOrderSummary';
+import type { RepairOrder, RepairOrderSummary } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 
 /** Keep in-memory stories when a stale queued PUT returns before the server caught up. */
@@ -38,8 +39,8 @@ export function preserveClientWarrantyStories(
 
 /** M21: persistence, debounced save, and serialized PUT queue extracted from useRepairOrders. */
 export function useROPersistence(
-  allROs: RepairOrder[],
-  setAllROs: Dispatch<SetStateAction<RepairOrder[]>>,
+  allROs: RepairOrderSummary[],
+  setAllROs: Dispatch<SetStateAction<RepairOrderSummary[]>>,
   roRef: MutableRefObject<RepairOrder | null>,
   setCurrentRO: Dispatch<SetStateAction<RepairOrder | null>>
 ) {
@@ -51,11 +52,16 @@ export function useROPersistence(
         const isNew = !allROs.some((r) => r.id === payload.id) || payload.id.startsWith('ro-');
         if (isNew && payload.id.startsWith('ro-')) {
           const { repairOrder } = await api.createRepairOrder(payload);
-          setAllROs((prev) => [repairOrder, ...prev.filter((r) => r.id !== payload.id)]);
+          setAllROs((prev) => [
+            repairOrderToSummary(repairOrder),
+            ...prev.filter((r) => r.id !== payload.id),
+          ]);
           return repairOrder;
         }
         const { repairOrder } = await api.updateRepairOrder(payload.id, payload);
-        setAllROs((prev) => prev.map((r) => (r.id === repairOrder.id ? repairOrder : r)));
+        setAllROs((prev) =>
+          prev.map((r) => (r.id === repairOrder.id ? repairOrderToSummary(repairOrder) : r))
+        );
         return repairOrder;
       });
     },
@@ -76,13 +82,14 @@ export function useROPersistence(
           roRef.current = saved;
           setCurrentRO(saved);
           setAllROs((prev) => {
+            const summary = repairOrderToSummary(saved);
             const idx = prev.findIndex((r) => r.id === saved.id);
             if (idx >= 0) {
               const copy = [...prev];
-              copy[idx] = saved;
+              copy[idx] = summary;
               return copy;
             }
-            return [saved, ...prev];
+            return [summary, ...prev];
           });
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) {
@@ -134,7 +141,9 @@ export function useROPersistence(
       const updated = ensureComplaintIds(structuredClone(updater(base)));
       roRef.current = updated;
       setCurrentRO(updated);
-      setAllROs((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setAllROs((prev) =>
+        prev.map((r) => (r.id === updated.id ? repairOrderToSummary(updated) : r))
+      );
       if (options?.skipPersist) {
         return updated;
       }

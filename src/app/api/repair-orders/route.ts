@@ -7,6 +7,7 @@ import {
 import { prisma } from '@/lib/db';
 import {
   dbToRepairOrder,
+  dbToRepairOrderSummary,
   normalizeImageAttachments,
   repairLineToDbFields,
   repairOrderToDbFields,
@@ -54,11 +55,7 @@ export async function GET(request: Request) {
       const hasMore = orders.length > params.limit;
       const page = hasMore ? orders.slice(0, params.limit) : orders;
 
-      const repairOrders = page.map((ro) => {
-        const mapped = dbToRepairOrder(ro);
-        mapped.technicianName = ro.technician.name;
-        return mapped;
-      });
+      const repairOrders = page.map((ro) => dbToRepairOrderSummary(ro));
 
       return {
         repairOrders,

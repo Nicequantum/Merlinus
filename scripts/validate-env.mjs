@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const REQUIRED = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'];
+const REQUIRED = ['DATABASE_URL', 'DATA_ENCRYPTION_KEY', 'SEARCH_HMAC_KEY', 'SESSION_SECRET'];
 /** Must never be set — exposes xAI keys to the browser bundle. Use GROK_API_KEY only. */
 const FORBIDDEN_PUBLIC_GROK_KEYS = [
   'NEXT_PUBLIC_GROK_API_KEY',

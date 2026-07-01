@@ -12,6 +12,7 @@ import type {
   ImageAttachment,
   RepairLine,
   RepairOrder,
+  RepairOrderSummary,
   StoryQualityResult,
   StoryReviewResult,
   TechnicianSession,
@@ -40,6 +41,7 @@ import {
   createNewRepairLine,
   ensureComplaintIds,
 } from '@/utils/repairOrderFactory';
+import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
 import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
 import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
@@ -129,7 +131,10 @@ export function useRepairOrders({
       const normalized = ensureComplaintIds(repairOrder);
       flushSync(() => {
         roRef.current = normalized;
-        setAllROs((prev) => [normalized, ...prev.filter((r) => r.id !== normalized.id)]);
+        setAllROs((prev) => [
+          repairOrderToSummary(normalized),
+          ...prev.filter((r) => r.id !== normalized.id),
+        ]);
         setCurrentLineId(null);
         setCurrentRO(normalized);
         setView('ro');
@@ -270,13 +275,14 @@ export function useRepairOrders({
           }
         );
         setAllROs((prev) => {
+          const summary = repairOrderToSummary(normalized);
           const idx = prev.findIndex((r) => r.id === normalized.id);
           if (idx >= 0) {
             const copy = [...prev];
-            copy[idx] = normalized;
+            copy[idx] = summary;
             return copy;
           }
-          return [normalized, ...prev];
+          return [summary, ...prev];
         });
         navigateView('ro');
       } catch (e) {
@@ -292,7 +298,7 @@ export function useRepairOrders({
   );
 
   const openRO = useCallback(
-    (target: RepairOrder | string) => {
+    (target: RepairOrder | RepairOrderSummary | string) => {
       const id = typeof target === 'string' ? target : target.id;
       void openROById(id);
     },
@@ -309,7 +315,7 @@ export function useRepairOrders({
           : repairOrder
       );
       roRef.current = withIds;
-      setAllROs((prev) => [withIds, ...prev]);
+      setAllROs((prev) => [repairOrderToSummary(withIds), ...prev]);
       setCurrentRO(withIds);
       navigateView('ro');
       toast.success('Manual repair order created');
@@ -409,7 +415,9 @@ export function useRepairOrders({
     const saved = ensureComplaintIds(await persistRO(updated));
     roRef.current = saved;
     setCurrentRO(saved);
-    setAllROs((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+    setAllROs((prev) =>
+      prev.map((r) => (r.id === saved.id ? repairOrderToSummary(saved) : r))
+    );
     setCurrentLineId(saved.repairLines[saved.repairLines.length - 1].id);
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);

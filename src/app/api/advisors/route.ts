@@ -18,7 +18,7 @@ const advisorListInclude = {
     select: {
       observationCount: true,
       lastComputedAt: true,
-      profileData: true,
+      profileDataEncrypted: true,
     },
   },
 } as const;

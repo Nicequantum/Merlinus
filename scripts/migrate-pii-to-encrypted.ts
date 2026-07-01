@@ -11,7 +11,7 @@
  *   npm run db:migrate-pii-safe
  *   npm run db:migrate-pii
  *
- * Requires: DATABASE_URL and ENCRYPTION_KEY (min 32 chars).
+ * Requires: DATABASE_URL and DATA_ENCRYPTION_KEY (min 32 chars).
  */
 import { PrismaClient } from '@prisma/client';
 import { fileURLToPath } from 'node:url';
@@ -338,8 +338,8 @@ async function main(): Promise<void> {
   if (!process.env.DATABASE_URL?.trim()) {
     throw new Error('DATABASE_URL must be set before running db:migrate-pii');
   }
-  if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
-    throw new Error('ENCRYPTION_KEY must be set (min 32 chars) before running db:migrate-pii');
+  if (!process.env.DATA_ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY.length < 32) {
+    throw new Error('DATA_ENCRYPTION_KEY must be set (min 32 chars) before running db:migrate-pii');
   }
 
   console.log(
