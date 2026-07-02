@@ -1,8 +1,8 @@
 import 'server-only';
 
 import type { RepairLine, RepairOrder } from '@/types';
-import { decryptPII, encryptPII } from './encryption';
-import { logger } from './logger';
+import { encryptPII } from './encryption';
+import { readEncryptedPiiTolerant } from './piiFieldRead';
 import { hashWarrantyStory } from './storyHash';
 
 export interface StoryCertificationState {
@@ -33,14 +33,9 @@ export function mapStoryCertificationFromDbLine(line: DbLineCertFields): StoryCe
 
   let certifiedByName = '';
   if (line.storyCertifiedByNameEncrypted) {
-    try {
-      certifiedByName = decryptPII(line.storyCertifiedByNameEncrypted);
-    } catch (error) {
-      logger.error('story_certification.decrypt_name_failed', {
-        error: error instanceof Error ? error.message : 'unknown',
-      });
-      return null;
-    }
+    const nameRead = readEncryptedPiiTolerant({ encrypted: line.storyCertifiedByNameEncrypted });
+    if (nameRead.decryptFailed) return null;
+    certifiedByName = nameRead.value;
   }
   if (!certifiedByName.trim()) return null;
 

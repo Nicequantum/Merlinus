@@ -236,6 +236,68 @@ describe('roMapper sensitive field encryption', () => {
     assert.equal(mapped.storyQualityAudit?.scoredAgainstStory, sampleLine.warrantyStory);
   });
 
+  test('dbToRepairOrder reads legacy plaintext stored in encrypted PII columns', () => {
+    const legacyRoNumber = '482910';
+    const legacyVin = 'W1N4N4HB5NJ123456';
+    const legacyCustomer = 'Jane Dealer';
+    const legacyConcern = 'CHECK ENGINE LIGHT ON AT STARTUP';
+    const legacyDescription = 'Engine diagnosis';
+    const legacyNotes = 'Found P0300 on cylinder 3.';
+
+    const mapped = dbToRepairOrder({
+      id: 'ro-legacy',
+      roNumberEncrypted: legacyRoNumber,
+      roNumberSearchTokens: [],
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      serviceAdvisorId: null,
+      serviceAdvisorNameEncrypted: 'Advisor Smith',
+      advisorMatchConfidence: null,
+      advisorIdentifiedAt: null,
+      vinEncrypted: legacyVin,
+      year: sampleRo.vehicle.year,
+      make: sampleRo.vehicle.make,
+      model: sampleRo.vehicle.model,
+      engine: '',
+      mileageIn: sampleRo.vehicle.mileageIn,
+      mileageOut: sampleRo.vehicle.mileageOut,
+      customerNameEncrypted: legacyCustomer,
+      complaintsEncrypted: JSON.stringify(sampleRo.complaints),
+      xentryImageUrls: '[]',
+      xentryOcrTextsEncrypted: '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-legacy',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: legacyDescription,
+          customerConcernEncrypted: legacyConcern,
+          technicianNotesEncrypted: legacyNotes,
+          xentryImageUrls: '[]',
+          xentryOcrTextsEncrypted: '',
+          extractedDataEncrypted: JSON.stringify(sampleLine.extractedData),
+          warrantyStoryEncrypted: sampleLine.warrantyStory ?? null,
+          storyQualityAuditEncrypted: '',
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      serviceAdvisor: null,
+    });
+
+    assert.equal(mapped.roNumber, legacyRoNumber);
+    assert.equal(mapped.vehicle.vin, legacyVin);
+    assert.equal(mapped.customer.name, legacyCustomer);
+    assert.equal(mapped.serviceAdvisorName, 'Advisor Smith');
+    assert.equal(mapped.repairLines[0]?.description, legacyDescription);
+    assert.equal(mapped.repairLines[0]?.customerConcern, legacyConcern);
+    assert.equal(mapped.repairLines[0]?.technicianNotes, legacyNotes);
+    assert.equal(mapped.piiDecryptWarnings, undefined);
+  });
+
   test('dbToRepairOrder tolerates unreadable encrypted PII fields', () => {
     const roFields = repairOrderToDbFields({
       roNumber: sampleRo.roNumber,
