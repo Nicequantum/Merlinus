@@ -589,12 +589,25 @@ async function checkCriticalAuditFixes(): Promise<void> {
     ),
     'utf8'
   );
+  const storyAiPersistSrc = readFileSync(
+    resolve(process.cwd(), 'src/lib/storyAiPersist.ts'),
+    'utf8'
+  );
   const auditBeforeUpdate =
-    generateSrc.indexOf("action: 'story.generate'") !== -1 &&
-    generateSrc.indexOf('repairLine.update') !== -1 &&
-    generateSrc.indexOf("action: 'story.generate'") < generateSrc.indexOf('repairLine.update');
+    generateSrc.includes("action: 'story.generate'") &&
+    generateSrc.includes('persistRepairLineStoryInTransaction') &&
+    generateSrc.includes('prisma.$transaction') &&
+    storyAiPersistSrc.includes('appendAuditLogInTransaction') &&
+    storyAiPersistSrc.includes('repairLine.updateMany') &&
+    storyAiPersistSrc.indexOf('appendAuditLogInTransaction') <
+      storyAiPersistSrc.indexOf('repairLine.updateMany');
   if (auditBeforeUpdate) {
-    record('Critical Fixes', 'C3 audit before story persist', 'pass', 'story.generate audit precedes repairLine.update');
+    record(
+      'Critical Fixes',
+      'C3 audit before story persist',
+      'pass',
+      'story.generate audit precedes repair line persist via persistRepairLineStoryInTransaction'
+    );
   } else {
     record('Critical Fixes', 'C3 audit before story persist', 'fail', 'Generate route must audit before DB story write');
   }
@@ -820,9 +833,14 @@ function checkMediumAuditFixes(): void {
     record('Medium', 'M13 audit metadata', 'fail', 'Audit metadata sanitization missing');
   }
 
+  const requestIpSrc = readFileSync(resolve(process.cwd(), 'src/lib/requestIp.ts'), 'utf8');
   const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
-  if (rateSrc.includes('x-vercel-forwarded-for')) {
-    record('Medium', 'M14 IP extraction', 'pass', 'Platform-trusted IP headers');
+  const ipExtractionOk =
+    requestIpSrc.includes('x-vercel-forwarded-for') &&
+    requestIpSrc.includes('TRUSTED_PROXY_HOPS') &&
+    rateSrc.includes("from './requestIp'");
+  if (ipExtractionOk) {
+    record('Medium', 'M14 IP extraction', 'pass', 'Platform-trusted IP headers via requestIp');
   } else {
     record('Medium', 'M14 IP extraction', 'fail', 'IP extraction medium fix incomplete');
   }
