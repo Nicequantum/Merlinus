@@ -19,6 +19,7 @@ import {
 } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import { ensureTechnicianCompliance } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -50,6 +51,11 @@ describe('JWT session refresh (H4)', () => {
       legalDisclaimerAt: technician.legalDisclaimerAt,
       legalDisclaimerVersion: technician.legalDisclaimerVersion,
     };
+
+    await ensureTechnicianCompliance(prisma, technicianId);
+    sessionVersion = (
+      await prisma.technician.findUniqueOrThrow({ where: { id: technicianId } })
+    ).sessionVersion;
   });
 
   after(async () => {

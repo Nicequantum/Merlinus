@@ -12,10 +12,10 @@ import { PrismaClient } from '@prisma/client';
 import { POST as postLogin } from '../../src/app/api/auth/login/route';
 import { POST as postExtract } from '../../src/app/api/repair-orders/extract/route';
 import { POST as postGenerateStory } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route';
-import { createSessionToken, SESSION_COOKIE } from '../../src/lib/auth';
+import { SESSION_COOKIE } from '../../src/lib/auth';
 import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
-import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import { createCompliantSessionToken } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -72,19 +72,7 @@ describe('critical path HTTP routes', () => {
     technicianId = technician.id;
     dealershipId = technician.dealershipId;
 
-    techToken = await createSessionToken({
-      technicianId: technician.id,
-      d7Number: technician.d7Number,
-      name: technician.name,
-      role: technician.role,
-      isAdmin: technician.isAdmin,
-      dealershipId: technician.dealershipId,
-      dealershipName: 'Integration Dealership',
-      consentAt: technician.consentAt?.toISOString() ?? new Date().toISOString(),
-      legalDisclaimerAt: technician.legalDisclaimerAt?.toISOString() ?? new Date().toISOString(),
-      legalDisclaimerVersion: technician.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
-      sessionVersion: technician.sessionVersion,
-    });
+    techToken = await createCompliantSessionToken(prisma, technician, 'Integration Dealership');
 
     const roInput = {
       roNumber: `CP-${Date.now().toString().slice(-6)}`,
