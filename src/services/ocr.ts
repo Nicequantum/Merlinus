@@ -5,6 +5,8 @@ import { clientLog } from '@/lib/clientLog';
 const OCR_TIMEOUT_MS = 120_000;
 /** Per-pass budget for RO scan OCR fallback — Grok vision is the primary path. */
 export const RO_SCAN_PASS_TIMEOUT_MS = 90_000;
+/** Diagnostic Xentry fallback — fail fast so the queue workflow never hangs at ~58%. */
+export const DIAGNOSTIC_OCR_PASS_TIMEOUT_MS = 35_000;
 /** OCR fallback resolution — Grok vision handles fine detail. */
 export const RO_SCAN_MAX_DIM = 1600;
 /** Downscale retry target when a pass hits the timeout on very large photos. */
@@ -518,26 +520,22 @@ export async function runMultiPassOCR(
   };
 }
 
-/** Optimized for XENTRY / UI screenshots — preserves tones, tries multiple page layouts. */
+/** Optimized for XENTRY / UI screenshots — two fast passes; Grok vision is primary. */
 export async function runDiagnosticOCR(file: File, onProgress?: (p: number) => void): Promise<string> {
   const screenshot = await preprocessImageForOCR(file, 'screenshot');
   const pass1 = await runOCR(
     screenshot,
-    onProgress ? (p) => onProgress(Math.round(p * 0.45)) : undefined,
+    onProgress ? (p) => onProgress(Math.round(p * 0.55)) : undefined,
     '6',
-    true
+    true,
+    DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
   const pass2 = await runOCR(
-    screenshot,
-    onProgress ? (p) => onProgress(45 + Math.round(p * 0.35)) : undefined,
-    '11',
-    true
-  );
-  const pass3 = await runOCR(
     file,
-    onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined,
-    '6',
-    true
+    onProgress ? (p) => onProgress(55 + Math.round(p * 0.45)) : undefined,
+    '11',
+    true,
+    DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
-  return mergeOcrTextPasses(pass1, pass2, pass3);
+  return mergeOcrTextPasses(pass1, pass2);
 }

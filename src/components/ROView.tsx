@@ -1,18 +1,20 @@
-import { Camera, ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
-import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
+import { XentryDiagnosticSection } from '@/components/XentryDiagnosticSection';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
-import { XentryImageGallery } from '@/components/XentryImageGallery';
-import type { RepairOrder } from '../types';
+import type { ImageAttachment, PendingImage, RepairOrder } from '../types';
 
 interface ROViewProps {
   ro: RepairOrder;
   isProcessingOCR: boolean;
   ocrProgress: number;
+  xentryStatusMessage: string;
+  xentrySavedImages: ImageAttachment[];
+  xentryPendingImages: PendingImage[];
   onDone: () => void;
   onUpdateRONumber: (value: string) => void;
   onUpdateVehicle: (field: 'vin' | 'year' | 'make' | 'model' | 'engine' | 'mileageIn' | 'mileageOut', value: string) => void;
@@ -21,7 +23,11 @@ interface ROViewProps {
   onEditComplaint: (index: number, value: string) => void;
   onRemoveComplaint: (index: number) => void;
   onDecodeVin: () => void;
-  onAddROXentryPhotos: () => void;
+  onCaptureRoXentryPhoto: () => void;
+  onAddRoXentryFromGallery: () => void;
+  onProcessRoXentryImages: () => void;
+  onClearPendingRoXentry: () => void;
+  onCancelRoXentryProcessing: () => void;
   onDeleteROXentryImage: (imageId: string) => void;
   onAddRepairLine: () => void;
   onOpenLine: (lineId: string) => void;
@@ -36,6 +42,9 @@ export function ROView({
   ro,
   isProcessingOCR,
   ocrProgress,
+  xentryStatusMessage,
+  xentrySavedImages,
+  xentryPendingImages,
   onDone,
   onUpdateRONumber,
   onUpdateVehicle,
@@ -44,7 +53,11 @@ export function ROView({
   onEditComplaint,
   onRemoveComplaint,
   onDecodeVin,
-  onAddROXentryPhotos,
+  onCaptureRoXentryPhoto,
+  onAddRoXentryFromGallery,
+  onProcessRoXentryImages,
+  onClearPendingRoXentry,
+  onCancelRoXentryProcessing,
   onDeleteROXentryImage,
   onAddRepairLine,
   onOpenLine,
@@ -256,23 +269,21 @@ export function ROView({
         </div>
       </div>
 
-      <div className="benz-card p-5 sm:p-6 mb-6">
-        <div className="benz-section-title mb-1">XENTRY / Diagnostic Images</div>
-        <p className="benz-hint mb-4 leading-relaxed">
-          Upload Quick Test, fault codes, guided tests, wiring diagrams, and measurements. OCR and smart parsing feed the AI.
-        </p>
-        <button
-          onClick={onAddROXentryPhotos}
-          disabled={isProcessingOCR}
-          className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium mb-3 disabled:opacity-50"
-        >
-          <Camera size={18} />
-          {isProcessingOCR ? `Analyzing… ${ocrProgress}%` : 'Add XENTRY photos'}
-        </button>
-        {ro.xentryImages && ro.xentryImages.length > 0 && (
-          <XentryImageGallery images={ro.xentryImages} onDeleteImage={onDeleteROXentryImage} />
-        )}
-        <ExtractedDataPreview data={ro.repairLines[0]?.extractedData} />
+      <div className="mb-6">
+        <XentryDiagnosticSection
+          savedImages={xentrySavedImages}
+          pendingImages={xentryPendingImages}
+          isProcessing={isProcessingOCR}
+          ocrProgress={ocrProgress}
+          statusMessage={xentryStatusMessage}
+          extractedData={ro.repairLines[0]?.extractedData}
+          onCapturePhoto={onCaptureRoXentryPhoto}
+          onAddFromGallery={onAddRoXentryFromGallery}
+          onProcessImages={onProcessRoXentryImages}
+          onClearPending={onClearPendingRoXentry}
+          onCancelProcessing={onCancelRoXentryProcessing}
+          onDeleteSavedImage={onDeleteROXentryImage}
+        />
       </div>
 
       <div className="benz-section-header px-0.5">

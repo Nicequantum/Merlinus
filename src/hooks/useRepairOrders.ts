@@ -8,8 +8,6 @@ import { clientLog } from '@/lib/clientLog';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import type {
   AppView,
-  ExtractedData,
-  ImageAttachment,
   RepairLine,
   RepairOrder,
   RepairOrderSummary,
@@ -17,11 +15,6 @@ import type {
   StoryReviewResult,
   TechnicianSession,
 } from '@/types';
-import {
-  emptyExtractedData,
-  mergeExtracted,
-  normalizeExtractedData,
-} from '@/utils/diagnosticParser';
 
 
 import { useROComplaints } from '@/hooks/repairOrders/useROComplaints';
@@ -44,10 +37,9 @@ import {
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
 import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
-import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
+import { useROXentryScan, type XentryTarget } from '@/hooks/repairOrders/useROXentryScan';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
-import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
   session: TechnicianSession | null;
@@ -96,8 +88,8 @@ export function useRepairOrders({
   const storyReviewInFlightRef = useRef(false);
 
   useEffect(() => {
-    // While a scan is finishing, openScanResultView sets roRef before currentRO commits.
-    if (scanInFlightRef.current) return;
+    // While a scan or diagnostic batch is finishing, roRef is updated optimistically.
+    if (scanInFlightRef.current || xentryInFlightRef.current) return;
     roRef.current = currentRO;
   }, [currentRO]);
 
@@ -122,6 +114,17 @@ export function useRepairOrders({
 
   const { flushPendingSave, cancelPendingSave, applyROUpdate, saveROImmediate, persistRO } =
     useROPersistence(allROs, setAllROs, roRef, setCurrentRO);
+
+  const xentryScan = useROXentryScan({
+    roRef,
+    flushPendingSave,
+    saveROImmediate,
+    xentryInFlightRef,
+    onOcrStart,
+    onOcrFinish,
+    setOcrProgress,
+    setScanStatusMessage,
+  });
 
   const prepareForScan = useCallback(async () => {
     await flushPendingSave();
@@ -429,74 +432,6 @@ export function useRepairOrders({
     navigateView('line');
   }, [flushPendingSave, navigateView, persistRO]);
 
-  const toastXentryResult = useCallback((fileCount: number, ocrTexts: string[]) => {
-    const failed = ocrTexts.filter((text) => text.includes('[Analysis failed:')).length;
-    if (failed === fileCount) {
-      const detail =
-        ocrTexts
-          .find((text) => text.includes('[Analysis failed:'))
-          ?.match(/\[Analysis failed: (.+)\]/)?.[1] || 'Diagnostic analysis failed.';
-      toast.error(detail);
-      return;
-    }
-    if (failed > 0) {
-      toast.warning(`${fileCount - failed} photo(s) analyzed; ${failed} need a retake or sharper image.`);
-      return;
-    }
-    toast.success(`${fileCount} diagnostic photo(s) saved and analyzed`);
-  }, []);
-
-  const processXentryImages = useCallback(
-    async (
-      files: File[],
-      existingImages: ImageAttachment[],
-      existingOcr: string[],
-      existingExtracted: ExtractedData,
-      onUploadComplete?: (snapshot: {
-        newImgs: ImageAttachment[];
-        allImages: ImageAttachment[];
-        updatedOcrTexts: string[];
-        updatedExtracted: ExtractedData;
-      }) => Promise<void>
-    ) => {
-      setOcrProgress(5);
-      const newImgs = await uploadFilesAsAttachments(files, 'ximg');
-      let updatedExtracted = normalizeExtractedData(existingExtracted);
-      let updatedOcrTexts = [
-        ...existingOcr,
-        ...files.map(() => '[Analyzing diagnostic photo…]'),
-      ];
-      const allImages = [...existingImages, ...newImgs];
-
-      if (onUploadComplete) {
-        await onUploadComplete({ newImgs, allImages, updatedOcrTexts, updatedExtracted });
-      }
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const attachment = newImgs[i]!;
-        const ocrIndex = existingOcr.length + i;
-        try {
-          const result = await analyzeXentryImage(file, attachment, (p) =>
-            setOcrProgress(Math.round(15 + ((i + p / 100) / files.length) * 85))
-          );
-          updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
-          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
-            idx === ocrIndex ? result.text : text
-          );
-        } catch (err) {
-          clientLog.warn('Xentry analysis failed for one image', err);
-          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
-            idx === ocrIndex ? '[Analysis failed for this image]' : text
-          );
-        }
-      }
-
-      return { newImgs, updatedExtracted, updatedOcrTexts, allImages };
-    },
-    [setOcrProgress]
-  );
-
   const deleteLineXentryImage = useCallback(
     async (lineId: string, imageId: string) => {
       if (!window.confirm('Delete this diagnostic photo? Extracted data will be updated.')) return;
@@ -568,183 +503,31 @@ export function useRepairOrders({
     [saveROImmediate]
   );
 
-  const addXentryPhotos = useCallback(
-    (lineId: string) => {
-      if (xentryInFlightRef.current) {
-        toast.message('Diagnostic photo upload already in progress…');
-        return;
-      }
+  const buildXentrySection = useCallback(
+    (target: XentryTarget) => {
+      const line =
+        target.scope === 'line'
+          ? currentRO?.repairLines.find((l) => l.id === target.lineId)
+          : currentRO?.repairLines[0];
 
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.multiple = false;
-      input.onchange = async (e) => {
-        const files = Array.from((e.target as HTMLInputElement).files || []);
-        if (files.length === 0 || !currentRO) return;
-        if (xentryInFlightRef.current) {
-          toast.message('Diagnostic photo upload already in progress…');
-          return;
-        }
-
-        xentryInFlightRef.current = true;
-        flushPendingSave();
-        onOcrStart('Uploading diagnostic photo…');
-        const latestRO = roRef.current;
-        const lineForExtract = latestRO?.repairLines.find((l) => l.id === lineId);
-        if (!latestRO || !lineForExtract) {
-          xentryInFlightRef.current = false;
-          onOcrFinish();
-          return;
-        }
-        try {
-          const result = await processXentryImages(
-            files,
-            lineForExtract.xentryImages || [],
-            lineForExtract.xentryOcrTexts || [],
-            lineForExtract.extractedData || emptyExtractedData(),
-            async (uploaded) => {
-              const snapshot = roRef.current;
-              if (!snapshot) return;
-              const updatedLines = snapshot.repairLines.map((l) =>
-                l.id === lineId
-                  ? {
-                      ...l,
-                      xentryImages: uploaded.allImages,
-                      xentryOcrTexts: uploaded.updatedOcrTexts,
-                      extractedData: uploaded.updatedExtracted,
-                    }
-                  : l
-              );
-              await saveROImmediate({ ...snapshot, repairLines: updatedLines }, { throwOnError: true });
-            }
-          );
-          const finalRO = roRef.current;
-          if (!finalRO) return;
-          const updatedLines = finalRO.repairLines.map((l) =>
-            l.id === lineId
-              ? {
-                  ...l,
-                  xentryImages: result.allImages,
-                  xentryOcrTexts: result.updatedOcrTexts,
-                  extractedData: result.updatedExtracted,
-                }
-              : l
-          );
-          await saveROImmediate({ ...finalRO, repairLines: updatedLines }, { throwOnError: true });
-          toastXentryResult(files.length, result.updatedOcrTexts);
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
-        } finally {
-          xentryInFlightRef.current = false;
-          onOcrFinish();
-        }
+      return {
+        savedImages:
+          target.scope === 'line' ? line?.xentryImages ?? [] : currentRO?.xentryImages ?? [],
+        pendingImages: xentryScan.getPendingImages(target),
+        extractedData: line?.extractedData,
+        onCapturePhoto: () => xentryScan.capturePhoto(target),
+        onAddFromGallery: () => xentryScan.addFromGallery(target),
+        onProcessImages: () => void xentryScan.processPending(target),
+        onClearPending: () => xentryScan.clearPending(target),
+        onCancelProcessing: () => xentryScan.cancelProcessing(),
+        onDeleteSavedImage:
+          target.scope === 'line'
+            ? (imageId: string) => void deleteLineXentryImage(target.lineId, imageId)
+            : (imageId: string) => void deleteROXentryImage(imageId),
       };
-      input.click();
     },
-    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]
+    [currentRO, deleteLineXentryImage, deleteROXentryImage, xentryScan]
   );
-
-  const addROXentryPhotos = useCallback(() => {
-    if (!currentRO) return;
-    if (xentryInFlightRef.current) {
-      toast.message('Xentry photo upload already in progress…');
-      return;
-    }
-
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.multiple = false;
-    input.onchange = async (e) => {
-      const files = Array.from((e.target as HTMLInputElement).files || []);
-      if (files.length === 0 || !currentRO) return;
-      if (xentryInFlightRef.current) {
-        toast.message('Xentry photo upload already in progress…');
-        return;
-      }
-
-      xentryInFlightRef.current = true;
-      flushPendingSave();
-      onOcrStart('Uploading Xentry photo…');
-      const latestRO = roRef.current;
-      if (!latestRO) {
-        xentryInFlightRef.current = false;
-        onOcrFinish();
-        return;
-      }
-      try {
-        const firstLine = latestRO.repairLines[0];
-        const result = await processXentryImages(
-          files,
-          latestRO.xentryImages || [],
-          latestRO.xentryOcrTexts || [],
-          firstLine?.extractedData || emptyExtractedData(),
-          async (uploaded) => {
-            const snapshot = roRef.current;
-            if (!snapshot) return;
-            let updatedLines = snapshot.repairLines;
-            const line0 = snapshot.repairLines[0];
-            if (line0) {
-              updatedLines = snapshot.repairLines.map((l, idx) =>
-                idx === 0
-                  ? {
-                      ...l,
-                      xentryImages: [...(l.xentryImages || []), ...uploaded.newImgs],
-                      xentryOcrTexts: uploaded.updatedOcrTexts,
-                      extractedData: uploaded.updatedExtracted,
-                    }
-                  : l
-              );
-            }
-            await saveROImmediate(
-              {
-                ...snapshot,
-                xentryImages: uploaded.allImages,
-                xentryOcrTexts: uploaded.updatedOcrTexts,
-                repairLines: updatedLines,
-              },
-              { throwOnError: true }
-            );
-          }
-        );
-        const finalRO = roRef.current;
-        if (!finalRO) return;
-        let updatedLines = finalRO.repairLines;
-        const line0 = finalRO.repairLines[0];
-        if (line0) {
-          updatedLines = finalRO.repairLines.map((l, idx) =>
-            idx === 0
-              ? {
-                  ...l,
-                  xentryImages: [...(l.xentryImages || []), ...result.newImgs],
-                  xentryOcrTexts: result.updatedOcrTexts,
-                  extractedData: result.updatedExtracted,
-                }
-              : l
-          );
-        }
-        await saveROImmediate(
-          {
-            ...finalRO,
-            xentryImages: result.allImages,
-            xentryOcrTexts: result.updatedOcrTexts,
-            repairLines: updatedLines,
-          },
-          { throwOnError: true }
-        );
-        toastXentryResult(files.length, result.updatedOcrTexts);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
-      } finally {
-        xentryInFlightRef.current = false;
-        onOcrFinish();
-      }
-    };
-    input.click();
-  }, [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]);
 
   const invalidateReviewRequests = useCallback(() => {
     reviewStorySeqRef.current += 1;
@@ -1012,8 +795,7 @@ export function useRepairOrders({
     updateRONumber,
     decodeVinForRO,
     addRepairLine,
-    addXentryPhotos,
-    addROXentryPhotos,
+    buildXentrySection,
     deleteLineXentryImage,
     deleteROXentryImage,
     applyCustomerPayTemplate,

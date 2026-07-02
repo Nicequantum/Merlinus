@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   BookOpen,
   BookmarkPlus,
-  Camera,
   Copy,
   Download,
   FileText,
@@ -17,10 +16,9 @@ import {
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
-import { XentryImageGallery } from '@/components/XentryImageGallery';
+import { XentryDiagnosticSection } from '@/components/XentryDiagnosticSection';
 import { SaveTemplateModal } from '@/components/SaveTemplateModal';
 import {
   StoryQualityLoadingPanel,
@@ -34,7 +32,15 @@ import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { TechnicianCertificationSection } from '@/components/TechnicianCertificationSection';
 import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult, TemplateCategory } from '@/types';
+import type {
+  ImageAttachment,
+  PendingImage,
+  RepairLine,
+  RepairOrder,
+  StoryQualityResult,
+  StoryReviewResult,
+  TemplateCategory,
+} from '@/types';
 import { WARRANTY_STORY_MAX_CHARS } from '@/types';
 import { useLineViewCertificationForm } from '@/hooks/lineView/useLineViewCertificationForm';
 import { useLineViewPdfExport } from '@/hooks/lineView/useLineViewPdfExport';
@@ -66,7 +72,14 @@ interface LineViewProps {
   onClearCdkSanitizedNotice?: () => void;
   onBack: () => void;
   onUpdateLine: (updates: Partial<RepairLine>) => void;
-  onAddXentryPhotos: () => void;
+  xentrySavedImages: ImageAttachment[];
+  xentryPendingImages: PendingImage[];
+  xentryStatusMessage: string;
+  onCaptureXentryPhoto: () => void;
+  onAddXentryFromGallery: () => void;
+  onProcessXentryImages: () => void;
+  onClearPendingXentry: () => void;
+  onCancelXentryProcessing: () => void;
   onDeleteXentryImage: (imageId: string) => void;
   onGenerateStory: () => void;
   onScoreStory: (storyText?: string) => void | Promise<void>;
@@ -96,7 +109,14 @@ export function LineView({
   onClearCdkSanitizedNotice,
   onBack,
   onUpdateLine,
-  onAddXentryPhotos,
+  xentrySavedImages,
+  xentryPendingImages,
+  xentryStatusMessage,
+  onCaptureXentryPhoto,
+  onAddXentryFromGallery,
+  onProcessXentryImages,
+  onClearPendingXentry,
+  onCancelXentryProcessing,
   onDeleteXentryImage,
   onGenerateStory,
   onScoreStory,
@@ -258,23 +278,22 @@ export function LineView({
           </div>
         </div>
 
-        <div className="benz-card benz-diagnostic-card p-5 min-w-0 w-full">
-          <div className="benz-section-title mb-1">Diagnostic Evidence</div>
-          <p className="benz-hint mb-4">Grok vision + on-device OCR — tap a photo to view or delete</p>
-          <button
-            onClick={onAddXentryPhotos}
-            disabled={isProcessingOCR}
-            className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium mb-3 disabled:opacity-50"
-          >
-            {isProcessingOCR ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-            {isProcessingOCR ? `Analyzing… ${ocrProgress}%` : 'Add diagnostic photos'}
-          </button>
-
-          {line.xentryImages && line.xentryImages.length > 0 && (
-            <XentryImageGallery images={line.xentryImages} onDeleteImage={onDeleteXentryImage} />
-          )}
-          <ExtractedDataPreview data={line.extractedData} />
-        </div>
+        <XentryDiagnosticSection
+          title="Diagnostic Evidence"
+          hint="Capture Xentry screens, fault codes, guided tests, and voltmeter readings. Queue multiple photos, then process them together for story generation."
+          savedImages={xentrySavedImages}
+          pendingImages={xentryPendingImages}
+          isProcessing={isProcessingOCR}
+          ocrProgress={ocrProgress}
+          statusMessage={xentryStatusMessage}
+          extractedData={line.extractedData}
+          onCapturePhoto={onCaptureXentryPhoto}
+          onAddFromGallery={onAddXentryFromGallery}
+          onProcessImages={onProcessXentryImages}
+          onClearPending={onClearPendingXentry}
+          onCancelProcessing={onCancelXentryProcessing}
+          onDeleteSavedImage={onDeleteXentryImage}
+        />
 
         {advisorName && (
           <div className="benz-line-aside border-benz-accent/25 bg-benz-accent/5">

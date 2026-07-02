@@ -268,12 +268,17 @@ export function BenzTechAuthenticatedApp({
         />
       )}
 
-      {ro.view === 'ro' && ro.currentRO && (
+      {ro.view === 'ro' && ro.currentRO && (() => {
+        const roXentry = ro.buildXentrySection({ scope: 'ro', roId: ro.currentRO.id });
+        return (
         <ViewErrorBoundary viewName="the repair order">
           <ROView
             ro={ro.currentRO}
             isProcessingOCR={ocr.isProcessingOCR}
             ocrProgress={ocr.ocrProgress}
+            xentryStatusMessage={ocr.scanStatusMessage}
+            xentrySavedImages={roXentry.savedImages}
+            xentryPendingImages={roXentry.pendingImages}
             onDone={() => ro.setView('home')}
             onUpdateRONumber={ro.updateRONumber}
             onUpdateVehicle={(field, value) => ro.updateVehicle({ [field]: value })}
@@ -282,7 +287,11 @@ export function BenzTechAuthenticatedApp({
             onEditComplaint={ro.editComplaint}
             onRemoveComplaint={ro.removeComplaint}
             onDecodeVin={ro.decodeVinForRO}
-            onAddROXentryPhotos={ro.addROXentryPhotos}
+            onCaptureRoXentryPhoto={roXentry.onCapturePhoto}
+            onAddRoXentryFromGallery={roXentry.onAddFromGallery}
+            onProcessRoXentryImages={roXentry.onProcessImages}
+            onClearPendingRoXentry={roXentry.onClearPending}
+            onCancelRoXentryProcessing={roXentry.onCancelProcessing}
             onDeleteROXentryImage={(imageId) =>
               runAction('Delete Xentry photo', () => ro.deleteROXentryImage(imageId))
             }
@@ -293,9 +302,15 @@ export function BenzTechAuthenticatedApp({
             }
           />
         </ViewErrorBoundary>
-      )}
+        );
+      })()}
 
-      {ro.view === 'line' && ro.currentRO && ro.currentLine && (
+      {ro.view === 'line' && ro.currentRO && ro.currentLine && (() => {
+        const lineXentry = ro.buildXentrySection({
+          scope: 'line',
+          lineId: ro.currentLine!.id,
+        });
+        return (
         <ViewErrorBoundary viewName="the repair line">
           <LineView
             ro={ro.currentRO}
@@ -303,6 +318,9 @@ export function BenzTechAuthenticatedApp({
             technicianName={session.name}
             isProcessingOCR={ocr.isProcessingOCR}
             ocrProgress={ocr.ocrProgress}
+            xentrySavedImages={lineXentry.savedImages}
+            xentryPendingImages={lineXentry.pendingImages}
+            xentryStatusMessage={ocr.scanStatusMessage}
             isGenerating={ro.isGeneratingForLine}
             isScoring={ro.isScoringForLine}
             isReviewing={ro.isReviewingForLine}
@@ -316,7 +334,11 @@ export function BenzTechAuthenticatedApp({
             onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
             onBack={() => ro.setView('ro')}
             onUpdateLine={(updates) => ro.updateLine(ro.currentLine!.id, updates)}
-            onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
+            onCaptureXentryPhoto={lineXentry.onCapturePhoto}
+            onAddXentryFromGallery={lineXentry.onAddFromGallery}
+            onProcessXentryImages={lineXentry.onProcessImages}
+            onClearPendingXentry={lineXentry.onClearPending}
+            onCancelXentryProcessing={lineXentry.onCancelProcessing}
             onDeleteXentryImage={(imageId) =>
               runAction('Delete diagnostic photo', () =>
                 ro.deleteLineXentryImage(ro.currentLine!.id, imageId)
@@ -356,7 +378,8 @@ export function BenzTechAuthenticatedApp({
             }
           />
         </ViewErrorBoundary>
-      )}
+        );
+      })()}
 
       {ro.view === 'settings' && (
         <SettingsView
