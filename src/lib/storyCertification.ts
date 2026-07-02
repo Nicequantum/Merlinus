@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { RepairLine, RepairOrder } from '@/types';
 import { decryptPII, encryptPII } from './encryption';
+import { logger } from './logger';
 import { hashWarrantyStory } from './storyHash';
 
 export interface StoryCertificationState {
@@ -30,9 +31,17 @@ export function mapStoryCertificationFromDbLine(line: DbLineCertFields): StoryCe
     return null;
   }
 
-  const certifiedByName = line.storyCertifiedByNameEncrypted
-    ? decryptPII(line.storyCertifiedByNameEncrypted)
-    : '';
+  let certifiedByName = '';
+  if (line.storyCertifiedByNameEncrypted) {
+    try {
+      certifiedByName = decryptPII(line.storyCertifiedByNameEncrypted);
+    } catch (error) {
+      logger.error('story_certification.decrypt_name_failed', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      return null;
+    }
+  }
   if (!certifiedByName.trim()) return null;
 
   return {

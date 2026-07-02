@@ -2,13 +2,13 @@
 
 **Audience:** Mercedes-Benz service technicians  
 **Time to read:** 5 minutes  
-**Version:** 3.0.1
+**Version:** 2.1.0
 
 > **Shop-floor cheat sheet:** Print and laminate the [Bay Reference Card](./Bay-Reference-Card.md) — keep it next to your tablet for voice modes and quick fixes.
 
 ---
 
-Merlin helps you turn your repair notes into professional warranty stories — fast. **Voice input** is built for greasy hands and noisy bays. **AI story generation** turns your documented findings into MI 2.0–ready narratives you can paste into CDK or export as a PDF.
+Merlin helps you turn repair notes into professional **MI 4.3–ready** warranty stories — fast. **Voice input** is built for greasy hands and noisy bays. **AI story generation** formats your documented findings into narratives you can paste into CDK or export as a PDF.
 
 > **Remember:** Merlin never invents test results. Document what you actually did. The AI formats your work — it does not replace your judgment.
 
@@ -17,10 +17,10 @@ Merlin helps you turn your repair notes into professional warranty stories — f
 ## 1. Log in and open a repair order
 
 1. Open Merlin on your shop-floor tablet (Chrome or Edge).
-2. Sign in with your technician account.
-3. Open or create a repair order (RO), then tap the **repair line** you are working on.
+2. Sign in with your D7 number and password.
+3. From the **repair order list**, open an RO and tap the **repair line** you are working on.
 
-![Login and repair order list](./images/technician-login-ro-list.png)
+![Login and repair order list](./images/technician-login-ro-list.svg)
 
 ---
 
@@ -35,7 +35,7 @@ Every text field in Merlin has a **microphone button** next to it. Use voice for
 | **Tap to toggle** (default) | Tap the mic **once** to start listening. Tap **again** to stop. | Longer notes, multiple sentences, walking around the bay |
 | **Push-to-talk** | Tap the **hand icon** to switch modes, then **hold** the mic while you speak. Release to stop. | Noisy bays, short bursts, when you want the mic on only while you talk |
 
-![Voice modes — tap toggle vs push-to-talk](./images/technician-voice-modes.png)
+![Voice modes — tap toggle vs push-to-talk](./images/technician-voice-modes.svg)
 
 **Switching modes:** Tap the small **hand / toggle** button beside the mic. Your choice is saved on that tablet.
 
@@ -51,7 +51,7 @@ When the mic is active, a small panel appears:
 - **Recognition confidence** — how sure the tablet is about what it heard
 - **Live preview** — **final** text (solid) vs *interim* text (italic while you are still talking)
 
-![Voice listening panel with noise meter](./images/technician-voice-panel.png)
+![Voice listening panel with noise meter](./images/technician-voice-panel.svg)
 
 ---
 
@@ -67,13 +67,13 @@ Merlin is tuned for real shop-floor conditions. These habits help voice work rel
 | **Speak test results clearly** — “P0300 cylinder 3 misfire” | Warranty stories need accurate codes and measurements |
 | **Face away from the loudest noise** when possible | Even with noise suppression, direction matters |
 | **Watch the noise meter** — if it says *Very noisy*, switch to push-to-talk or move a step away | Merlin lowers its confidence threshold in loud bays, but cleaner audio is always better |
-| **If listening stops after ~15 seconds of silence** | Tap **Retry** — this is normal timeout protection, not a bug |
+| **If listening stops after ~45 seconds of silence** | Tap **Retry** — this is normal timeout protection, not a bug |
 
-**Pro tip from the bay:** Dictate technician notes in short chunks (finding → test → repair) instead of one long ramble. Generate the warranty story after your notes are complete.
+**Pro tip from the bay:** Dictate technician notes in short chunks (finding → test → repair) instead of one long ramble. Tap **Generate MI 4.3** after your notes are complete.
 
 ---
 
-## 4. Build your line — then generate the story
+## 4. Build your line — diagnostic evidence, then generate
 
 ### Step A — Fill in the line (voice or type)
 
@@ -81,31 +81,44 @@ Merlin is tuned for real shop-floor conditions. These habits help voice work rel
 2. **Customer concern** — prefilled from scan; edit to match advisor wording.
 3. **Technician notes & findings** — document actual tests, measurements, parts replaced, and results. **Use voice here.**
 
-![Technician notes field with microphone](./images/technician-notes-voice.png)
+![Technician notes field with microphone](./images/technician-notes-voice.svg)
 
-4. **(Optional) Diagnostic photos** — tap **Add diagnostic photos** to attach XENTRY screenshots or bay photos. Merlin can read fault codes from images.
+### Step B — Add diagnostic evidence (optional but recommended)
 
-### Step B — Generate the warranty story
+Scroll to the **Diagnostic Evidence** section on the line view:
 
-1. When your notes reflect **work you actually performed**, tap **Generate warranty story**.
-2. Wait for “Generating with Grok…” — usually a few seconds. Stay on Wi‑Fi.
+1. Tap **Capture photo** or **Add from gallery** for XENTRY screenshots, fault codes, guided tests, or voltmeter readings.
+2. Queue multiple images, then tap **Process images** — Merlin extracts codes and readings for story generation.
+3. To stop mid-batch, tap **Cancel** — queued photos are cleared (same as RO scan cancel).
+
+![Diagnostic Evidence section with photo queue](./images/technician-diagnostic-evidence.svg)
+
+### Step C — Generate the MI 4.3 story
+
+1. When your notes reflect **work you actually performed**, tap **Generate MI 4.3**.
+2. Wait for the progress bar — usually a few seconds. Stay on Wi‑Fi.
 3. Read the story in the **Warranty Story · 3 C's** box. Edit anything that needs correction (voice or keyboard).
 
-![Generate warranty story button](./images/technician-generate-story.png)
+![Generate MI 4.3 button](./images/technician-generate-mi43.svg)
 
-### Step C — Review, edit, and submit
+### Step D — Audit, review, certify, and submit
 
 | Action | When to use it |
 |--------|----------------|
-| **Review with AI** | Checks clarity, completeness, and policy alignment after you have a story |
+| **Audit Story** | Score the narrative against MI criteria after you have a story |
+| **Review with AI** | Get coaching feedback on clarity and completeness |
 | **Regenerate** | Notes changed significantly — get a fresh draft |
-| **Copy for CDK** | Paste formatted text into your DMS |
-| **Download PDF** | Branded PDF for records or submission |
+| **Copy for CDK** | Paste formatted text into your DMS (after certification when required) |
+| **Export PDF** | Branded PDF for records or submission |
 | **Browse template library** | Insert a saved story pattern for common jobs |
 
 **Character limit:** The counter shows story length. If you exceed the recommended DMS limit, edit before submitting.
 
-![Warranty story editor with review and copy buttons](./images/technician-story-actions.png)
+![Warranty story editor with Audit Story and Copy for CDK](./images/technician-story-actions.svg)
+
+### Customer Pay lines (instant — no AI)
+
+If the line shows a green **Customer Pay · Instant** badge, pick a template from the library — no **Generate MI 4.3** or quality audit required. Edit and **Copy for CDK** when ready.
 
 ---
 
@@ -136,7 +149,8 @@ Voice is optional. **Every field can be typed.** Manual input always works, even
 | “Microphone blocked” message | Site settings → allow mic → reload page |
 | Voice stops after one sentence | Switch to **tap to toggle** for longer dictation, or tap **Retry** |
 | Wrong words appear | Edit the text — voice is a draft, not the final story |
-| “Generating with Grok…” hangs or times out | Shorten notes, check Wi‑Fi, tap **Regenerate** |
+| **Generate MI 4.3** hangs or times out | Shorten notes, check Wi‑Fi, tap **Regenerate** |
+| Diagnostic photos stuck processing | Tap **Cancel**, re-queue images, try **Process images** again |
 | Logged out unexpectedly | Sign in again; ask IT if it keeps happening |
 | Red audit or integrity warning | **Stop using Merlin** — notify service manager immediately |
 
@@ -147,6 +161,7 @@ Voice is optional. **Every field can be typed.** Manual input always works, even
 - [ ] Chrome or Edge, tablet charged, Wi‑Fi connected
 - [ ] Logged into Merlin
 - [ ] Technician notes document **actual** findings before generating
+- [ ] **Audit Story** run when certification is required
 - [ ] Story reviewed and edited before CDK paste or PDF export
 
 ---
@@ -161,4 +176,4 @@ Voice is optional. **Every field can be typed.** Manual input always works, even
 
 ---
 
-*Merlin — Mercedes-Benz Warranty Story Generator · Authorized dealership use only*
+*Merlin v2.1.0 — Mercedes-Benz Warranty Story Generator · Authorized dealership use only*

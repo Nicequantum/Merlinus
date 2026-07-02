@@ -9,7 +9,7 @@
 
 Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz technicians to create accurate, professional warranty narratives using Grok AI. It combines voice input, enterprise-grade security, and a complete audit trail to meet the standards of both individual dealerships and multi-location groups.
 
-**Version:** 2.0.0 · **Prompt version:** 2.1.0 · **Status:** **Production Ready** — v2.0 Hardening (enterprise security upgrade from Merlin 3.x baseline)
+**Version:** 2.1.0 · **Prompt version:** 2.1.0 · **Status:** **Ready for Validation** — pre-rollout polish complete ([CHANGELOG](./CHANGELOG.md))
 
 ---
 
@@ -27,8 +27,8 @@ Merlinus is a secure, dealership-specific platform that allows Mercedes-Benz tec
 | **Documentation** | ✅ Ready | 13 rollout documents in [`docs/`](./docs/) — [full index](./docs/README.md) |
 | **Production sign-off** | ✅ Ready | [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) — required before each deployment |
 | **Dealership config** | ⚠️ Per site | Set `DEALERSHIP_DISPLAY_NAME`, secrets, and doc placeholders before go-live |
-| **Screenshots** | ⚠️ Optional | Add `docs/images/*.png` before printing Technician Quick Start |
-| **KV rate limiting** | ⚠️ Recommended | Configure `KV_REST_*` for distributed limits in serverless |
+| **Screenshots** | ✅ Wireframes | SVG placeholders in `docs/images/` — replace with dealership captures before print |
+| **KV rate limiting** | ⚠️ Required prod | Configure Vercel KV — see [Vercel KV setup](#vercel-kv-setup-production) below |
 
 **Go-live gate:** `npm run validate:pre-rollout` with **0 critical failures** + [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md) signed off + [Go-Live Checklist](./docs/Go-Live-Checklist.md) completed.
 
@@ -291,7 +291,7 @@ MERLIN_BASE_URL=https://your-dealership-url.example npm run validate:pre-rollout
 | After database migration on production | Dealership IT |
 | Before handing tablets to technicians | Service manager + IT sign-off |
 
-The script prints **green ✔ pass**, **yellow ⚠ warn**, and **red ✖ fail** for each check and exits with code **1** if any critical check fails. It validates:
+The script prints **green ✔ pass**, **yellow ⚠ warn**, and **red ✖ fail** for each check. The summary **separates code defects from configuration/env gaps** so IT knows whether to fix the repo or Vercel settings. Exits with code **1** if any critical check fails. It validates:
 
 - Environment variables, maintenance mode off, build metadata
 - Database, encryption, audit chain, prompt version
@@ -301,10 +301,22 @@ The script prints **green ✔ pass**, **yellow ⚠ warn**, and **red ✖ fail** 
 
 **Manual steps still required after the script passes:** shop-floor tablet voice/mic test, end-to-end story generation with a real RO, and PDF download on a tablet.
 
+### Vercel KV setup (production)
+
+Distributed rate limiting requires **Vercel KV** (Upstash Redis). Without it, limits are per serverless instance only — Grok routes may exceed intended caps under load.
+
+1. In the Vercel dashboard: **Project → Storage → Create Database → KV**
+2. Name the store (e.g. `merlin-kv`) and **Connect to Project** — select Production (and Preview if desired)
+3. Vercel injects `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically; confirm under **Settings → Environment Variables**
+4. Redeploy so running instances pick up the new variables
+5. Re-run `npm run validate:pre-rollout` — **Distributed rate limiting (KV)** should show PASS
+
+Manual / non-Vercel hosting: create an [Upstash Redis](https://upstash.com/) database and copy the REST URL and token into your environment as `KV_REST_API_URL` and `KV_REST_API_TOKEN` (see `.env.example`).
+
 ### Production (Vercel + PostgreSQL)
 
 1. Connect repo, deploy branch `main`
-2. Set all variables from `.env.example` in Vercel project settings
+2. Set all variables from `.env.example` in Vercel project settings (including KV — see above)
 3. Confirm `npm run build` succeeds (runs env validation + `prisma migrate deploy`)
 4. Run `npm run db:reencrypt` if upgrading an existing database
 5. Verify health and status endpoints:

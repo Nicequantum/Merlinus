@@ -13,8 +13,6 @@ import type { RepairLine as DbLine, RepairOrder as DbRO } from '@prisma/client';
 import {
   decryptComplaintsPayload,
   decryptJsonObject,
-  decryptOptionalSensitiveText,
-  decryptSensitiveText,
   decryptStringArray,
   encryptComplaintsPayload,
   encryptJsonObject,
@@ -29,10 +27,13 @@ import { mapSoldMetricsFromDb } from './repairLineSoldMetrics';
 import { sanitizeForCDK } from './sanitizeForCDK';
 import { buildImageProxyUrl, extractPathnameFromImageRef } from './imageUrls';
 import {
-  readAdvisorDisplayNameFromDb,
-  readDescriptionFromDb,
-  readEncryptedPiiFromDb,
-  readRoNumberFromDb,
+  appendPiiDecryptWarning,
+  readAdvisorDisplayNameTolerant,
+  readDescriptionTolerant,
+  readEncryptedPiiTolerant,
+  readOptionalSensitiveTextTolerant,
+  readRoNumberTolerant,
+  readSensitiveTextTolerant,
 } from './piiFieldRead';
 import { buildRoNumberSearchTokens } from './piiSearchToken';
 
@@ -139,7 +140,7 @@ function dbToRepairLineSummary(line: DbLine): RepairLineSummary {
 
 /** List/search DTO — decrypts RO number and first complaint only; lines stay ciphertext-aware. */
 export function dbToRepairOrderSummary(ro: DbROListRow): RepairOrderSummary {
-  const roNumber = readRoNumberFromDb(ro);
+  const roNumber = readRoNumberTolerant(ro).value;
   const complaintsPayload = decryptComplaintsPayload(ro.complaintsEncrypted);
   const firstComplaintPreview = complaintsPayload.complaints[0]?.trim() || undefined;
 
@@ -163,19 +164,34 @@ export function dbToRepairOrderSummary(ro: DbROListRow): RepairOrderSummary {
 }
 
 export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
-  const advisorName = readEncryptedPiiFromDb({ encrypted: ro.serviceAdvisorNameEncrypted }) || undefined;
+  const piiDecryptWarnings: string[] = [];
 
-  const roNumber = readRoNumberFromDb(ro);
+  const roNumberRead = readRoNumberTolerant(ro);
+  appendPiiDecryptWarning(piiDecryptWarnings, 'RO number', roNumberRead);
 
-  const serviceAdvisorDisplayName = ro.serviceAdvisor
-    ? readAdvisorDisplayNameFromDb(ro.serviceAdvisor)
-    : undefined;
+  const vinRead = readEncryptedPiiTolerant({ encrypted: ro.vinEncrypted });
+  appendPiiDecryptWarning(piiDecryptWarnings, 'VIN', vinRead);
+
+  const customerNameRead = readEncryptedPiiTolerant({ encrypted: ro.customerNameEncrypted });
+  appendPiiDecryptWarning(piiDecryptWarnings, 'Customer name', customerNameRead);
+
+  const advisorNameRead = readEncryptedPiiTolerant({ encrypted: ro.serviceAdvisorNameEncrypted });
+  appendPiiDecryptWarning(piiDecryptWarnings, 'Service advisor name', advisorNameRead);
+
+  const serviceAdvisorDisplayNameRead = ro.serviceAdvisor
+    ? readAdvisorDisplayNameTolerant(ro.serviceAdvisor)
+    : { value: '', decryptFailed: false };
+  if (ro.serviceAdvisor) {
+    appendPiiDecryptWarning(piiDecryptWarnings, 'Service advisor display name', serviceAdvisorDisplayNameRead);
+  }
+
+  const complaintsPayload = decryptComplaintsPayload(ro.complaintsEncrypted);
 
   return {
     id: ro.id,
-    roNumber,
+    roNumber: roNumberRead.value,
     vehicle: {
-      vin: readEncryptedPiiFromDb({ encrypted: ro.vinEncrypted }),
+      vin: vinRead.value,
       year: ro.year,
       make: ro.make,
       model: ro.model,
@@ -183,45 +199,59 @@ export function dbToRepairOrder(ro: DbROWithAdvisor): RepairOrder {
       mileageIn: ro.mileageIn,
       mileageOut: ro.mileageOut,
     },
-    customer: { name: readEncryptedPiiFromDb({ encrypted: ro.customerNameEncrypted }) },
-    ...(() => {
-      const payload = decryptComplaintsPayload(ro.complaintsEncrypted);
-      return {
-        complaints: payload.complaints,
-        complaintLabels: payload.labels,
-      };
-    })(),
+    customer: { name: customerNameRead.value },
+    complaints: complaintsPayload.complaints,
+    complaintLabels: complaintsPayload.labels,
     serviceAdvisor: ro.serviceAdvisor
       ? {
           id: ro.serviceAdvisor.id,
-          displayName: serviceAdvisorDisplayName || '',
+          displayName: serviceAdvisorDisplayNameRead.value || '',
           matchConfidence: ro.advisorMatchConfidence ?? undefined,
         }
       : undefined,
-    serviceAdvisorName: advisorName || serviceAdvisorDisplayName,
+    serviceAdvisorName: advisorNameRead.value || serviceAdvisorDisplayNameRead.value || undefined,
     xentryImages: parseImageAttachments(ro.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(ro.xentryOcrTextsEncrypted),
-    repairLines: ro.repairLines.sort((a, b) => a.lineNumber - b.lineNumber).map(dbToRepairLine),
+    repairLines: ro.repairLines
+      .sort((a, b) => a.lineNumber - b.lineNumber)
+      .map((line) => dbToRepairLine(line, piiDecryptWarnings)),
     createdAt: ro.createdAt.toISOString(),
     updatedAt: ro.updatedAt.toISOString(),
     technicianId: ro.technicianId,
     technicianName: undefined,
+    ...(piiDecryptWarnings.length > 0 ? { piiDecryptWarnings } : {}),
   };
 }
 
-export function dbToRepairLine(line: DbLine): RepairLine {
-  const description = readDescriptionFromDb(line);
+export function dbToRepairLine(line: DbLine, piiDecryptWarnings?: string[]): RepairLine {
+  const warnings = piiDecryptWarnings ?? [];
+  const lineLabel = (field: string) => `Line ${line.lineNumber} ${field}`;
+
+  const descriptionRead = readDescriptionTolerant(line);
+  appendPiiDecryptWarning(warnings, lineLabel('description'), descriptionRead);
+
+  const customerConcernRead = readEncryptedPiiTolerant({ encrypted: line.customerConcernEncrypted });
+  appendPiiDecryptWarning(warnings, lineLabel('customer concern'), customerConcernRead);
+
+  const technicianNotesRead = readSensitiveTextTolerant(line.technicianNotesEncrypted);
+  appendPiiDecryptWarning(warnings, lineLabel('technician notes'), technicianNotesRead);
+
+  const warrantyStoryRead = readOptionalSensitiveTextTolerant(line.warrantyStoryEncrypted);
+  appendPiiDecryptWarning(warnings, lineLabel('warranty story'), warrantyStoryRead);
+  const warrantyStory = warrantyStoryRead.decryptFailed
+    ? undefined
+    : warrantyStoryRead.value || undefined;
 
   return {
     id: line.id,
     lineNumber: line.lineNumber,
-    description,
-    customerConcern: readEncryptedPiiFromDb({ encrypted: line.customerConcernEncrypted }),
-    technicianNotes: decryptSensitiveText(line.technicianNotesEncrypted),
+    description: descriptionRead.value,
+    customerConcern: customerConcernRead.value,
+    technicianNotes: technicianNotesRead.value,
     xentryImages: parseImageAttachments(line.xentryImageUrls),
     xentryOcrTexts: decryptStringArray(line.xentryOcrTextsEncrypted),
     extractedData: decryptJsonObject<ExtractedData>(line.extractedDataEncrypted, emptyExtractedData()),
-    warrantyStory: decryptOptionalSensitiveText(line.warrantyStoryEncrypted),
+    warrantyStory,
     storyQualityAudit: parseStoryQualityAudit(
       (line as DbLine & { storyQualityAuditEncrypted?: string }).storyQualityAuditEncrypted
     ),
@@ -245,8 +275,7 @@ export function dbToRepairLine(line: DbLine): RepairLine {
           storyCertifiedHash?: string;
         }
       );
-      const storyText = decryptOptionalSensitiveText(line.warrantyStoryEncrypted);
-      if (!certification || !storyCertificationMatchesStory(certification, storyText)) {
+      if (!certification || !storyCertificationMatchesStory(certification, warrantyStory)) {
         return null;
       }
       return certification;

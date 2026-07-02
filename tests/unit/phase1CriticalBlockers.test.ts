@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { CRITICAL_AUDIT_ACTIONS } from '@/lib/audit';
+import { AUDIT_ACTIONS } from '@/types';
+import { buildDiagnosticExtractAuditMetadata } from '@/lib/diagnosticExtractAudit';
 import { buildRoExtractAuditMetadata } from '@/lib/roExtractAudit';
 import { assessRoExtractionQuality } from '@/lib/scanPipeline';
 import type { StructuredROExtraction } from '@/types';
@@ -16,6 +18,45 @@ function readSrc(relativePath: string): string {
 describe('Phase 1 critical blockers', () => {
   it('registers ro.extract as a critical audit action', () => {
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('ro.extract'));
+  });
+
+  it('registers diagnostics.extract as a critical audit action', () => {
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('diagnostics.extract'));
+  });
+
+  it('AUDIT_ACTIONS filter dropdown matches every AuditAction union member (H7)', () => {
+    const auditSrc = readSrc('src/lib/audit.ts');
+    const unionBlock = auditSrc.match(/export type AuditAction\s*=\s*([\s\S]*?);/)?.[1] ?? '';
+    const auditActionMembers = [...unionBlock.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    const dropdownActions = [...AUDIT_ACTIONS];
+
+    assert.deepEqual(dropdownActions, auditActionMembers);
+    assert.ok(dropdownActions.includes('template.use'));
+    assert.ok(dropdownActions.includes('customerPay.clear'));
+    assert.ok(dropdownActions.includes('diagnostics.extract'));
+  });
+
+  it('diagnostics.extract audit metadata contains no PII fields', () => {
+    const meta = buildDiagnosticExtractAuditMetadata({
+      pathname: 'benz-tech/dealership/tech/ximg-secret.jpg',
+      durationMs: 3200,
+      extracted: {
+        codes: ['P0300'],
+        faultCodes: [{ code: 'P0300', description: 'Cylinder misfire' }],
+        guidedTests: ['Check ignition coil'],
+        measurements: [{ label: 'Battery', value: '12.4V' }],
+        components: ['Coil'],
+        circuits: ['F30'],
+      },
+    });
+
+    assert.equal(meta.faultCodeCount, 1);
+    assert.equal(meta.measurementCount, 1);
+    assert.equal(meta.success, true);
+    assert.equal(typeof meta.pathnameDigest, 'string');
+    assert.equal('description' in meta, false);
+    assert.equal('codes' in meta, false);
+    assert.equal('measurements' in meta, false);
   });
 
   it('ro.extract audit metadata contains no PII fields', () => {

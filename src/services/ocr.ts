@@ -521,8 +521,23 @@ export async function runMultiPassOCR(
 }
 
 /** Optimized for XENTRY / UI screenshots — two fast passes; Grok vision is primary. */
-export async function runDiagnosticOCR(file: File, onProgress?: (p: number) => void): Promise<string> {
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+}
+
+export async function runDiagnosticOCR(
+  file: File,
+  onProgress?: (p: number) => void,
+  options?: { signal?: AbortSignal }
+): Promise<string> {
+  const signal = options?.signal;
+  throwIfAborted(signal);
+
   const screenshot = await preprocessImageForOCR(file, 'screenshot');
+  throwIfAborted(signal);
+
   const pass1 = await runOCR(
     screenshot,
     onProgress ? (p) => onProgress(Math.round(p * 0.55)) : undefined,
@@ -530,6 +545,8 @@ export async function runDiagnosticOCR(file: File, onProgress?: (p: number) => v
     true,
     DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
+  throwIfAborted(signal);
+
   const pass2 = await runOCR(
     file,
     onProgress ? (p) => onProgress(55 + Math.round(p * 0.45)) : undefined,
@@ -537,5 +554,6 @@ export async function runDiagnosticOCR(file: File, onProgress?: (p: number) => v
     true,
     DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
+  throwIfAborted(signal);
   return mergeOcrTextPasses(pass1, pass2);
 }

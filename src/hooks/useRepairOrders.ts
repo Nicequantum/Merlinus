@@ -37,25 +37,25 @@ import {
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
 import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
-import { useROXentryScan, type XentryTarget } from '@/hooks/repairOrders/useROXentryScan';
+import { readXentryViewState, type XentryTarget } from '@/hooks/repairOrders/xentryDataModel';
+import { useROXentryScan } from '@/hooks/repairOrders/useROXentryScan';
+import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPipeline';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 
 interface UseRepairOrdersOptions {
   session: TechnicianSession | null;
-  onOcrStart: (message?: string) => void;
-  onOcrFinish: () => void;
-  setOcrProgress: (p: number) => void;
-  setScanStatusMessage: (message: string) => void;
+  roScanPipeline: VisionPipelineControls;
+  xentryPipeline: VisionPipelineControls;
+  getActivePipeline: () => VisionPipelineId | null;
   onComplianceRequired?: () => void;
 }
 
 export function useRepairOrders({
   session,
-  onOcrStart,
-  onOcrFinish,
-  setOcrProgress,
-  setScanStatusMessage,
+  roScanPipeline,
+  xentryPipeline,
+  getActivePipeline,
   onComplianceRequired,
 }: UseRepairOrdersOptions) {
   const [view, setView] = useState<AppView>('home');
@@ -115,15 +115,29 @@ export function useRepairOrders({
   const { flushPendingSave, cancelPendingSave, applyROUpdate, saveROImmediate, persistRO } =
     useROPersistence(allROs, setAllROs, roRef, setCurrentRO);
 
+  const syncROView = useCallback((ro: RepairOrder) => {
+    roRef.current = ro;
+    setCurrentRO(ro);
+    setAllROs((prev) => {
+      const summary = repairOrderToSummary(ro);
+      const idx = prev.findIndex((r) => r.id === ro.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = summary;
+        return copy;
+      }
+      return [summary, ...prev];
+    });
+  }, [setAllROs]);
+
   const xentryScan = useROXentryScan({
     roRef,
     flushPendingSave,
     saveROImmediate,
     xentryInFlightRef,
-    onOcrStart,
-    onOcrFinish,
-    setOcrProgress,
-    setScanStatusMessage,
+    xentryPipeline,
+    getActivePipeline,
+    syncROView,
   });
 
   const prepareForScan = useCallback(async () => {
@@ -149,8 +163,8 @@ export function useRepairOrders({
   );
 
   const navigateView = useCallback(
-    (next: AppView) => {
-      flushPendingSave();
+    async (next: AppView) => {
+      await flushPendingSave();
       if (next === 'home') {
         roRef.current = null;
         setCurrentRO(null);
@@ -180,10 +194,8 @@ export function useRepairOrders({
     prepareForScan,
     openScanResultView,
     scanInFlightRef,
-    onOcrStart,
-    onOcrFinish,
-    setOcrProgress,
-    setScanStatusMessage,
+    roScanPipeline,
+    getActivePipeline,
   });
 
   const { addComplaint, removeComplaint, editComplaint, updateRONumber } = useROComplaints({
@@ -193,7 +205,7 @@ export function useRepairOrders({
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
   useEffect(() => {
-    if (scanInFlightRef.current) return;
+    if (scanInFlightRef.current || xentryInFlightRef.current) return;
     if (view === 'ro' && !currentRO) {
       setView('home');
       return;
@@ -253,10 +265,20 @@ export function useRepairOrders({
       if (openingROInFlightRef.current === id) return;
       openingROInFlightRef.current = id;
       setOpeningROId(id);
-      flushPendingSave();
+      await flushPendingSave();
       try {
         const { repairOrder } = await api.getRepairOrder(id);
         const normalized = ensureComplaintIds(repairOrder);
+        if (normalized.piiDecryptWarnings?.length) {
+          const preview = normalized.piiDecryptWarnings.slice(0, 3).join(', ');
+          const extra =
+            normalized.piiDecryptWarnings.length > 3
+              ? ` (+${normalized.piiDecryptWarnings.length - 3} more)`
+              : '';
+          toast.warning(
+            `Some encrypted fields could not be read: ${preview}${extra}. Contact your manager if data looks missing.`
+          );
+        }
         roRef.current = normalized;
         setCurrentRO(normalized);
         setCurrentLineId(null);
@@ -294,7 +316,7 @@ export function useRepairOrders({
           }
           return [summary, ...prev];
         });
-        navigateView('ro');
+        await navigateView('ro');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Failed to load repair order');
       } finally {
@@ -473,19 +495,12 @@ export function useRepairOrders({
       const result = removeImageAtIndex(latestRO.xentryImages || [], latestRO.xentryOcrTexts || [], imageId);
       if (!result) return;
 
-      const updatedLines = latestRO.repairLines.map((l, idx) => {
-        if (idx !== 0) return l;
-        const lineImages = l.xentryImages || [];
-        if (!lineImages.some((img) => img.id === imageId)) return l;
-        const lineResult = removeImageAtIndex(lineImages, l.xentryOcrTexts || [], imageId);
-        if (!lineResult) return l;
-        return {
-          ...l,
-          xentryImages: lineResult.nextImages,
-          xentryOcrTexts: lineResult.nextOcr,
-          extractedData: lineResult.rebuilt,
-        };
-      });
+      const line0 = latestRO.repairLines[0];
+      const updatedLines = line0
+        ? latestRO.repairLines.map((line, idx) =>
+            idx === 0 ? { ...line, extractedData: result.rebuilt } : line
+          )
+        : latestRO.repairLines;
 
       try {
         await saveROImmediate({
@@ -505,16 +520,12 @@ export function useRepairOrders({
 
   const buildXentrySection = useCallback(
     (target: XentryTarget) => {
-      const line =
-        target.scope === 'line'
-          ? currentRO?.repairLines.find((l) => l.id === target.lineId)
-          : currentRO?.repairLines[0];
+      const viewState = readXentryViewState(currentRO, target);
 
       return {
-        savedImages:
-          target.scope === 'line' ? line?.xentryImages ?? [] : currentRO?.xentryImages ?? [],
+        savedImages: viewState.images,
         pendingImages: xentryScan.getPendingImages(target),
-        extractedData: line?.extractedData,
+        extractedData: viewState.extracted,
         onCapturePhoto: () => xentryScan.capturePhoto(target),
         onAddFromGallery: () => xentryScan.addFromGallery(target),
         onProcessImages: () => void xentryScan.processPending(target),
@@ -721,14 +732,11 @@ export function useRepairOrders({
     cdkSanitizedByLine,
   });
 
-  /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
-  const filteredROs = searchTerm.trim() ? searchROs : todayROs;
-
   const navigateToLine = useCallback(
-    (lineId: string) => {
-      flushPendingSave();
+    async (lineId: string) => {
+      await flushPendingSave();
       setCurrentLineId(lineId);
-      navigateView('line');
+      await navigateView('line');
     },
     [flushPendingSave, navigateView]
   );
@@ -764,7 +772,6 @@ export function useRepairOrders({
     cdkSanitizedForLine,
     clearCdkSanitizedNotice,
     openingROId,
-    filteredROs,
     todayROs,
     searchROs,
     searchLoading,

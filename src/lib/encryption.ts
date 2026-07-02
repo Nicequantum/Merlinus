@@ -3,6 +3,21 @@ import 'server-only';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'crypto';
 import { logger } from './logger';
 
+/**
+ * L4 — Encryption key rotation (Phase 1 accepted risk)
+ *
+ * Phase 1 uses a single static DATA_ENCRYPTION_KEY per deployment. Rotating the key
+ * requires a planned maintenance window and `npm run db:reencrypt` (see docs/Reencryption-Runbook.md).
+ * There is no automatic online re-key or multi-key envelope encryption in this release.
+ *
+ * Accepted for initial pilot with compensating controls:
+ * - Keys stored only in Vercel env (never in repo); 64-hex format validated at build
+ * - Legacy scrypt salt fallback for rows encrypted before H7 hardening
+ * - Tolerant decrypt reads surface piiDecryptWarnings instead of silent data loss
+ *
+ * Planned Phase 2: dual-key envelope rotation with background re-encryption job.
+ */
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 

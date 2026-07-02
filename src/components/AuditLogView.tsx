@@ -6,6 +6,7 @@ import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
 import { api, type TechnicianUser } from '@/lib/api';
 import type { AuditDashboardSummary, AuditLogEntry, TechnicianSession } from '@/types';
+import { formatAuditMetadataForDisplay } from '@/lib/auditMetadataDisplay';
 import { AUDIT_ACTIONS } from '@/types';
 
 interface AuditLogViewProps {
@@ -235,6 +236,18 @@ export function AuditLogView({ session, onBack }: AuditLogViewProps) {
                   )}
                   {log.entryHash && (
                     <div className="text-xs text-benz-muted font-mono mt-1">hash {log.entryHash.slice(0, 16)}…</div>
+                  )}
+                  {log.promptVersion && (
+                    <div className="text-xs text-benz-muted mt-1">prompt {log.promptVersion}</div>
+                  )}
+                  {formatAuditMetadataForDisplay(log.metadata).length > 0 && (
+                    <ul className="text-xs text-benz-secondary mt-2 space-y-0.5 list-none">
+                      {formatAuditMetadataForDisplay(log.metadata).map((line) => (
+                        <li key={line} className="font-mono break-all">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
                 {log.ipAddress && <div className="text-xs text-benz-muted font-mono">{log.ipAddress}</div>}

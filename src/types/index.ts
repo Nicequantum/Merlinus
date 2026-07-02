@@ -112,6 +112,8 @@ export interface RepairOrder {
   updatedAt?: string;
   technicianId?: string;
   technicianName?: string;
+  /** Present when one or more encrypted fields failed to decrypt (legacy key mismatch, corruption). */
+  piiDecryptWarnings?: string[];
 }
 
 /** Lightweight line shape for RO list views — no decrypted PII or story text. */
@@ -459,6 +461,8 @@ export const AUDIT_ACTIONS = [
   'ro.create',
   'ro.update',
   'ro.delete',
+  'ro.extract',
+  'diagnostics.extract',
   'story.generate',
   'story.score',
   'story.review',
@@ -479,6 +483,8 @@ export const AUDIT_ACTIONS = [
   'advisor.delete',
   'advisor.sold_metrics',
   'template.save',
+  'template.use',
+  'customerPay.clear',
   'customerPayTemplateApplied',
   'customerPayStory.edit',
   'customerPayStory.pdf_export',

@@ -25,6 +25,7 @@ describe('Critical audit fixes (C1–C7)', () => {
 
   it('C2: compliance-critical audit actions are defined', () => {
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('ro.extract'));
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('diagnostics.extract'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.generate'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.score'));
     assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.review'));

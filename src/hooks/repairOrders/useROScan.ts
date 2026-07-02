@@ -28,6 +28,11 @@ import {
 import { extractVmiWarrantyInfo, mergeVehicleWarrantyInfo } from '@/utils/vmiExtractor';
 import { uploadRoScanAttachments } from '@/utils/uploadHelpers';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
+import {
+  type VisionPipelineControls,
+  type VisionPipelineId,
+  visionPipelineBlockedMessage,
+} from '@/hooks/visionPipeline';
 
 interface UseROScanOptions {
   /** Flush + cancel stale debounced saves before scan (prevents post-scan overwrite). */
@@ -35,10 +40,8 @@ interface UseROScanOptions {
   /** Open scanned RO without flushPendingSave — navigateView races with new RO state. */
   openScanResultView: (repairOrder: RepairOrder) => void;
   scanInFlightRef: MutableRefObject<boolean>;
-  onOcrStart: (message?: string) => void;
-  onOcrFinish: () => void;
-  setOcrProgress: (p: number) => void;
-  setScanStatusMessage: (message: string) => void;
+  roScanPipeline: VisionPipelineControls;
+  getActivePipeline: () => VisionPipelineId | null;
 }
 
 /** RO document scan pipeline: pending pages, OCR, Grok extraction, and RO creation. */
@@ -46,10 +49,8 @@ export function useROScan({
   prepareForScan,
   openScanResultView,
   scanInFlightRef,
-  onOcrStart,
-  onOcrFinish,
-  setOcrProgress,
-  setScanStatusMessage,
+  roScanPipeline,
+  getActivePipeline,
 }: UseROScanOptions) {
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const scanCancelledRef = useRef(false);
@@ -148,6 +149,11 @@ export function useROScan({
         toast.message('Scan already in progress…');
         return;
       }
+      if (!roScanPipeline.tryAcquire()) {
+        const blocker = getActivePipeline();
+        if (blocker) toast.message(visionPipelineBlockedMessage(blocker));
+        return;
+      }
 
       const sessionId = ++scanSessionRef.current;
       const isActiveSession = () =>
@@ -162,10 +168,10 @@ export function useROScan({
         await prepareForScan();
         if (!isActiveSession()) return;
 
-        onOcrStart('Uploading documents…');
+        roScanPipeline.start('Uploading documents…');
         setPendingROImages(images);
-        setOcrProgress(8);
-        setScanStatusMessage(`Uploading ${images.length} page${images.length === 1 ? '' : 's'}…`);
+        roScanPipeline.setProgress(8);
+        roScanPipeline.setStatusMessage(`Uploading ${images.length} page${images.length === 1 ? '' : 's'}…`);
         void warmupOcrWorker().catch((error) => {
           clientLog.warn('OCR worker warmup failed', error);
         });
@@ -191,14 +197,14 @@ export function useROScan({
           for (let i = 0; i < images.length; i++) {
             if (!isActiveSession()) return emptyOcrResult();
             const img = images[i];
-            setScanStatusMessage(`Reading page ${i + 1} of ${images.length} (on-device OCR)…`);
-            setOcrProgress(Math.round(30 + (i / images.length) * 15));
+            roScanPipeline.setStatusMessage(`Reading page ${i + 1} of ${images.length} (on-device OCR)…`);
+            roScanPipeline.setProgress(Math.round(30 + (i / images.length) * 15));
 
             let ocrResult;
             try {
               ocrResult = await runFastRoScanOcr(img.file, (p) => {
                 if (!isActiveSession()) return;
-                setOcrProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35));
+                roScanPipeline.setProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35));
               });
             } catch (error) {
               clientLog.warn(`On-device OCR failed on page ${i + 1}; continuing if AI vision succeeds`, error);
@@ -219,8 +225,8 @@ export function useROScan({
           return { combinedText, structuredFromPasses };
         };
 
-        setOcrProgress(35);
-        setScanStatusMessage('AI vision extraction started (on-device OCR runs as fallback)…');
+        roScanPipeline.setProgress(35);
+        roScanPipeline.setStatusMessage('AI vision extraction started (on-device OCR runs as fallback)…');
         const ocrPromise = runClientOcr().catch((error) => {
           clientLog.error('ro.scan.ocr_failed', error);
           return emptyOcrResult();
@@ -238,20 +244,20 @@ export function useROScan({
           return null;
         });
 
-        setOcrProgress(42);
-        setScanStatusMessage('AI vision extraction in progress…');
+        roScanPipeline.setProgress(42);
+        roScanPipeline.setStatusMessage('AI vision extraction in progress…');
 
         const grokExtracted = await grokPromise;
         if (!isActiveSession()) return;
 
         let ocrResult: ClientOcrResult;
         if (isStrongGrokExtraction(grokExtracted)) {
-          setOcrProgress(78);
-          setScanStatusMessage('AI vision complete — finalizing repair order…');
+          roScanPipeline.setProgress(78);
+          roScanPipeline.setStatusMessage('AI vision complete — finalizing repair order…');
           ocrResult = emptyOcrResult();
           void ocrPromise;
         } else {
-          setScanStatusMessage('AI vision inconclusive — finishing on-device OCR…');
+          roScanPipeline.setStatusMessage('AI vision inconclusive — finishing on-device OCR…');
           ocrResult = await ocrPromise;
         }
         if (!isActiveSession()) return;
@@ -270,8 +276,8 @@ export function useROScan({
           toast.warning(`On-device OCR used — AI vision unavailable: ${extractError}`);
         }
 
-        setOcrProgress(82);
-        setScanStatusMessage('Cross-validating AI vision and OCR results…');
+        roScanPipeline.setProgress(82);
+        roScanPipeline.setStatusMessage('Cross-validating AI vision and OCR results…');
 
         const classifiedPages = classifyScanPages(ocrText || '');
         const roOcrText =
@@ -296,15 +302,15 @@ export function useROScan({
         }
 
         if (!isActiveSession()) return;
-        setOcrProgress(88);
-        setScanStatusMessage('Creating repair order…');
+        roScanPipeline.setProgress(88);
+        roScanPipeline.setStatusMessage('Creating repair order…');
         createdSuccessfully = await createROFromExtracted(extracted);
         if (!createdSuccessfully) {
           throw new Error('Failed to create repair order from scan.');
         }
 
-        setOcrProgress(100);
-        setScanStatusMessage('Opening repair order…');
+        roScanPipeline.setProgress(100);
+        roScanPipeline.setStatusMessage('Opening repair order…');
       } catch (error) {
         if (!isActiveSession()) return;
         const message = formatScanApiError(error);
@@ -329,19 +335,17 @@ export function useROScan({
           } else {
             scanInFlightRef.current = false;
           }
-          onOcrFinish();
+          roScanPipeline.finish();
         }
       }
     },
     [
       clearPendingPreviews,
       createROFromExtracted,
+      getActivePipeline,
       mergePageOcrExtraction,
-      onOcrFinish,
-      onOcrStart,
       prepareForScan,
-      setOcrProgress,
-      setScanStatusMessage,
+      roScanPipeline,
     ]
   );
 
@@ -427,9 +431,9 @@ export function useROScan({
     scanInFlightRef.current = false;
     clearPendingPreviews(pendingROImages);
     setPendingROImages([]);
-    onOcrFinish();
+    roScanPipeline.finish();
     toast.message('Scan cancelled');
-  }, [clearPendingPreviews, onOcrFinish, pendingROImages]);
+  }, [clearPendingPreviews, pendingROImages, roScanPipeline]);
 
   return {
     pendingROImages,

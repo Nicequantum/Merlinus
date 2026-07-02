@@ -79,10 +79,9 @@ export function BenzTechAuthenticatedApp({
   }, [onSessionRefresh]);
   const ro = useRepairOrders({
     session,
-    onOcrStart: ocr.startOcr,
-    onOcrFinish: ocr.finishOcr,
-    setOcrProgress: ocr.setOcrProgress,
-    setScanStatusMessage: ocr.setScanStatusMessage,
+    roScanPipeline: ocr.roScan,
+    xentryPipeline: ocr.xentry,
+    getActivePipeline: ocr.getActivePipeline,
     onComplianceRequired: handleComplianceRequired,
   });
 
@@ -227,9 +226,9 @@ export function BenzTechAuthenticatedApp({
             onClearPendingScan={ro.clearPendingScan}
             onCancelScan={ro.cancelScan}
             onCreateManualRO={ro.createManualRO}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
-            scanStatusMessage={ocr.scanStatusMessage}
+            isProcessingOCR={ocr.roScan.isProcessing}
+            ocrProgress={ocr.roScan.progress}
+            scanStatusMessage={ocr.roScan.statusMessage}
           >
             {roListSection}
           </ManagerDashboard>
@@ -252,9 +251,9 @@ export function BenzTechAuthenticatedApp({
           previousHasMore={ro.previousHasMore}
           onLoadMorePrevious={ro.loadMorePrevious}
           pendingROImages={ro.pendingROImages}
-          isProcessingOCR={ocr.isProcessingOCR}
-          ocrProgress={ocr.ocrProgress}
-          scanStatusMessage={ocr.scanStatusMessage}
+          isProcessingOCR={ocr.roScan.isProcessing}
+          ocrProgress={ocr.roScan.progress}
+          scanStatusMessage={ocr.roScan.statusMessage}
           onScanRO={ro.scanRO}
           onAddFromGallery={ro.addScanPagesFromGallery}
           onProcessScan={ro.processPendingScan}
@@ -274,11 +273,12 @@ export function BenzTechAuthenticatedApp({
         <ViewErrorBoundary viewName="the repair order">
           <ROView
             ro={ro.currentRO}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
-            xentryStatusMessage={ocr.scanStatusMessage}
+            isProcessingOCR={ocr.xentry.isProcessing}
+            ocrProgress={ocr.xentry.progress}
+            xentryStatusMessage={ocr.xentry.statusMessage}
             xentrySavedImages={roXentry.savedImages}
             xentryPendingImages={roXentry.pendingImages}
+            xentryExtractedData={roXentry.extractedData}
             onDone={() => ro.setView('home')}
             onUpdateRONumber={ro.updateRONumber}
             onUpdateVehicle={(field, value) => ro.updateVehicle({ [field]: value })}
@@ -316,11 +316,11 @@ export function BenzTechAuthenticatedApp({
             ro={ro.currentRO}
             line={ro.currentLine}
             technicianName={session.name}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
+            isProcessingOCR={ocr.xentry.isProcessing}
+            ocrProgress={ocr.xentry.progress}
             xentrySavedImages={lineXentry.savedImages}
             xentryPendingImages={lineXentry.pendingImages}
-            xentryStatusMessage={ocr.scanStatusMessage}
+            xentryStatusMessage={ocr.xentry.statusMessage}
             isGenerating={ro.isGeneratingForLine}
             isScoring={ro.isScoringForLine}
             isReviewing={ro.isReviewingForLine}

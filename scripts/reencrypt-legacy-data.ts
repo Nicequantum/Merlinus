@@ -6,6 +6,12 @@
  * S2 dual-storage backfill (roNumber, description, displayName): npm run db:migrate-pii
  *
  * Requires: DATABASE_URL and DATA_ENCRYPTION_KEY in the environment.
+ *
+ * L4 — Key rotation operations (Phase 1 accepted risk)
+ * ─────────────────────────────────────────────────────
+ * This script is the ONLY supported path for re-encrypting PII after DATA_ENCRYPTION_KEY
+ * or SEARCH_HMAC_KEY rotation. Phase 1 does not support hot key rollover — run during
+ * a maintenance window with MERLIN_MAINTENANCE_MODE=true. Full checklist: docs/Reencryption-Runbook.md
  */
 import { PrismaClient } from '@prisma/client';
 import {

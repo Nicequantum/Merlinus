@@ -22,6 +22,7 @@ export type AuditAction =
   | 'ro.update'
   | 'ro.delete'
   | 'ro.extract'
+  | 'diagnostics.extract'
   | 'story.generate'
   | 'story.score'
   | 'story.review'
@@ -70,6 +71,7 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'consent.accept',
   'legalDisclaimer.accept',
   'ro.extract',
+  'diagnostics.extract',
   'story.generate',
   'story.score',
   'story.review',

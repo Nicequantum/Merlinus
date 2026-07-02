@@ -117,15 +117,20 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
         if (todayStart) setTodayStartIso(todayStart);
         previousLoadedRef.current = true;
       } catch (error) {
-        if (!(error instanceof ApiError && error.status === 401)) {
-          toast.error('Could not load previous repair orders — try again.');
+        if (error instanceof ApiError && error.status === 401) {
+          return;
         }
+        if (error instanceof ApiError && isComplianceBlockedError(error)) {
+          onComplianceRequiredRef.current?.();
+          return;
+        }
+        toast.error('Could not load previous repair orders — try again.');
       } finally {
         setPreviousLoading(false);
         setPreviousLoadingMore(false);
       }
     },
-    [previousCursor, session]
+    [onComplianceRequiredRef, previousCursor, session]
   );
 
   const togglePreviousExpanded = useCallback(() => {
@@ -163,9 +168,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
     }
 
     setLoading(true);
-    refreshList().catch(() => {
-      toast.error('Could not load repair orders — check your connection');
-    });
+    void refreshList();
   }, [session, refreshList]);
 
   const todayROs = useMemo(

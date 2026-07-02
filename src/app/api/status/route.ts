@@ -1,6 +1,5 @@
 import { VOICE_INPUT_SETTINGS } from '@/lib/constants';
 import { getRuntimeConfig, isMaintenanceModeEnabled } from '@/lib/env';
-import { isGrokConfigured } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +15,6 @@ export async function GET() {
       promptVersion: config.promptVersion,
       buildCommit: config.buildCommit,
       buildDate: config.buildDate,
-      grokConfigured: isGrokConfigured(),
       voiceEnabled: VOICE_INPUT_SETTINGS.enabled,
     },
     { headers: { 'Cache-Control': 'no-store' } }

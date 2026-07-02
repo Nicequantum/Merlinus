@@ -246,7 +246,7 @@ curl -s https://your-dealership-url/api/health
 curl -s https://your-dealership-url/api/status
 ```
 
-Returns `maintenance`, `version`, `grokConfigured`, and `voiceEnabled` — suitable for uptime dashboards.
+Returns `maintenance`, `version`, `promptVersion`, and `voiceEnabled` — suitable for uptime dashboards. AI configuration is checked on authenticated `/api/health` (manager-only).
 
 ### Recommended monitoring
 

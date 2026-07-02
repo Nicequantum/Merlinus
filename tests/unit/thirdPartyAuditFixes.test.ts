@@ -285,6 +285,40 @@ describe('Third-party audit hardening', () => {
     assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisites'));
   });
 
+  it('openROById warns when encrypted fields fail to decrypt (M2)', () => {
+    const src = readSrc('src/hooks/useRepairOrders.ts');
+    assert.ok(src.includes('piiDecryptWarnings'));
+    assert.ok(src.includes('toast.warning'));
+    assert.ok(src.includes('Some encrypted fields could not be read'));
+    const mapper = readSrc('src/lib/roMapper.ts');
+    assert.ok(mapper.includes('piiDecryptWarnings'));
+    assert.ok(mapper.includes('appendPiiDecryptWarning'));
+    assert.ok(mapper.includes('readSensitiveTextTolerant'));
+    assert.ok(mapper.includes('readOptionalSensitiveTextTolerant'));
+  });
+
+  it('previous RO pagination handles compliance 403 like today list (M9)', () => {
+    const src = readSrc('src/hooks/repairOrders/useROList.ts');
+    const loadPreviousBlock = src.slice(src.indexOf('const loadPreviousPage'));
+    assert.ok(loadPreviousBlock.includes('isComplianceBlockedError'));
+    assert.ok(loadPreviousBlock.includes('onComplianceRequiredRef.current?.()'));
+  });
+
+  it('initial RO list load relies on listError UI instead of duplicate toast (M4)', () => {
+    const src = readSrc('src/hooks/repairOrders/useROList.ts');
+    const effectBlock = src.slice(src.indexOf('useEffect(() => {'));
+    assert.equal(effectBlock.includes("toast.error('Could not load repair orders"), false);
+    assert.ok(src.includes('setListError('));
+    assert.ok(src.includes('void refreshList()'));
+  });
+
+  it('withAuth uses session compliance versions without extra DB lookups (M5)', () => {
+    const src = readSrc('src/lib/apiRoute.ts');
+    assert.ok(src.includes('session.consentVersion'));
+    assert.ok(src.includes('session.legalDisclaimerVersion'));
+    assert.equal(src.includes('prisma.technician.findUnique'), false);
+  });
+
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {
     const shell = readSrc('src/components/BenzTechApp.tsx');
     assert.ok(shell.includes('LoginView'));

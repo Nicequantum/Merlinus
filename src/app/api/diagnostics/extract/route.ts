@@ -6,8 +6,9 @@ import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
 import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
+import { writeDiagnosticExtractAudit } from '@/lib/diagnosticExtractAudit';
 import { logger } from '@/lib/logger';
-import { RATE_LIMITS } from '@/lib/rate-limit';
+import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
 /** Must match DIAGNOSTIC_EXTRACT_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, imagePathnamesSchema);
       if ('error' in parsed) return parsed.error;
 
+      const extractStartedAt = Date.now();
       const pathname =
         extractPathnameFromImageRef(parsed.data.imagePathnames[0]) || parsed.data.imagePathnames[0];
 
@@ -59,9 +61,22 @@ export async function POST(request: Request) {
 
       try {
         const extracted = await extractDiagnosticsFromImage(imageDataUrl);
+        const durationMs = Date.now() - extractStartedAt;
+
+        await writeDiagnosticExtractAudit({
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          pathname,
+          durationMs,
+          extracted,
+          ipAddress: getRequestIp(request),
+        });
+
         logger.info('diagnostics.extract.success', {
           technicianId: session.technicianId,
           codeCount: extracted.codes?.length ?? 0,
+          faultCodeCount: extracted.faultCodes?.length ?? 0,
+          durationMs,
         });
         return extracted;
       } catch (error) {

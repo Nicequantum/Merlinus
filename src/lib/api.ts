@@ -30,6 +30,7 @@ import {
   parseRetryAfterMs,
   sleep,
 } from '@/lib/networkErrors';
+import { isRequestAborted } from '@/lib/requestAbort';
 import {
   DIAGNOSTIC_EXTRACT_CLIENT_MS,
   RO_EXTRACT_CLIENT_MS,
@@ -62,12 +63,19 @@ export class ApiError extends Error {
 async function fetchWithNetworkRetry(
   path: string,
   init: RequestInit,
-  timeoutMs?: number
+  timeoutMs?: number,
+  externalSignal?: AbortSignal
 ): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= NETWORK_RETRY_MAX_ATTEMPTS; attempt++) {
+    if (externalSignal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    externalSignal?.addEventListener('abort', onExternalAbort);
     const timer =
       timeoutMs && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
 
@@ -90,7 +98,10 @@ async function fetchWithNetworkRetry(
 
       return res;
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isRequestAborted(error)) {
+        if (externalSignal?.aborted) {
+          throw error;
+        }
         throw new ApiError(`Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s`, 408);
       }
 
@@ -101,6 +112,7 @@ async function fetchWithNetworkRetry(
 
       await sleep(networkRetryDelayMs(attempt));
     } finally {
+      externalSignal?.removeEventListener('abort', onExternalAbort);
       if (timer) clearTimeout(timer);
     }
   }
@@ -108,8 +120,11 @@ async function fetchWithNetworkRetry(
   throw lastError;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  const { timeoutMs, ...fetchOptions } = options || {};
+async function apiFetch<T>(
+  path: string,
+  options?: RequestInit & { timeoutMs?: number; signal?: AbortSignal }
+): Promise<T> {
+  const { timeoutMs, signal, ...fetchOptions } = options || {};
   const res = await fetchWithNetworkRetry(
     path,
     {
@@ -120,7 +135,8 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
       },
       credentials: 'include',
     },
-    timeoutMs
+    timeoutMs,
+    signal
   );
 
   if (!res.ok) {
@@ -340,11 +356,12 @@ export const api = {
       timeoutMs: RO_EXTRACT_CLIENT_MS,
     }),
 
-  extractDiagnostics: (imagePathname: string) =>
+  extractDiagnostics: (imagePathname: string, options?: { signal?: AbortSignal }) =>
     apiFetch<ExtractedData>('/api/diagnostics/extract', {
       method: 'POST',
       body: JSON.stringify({ imagePathnames: [imagePathname] }),
       timeoutMs: DIAGNOSTIC_EXTRACT_CLIENT_MS,
+      signal: options?.signal,
     }),
 
   generateStory: (roId: string, lineId: string) =>

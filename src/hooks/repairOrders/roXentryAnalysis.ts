@@ -1,5 +1,6 @@
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
+import { isRequestAborted } from '@/lib/requestAbort';
 import { formatScanApiError } from '@/lib/scanPipeline';
 import { runDiagnosticOCR } from '@/services/ocr';
 import type { ExtractedData, ImageAttachment } from '@/types';
@@ -23,19 +24,29 @@ function hasDiagnosticContent(data: Partial<ExtractedData>): boolean {
 export async function analyzeXentryImage(
   file: File,
   attachment: ImageAttachment,
-  onProgress: (p: number) => void
+  onProgress: (p: number) => void,
+  options?: { signal?: AbortSignal }
 ): Promise<{ text: string; extracted: Partial<ExtractedData> }> {
+  const signal = options?.signal;
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+  };
+
   let extracted: Partial<ExtractedData> = {};
   let text = '';
 
+  throwIfAborted();
   onProgress(10);
   let extractError: string | null = null;
   try {
-    const grokData = await api.extractDiagnostics(attachment.pathname);
+    const grokData = await api.extractDiagnostics(attachment.pathname, { signal });
     extracted = mergeExtracted(emptyExtractedData(), grokData);
     text = formatExtractionAsOcrText(grokData);
     onProgress(50);
   } catch (err) {
+    if (isRequestAborted(err)) throw err;
     extractError = formatScanApiError(err);
     clientLog.error('xentry.extract_api_failed', {
       message: extractError,
@@ -49,9 +60,12 @@ export async function analyzeXentryImage(
     return { text: text.trim() || formatExtractionAsOcrText(extracted), extracted };
   }
 
+  throwIfAborted();
   try {
-    const ocrText = await runDiagnosticOCR(file, (p) =>
-      onProgress(text ? 50 + Math.round(p * 0.45) : Math.round(p * 0.9))
+    const ocrText = await runDiagnosticOCR(
+      file,
+      (p) => onProgress(text ? 50 + Math.round(p * 0.45) : Math.round(p * 0.9)),
+      { signal }
     );
     if (ocrText.trim()) {
       const ocrExtracted = parseDiagnosticExtraction(ocrText);
@@ -59,6 +73,7 @@ export async function analyzeXentryImage(
       text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
     }
   } catch (err) {
+    if (isRequestAborted(err)) throw err;
     clientLog.error('xentry.ocr_failed', {
       pathname: attachment.pathname,
       error: err instanceof Error ? err.message : 'unknown',

@@ -22,6 +22,8 @@ import { logger } from './logger';
  * - Rate-limited login endpoint
  *
  * Planned Phase 2: corporate SSO (e.g. Entra ID) and MFA — track in enterprise roadmap.
+ *
+ * See also: src/lib/encryption.ts (L4 key rotation accepted risk) and docs/Reencryption-Runbook.md.
  */
 
 export const SESSION_COOKIE = 'benz_tech_session';

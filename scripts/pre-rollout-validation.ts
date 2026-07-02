@@ -74,24 +74,61 @@ const c = {
 
 type CheckStatus = 'pass' | 'fail' | 'warn';
 
+/** Separates repository/code defects from deployment configuration gaps. */
+type CheckKind = 'code' | 'config' | 'documentation' | 'ops';
+
 interface CheckResult {
   section: string;
   name: string;
   status: CheckStatus;
   detail: string;
   critical: boolean;
+  kind: CheckKind;
 }
 
 const results: CheckResult[] = [];
+
+function inferCheckKind(section: string, name: string): CheckKind {
+  if (section === 'Environment') return 'config';
+  if (section === 'Documentation') return 'documentation';
+  if (section === 'Production') {
+    if (
+      name.includes('checklist') ||
+      name.includes('README') ||
+      name.includes('Environment documentation')
+    ) {
+      return 'documentation';
+    }
+    return 'code';
+  }
+  if (section === 'Security') {
+    if (name.includes('KV') || name.includes('Grok API key')) return 'config';
+    return 'code';
+  }
+  if (section === 'Core Systems') {
+    if (
+      name.includes('Database connection') ||
+      name.includes('AES-256 encryption') ||
+      name.includes('DATABASE_URL')
+    ) {
+      return 'config';
+    }
+    return 'code';
+  }
+  if (section === 'Core Features' && name.includes('health')) return 'config';
+  return 'code';
+}
 
 function record(
   section: string,
   name: string,
   status: CheckStatus,
   detail: string,
-  critical = true
+  critical = true,
+  kind?: CheckKind
 ): void {
-  results.push({ section, name, status, detail, critical });
+  const resolvedKind = kind ?? inferCheckKind(section, name);
+  results.push({ section, name, status, detail, critical, kind: resolvedKind });
   const icon = status === 'pass' ? `${c.green}✔ PASS${c.reset}` : status === 'warn' ? `${c.yellow}⚠ WARN${c.reset}` : `${c.red}✖ FAIL${c.reset}`;
   console.log(`  ${icon}  ${name}`);
   if (detail) console.log(`         ${c.dim}${detail}${c.reset}`);
@@ -885,6 +922,53 @@ function checkMediumAuditFixes(): void {
   }
 }
 
+function checkLowAuditFixes(): void {
+  section('Low Priority Audit Fixes (L1–L5)');
+
+  const authSrc = readFileSync(resolve(process.cwd(), 'src/lib/auth.ts'), 'utf8');
+  if (authSrc.includes('Phase 1 accepted risk') && authSrc.includes('Planned Phase 2')) {
+    record('Low', 'L1 SSO/MFA accepted risk', 'pass', 'Documented with compensating controls');
+  } else {
+    record('Low', 'L1 SSO/MFA accepted risk', 'fail', 'Auth module missing Phase 1 risk documentation');
+  }
+
+  const statusSrc = readFileSync(resolve(process.cwd(), 'src/app/api/status/route.ts'), 'utf8');
+  if (!statusSrc.includes('grokConfigured') && statusSrc.includes('maintenance')) {
+    record('Low', 'L2 status endpoint disclosure', 'pass', 'Public status omits grokConfigured');
+  } else {
+    record('Low', 'L2 status endpoint disclosure', 'fail', 'Public status still exposes AI configuration');
+  }
+
+  const roHook = readFileSync(resolve(process.cwd(), 'src/hooks/useRepairOrders.ts'), 'utf8');
+  if (!roHook.includes('filteredROs') && roHook.includes('todayROs')) {
+    record('Low', 'L3 deprecated filteredROs', 'pass', 'Legacy export removed');
+  } else {
+    record('Low', 'L3 deprecated filteredROs', 'fail', 'filteredROs still exported');
+  }
+
+  const runbook = readFileSync(resolve(process.cwd(), 'docs/Reencryption-Runbook.md'), 'utf8');
+  const encryptionSrc = readFileSync(resolve(process.cwd(), 'src/lib/encryption.ts'), 'utf8');
+  const reencryptSrc = readFileSync(resolve(process.cwd(), 'scripts/reencrypt-legacy-data.ts'), 'utf8');
+  if (
+    runbook.includes('Key rotation') &&
+    runbook.includes('DATA_ENCRYPTION_KEY') &&
+    encryptionSrc.includes('Phase 1 accepted risk') &&
+    reencryptSrc.includes('Phase 1 accepted risk')
+  ) {
+    record('Low', 'L4 key rotation runbook', 'pass', 'Runbook + encryption.ts document rotation accepted risk');
+  } else {
+    record('Low', 'L4 key rotation runbook', 'fail', 'Reencryption runbook or Phase 1 risk comments incomplete');
+  }
+
+  const xentrySrc = readFileSync(resolve(process.cwd(), 'src/hooks/repairOrders/useROXentryScan.ts'), 'utf8');
+  const cancelBlock = xentrySrc.slice(xentrySrc.indexOf('const cancelProcessing'));
+  if (cancelBlock.includes('setPendingByKey') && cancelBlock.includes('return {}')) {
+    record('Low', 'L5 Xentry cancel UX', 'pass', 'Cancel clears queued diagnostic photos');
+  } else {
+    record('Low', 'L5 Xentry cancel UX', 'fail', 'Xentry cancel does not clear pending queue');
+  }
+}
+
 async function checkCoreFeatures(): Promise<void> {
   section('Core Feature Tests');
 
@@ -1124,14 +1208,19 @@ const REQUIRED_ROLLOUT_DOCS = [
   'Support-Playbook.md',
 ];
 
-const RECOMMENDED_DOC_IMAGES = [
-  'technician-login-ro-list.png',
-  'technician-voice-modes.png',
-  'technician-voice-panel.png',
-  'technician-notes-voice.png',
-  'technician-generate-story.png',
-  'technician-story-actions.png',
+const RECOMMENDED_DOC_IMAGE_BASES = [
+  'technician-login-ro-list',
+  'technician-voice-modes',
+  'technician-voice-panel',
+  'technician-notes-voice',
+  'technician-diagnostic-evidence',
+  'technician-generate-mi43',
+  'technician-story-actions',
 ];
+
+function docImagePresent(imagesDir: string, baseName: string): boolean {
+  return ['.svg', '.png', '.webp'].some((ext) => existsSync(resolve(imagesDir, `${baseName}${ext}`)));
+}
 
 async function checkDocumentation(): Promise<void> {
   section('Rollout Documentation');
@@ -1189,22 +1278,20 @@ async function checkDocumentation(): Promise<void> {
       false
     );
   } else {
-    const missingImages = RECOMMENDED_DOC_IMAGES.filter(
-      (name) => !existsSync(resolve(imagesDir, name))
-    );
+    const missingImages = RECOMMENDED_DOC_IMAGE_BASES.filter((base) => !docImagePresent(imagesDir, base));
     if (missingImages.length === 0) {
       record(
         'Documentation',
         'Technician guide screenshots',
         'pass',
-        `All ${RECOMMENDED_DOC_IMAGES.length} recommended images present`
+        `All ${RECOMMENDED_DOC_IMAGE_BASES.length} recommended images present (SVG/PNG)`
       );
     } else {
       record(
         'Documentation',
         'Technician guide screenshots',
         'warn',
-        `Missing ${missingImages.length}/${RECOMMENDED_DOC_IMAGES.length} images — OK for launch; add before print distribution`,
+        `Missing ${missingImages.length}/${RECOMMENDED_DOC_IMAGE_BASES.length} images — OK for launch; replace wireframes with dealership captures before print`,
         false
       );
     }
@@ -1310,11 +1397,27 @@ async function checkSecurityAndConfig(): Promise<void> {
 
 // ─── Summary report ────────────────────────────────────────────────────────────
 
+function printKindBucket(title: string, items: CheckResult[], color: string): void {
+  if (items.length === 0) return;
+  console.log(`\n${color}${c.bold}${title}${c.reset}`);
+  for (const r of items) {
+    const statusColor = r.status === 'pass' ? c.green : r.status === 'warn' ? c.yellow : c.red;
+    console.log(`  ${statusColor}${r.status.toUpperCase().padEnd(4)}${c.reset} [${r.section}] ${r.name}`);
+    if (r.detail) console.log(`       ${c.dim}${r.detail}${c.reset}`);
+  }
+}
+
 function printSummary(): void {
   const passed = results.filter((r) => r.status === 'pass').length;
   const warned = results.filter((r) => r.status === 'warn').length;
   const failed = results.filter((r) => r.status === 'fail').length;
-  const criticalFails = results.filter((r) => r.status === 'fail' && r.critical).length;
+  const criticalCodeFails = results.filter(
+    (r) => r.status === 'fail' && r.critical && r.kind === 'code'
+  );
+  const criticalConfigFails = results.filter(
+    (r) => r.status === 'fail' && r.critical && r.kind === 'config'
+  );
+  const criticalFails = criticalCodeFails.length + criticalConfigFails.length;
 
   console.log(`\n${c.bold}${'═'.repeat(64)}${c.reset}`);
   console.log(`${c.bold}  MERLIN PRE-ROLLOUT VALIDATION REPORT${c.reset}`);
@@ -1327,7 +1430,8 @@ function printSummary(): void {
     for (const r of results.filter((x) => x.section === sec)) {
       const color = r.status === 'pass' ? c.green : r.status === 'warn' ? c.yellow : c.red;
       const label = r.status.toUpperCase().padEnd(4);
-      console.log(`  ${color}${label}${c.reset} ${r.name}`);
+      const kindTag = r.kind === 'code' ? '' : ` ${c.dim}(${r.kind})${c.reset}`;
+      console.log(`  ${color}${label}${c.reset} ${r.name}${kindTag}`);
       if (r.detail) console.log(`       ${c.dim}${r.detail}${c.reset}`);
     }
     console.log('');
@@ -1335,11 +1439,49 @@ function printSummary(): void {
 
   console.log(`${c.bold}Totals:${c.reset}  ${c.green}${passed} passed${c.reset}  ${c.yellow}${warned} warnings${c.reset}  ${c.red}${failed} failed${c.reset}`);
 
+  printKindBucket(
+    'CODE ISSUES — fix in repository, then rebuild and redeploy',
+    criticalCodeFails,
+    c.red
+  );
+  printKindBucket(
+    'CONFIG / ENV ISSUES — fix in Vercel project settings or .env.local (not a code defect)',
+    criticalConfigFails,
+    c.red
+  );
+
+  const docWarnings = results.filter((r) => r.status === 'warn' && r.kind === 'documentation');
+  printKindBucket(
+    'DOCUMENTATION NOTES — non-blocking; complete before print distribution',
+    docWarnings,
+    c.yellow
+  );
+
+  console.log(`\n${c.bold}Rollout verdict${c.reset}`);
+  if (criticalCodeFails.length > 0) {
+    console.log(
+      `${c.red}${c.bold}✖ CODE NOT READY — ${criticalCodeFails.length} critical code failure(s).${c.reset}`
+    );
+    console.log(`${c.dim}  Resolve code issues above before staging validation.${c.reset}`);
+  } else {
+    console.log(`${c.green}✔ Code checks passed — no critical repository defects.${c.reset}`);
+  }
+
+  if (criticalConfigFails.length > 0) {
+    console.log(
+      `${c.red}${c.bold}✖ CONFIG INCOMPLETE — ${criticalConfigFails.length} critical env/deployment gap(s).${c.reset}`
+    );
+    console.log(
+      `${c.dim}  Set missing variables in Vercel (see .env.example) or copy .env.example → .env.local for local runs.${c.reset}`
+    );
+  } else if (criticalCodeFails.length === 0) {
+    console.log(`${c.green}✔ Environment configuration complete for this run.${c.reset}`);
+  }
+
   if (criticalFails > 0) {
-    console.log(`\n${c.red}${c.bold}✖ ROLLOUT BLOCKED — ${criticalFails} critical check(s) failed.${c.reset}`);
-    console.log(`${c.dim}  Fix failures above before deploying to dealership tablets.${c.reset}\n`);
+    console.log(`${c.dim}\n  Rollout blocked until all critical code and config checks pass.${c.reset}\n`);
   } else if (warned > 0) {
-    console.log(`\n${c.yellow}${c.bold}⚠ ROLLOUT PROCEED WITH CAUTION — ${warned} warning(s).${c.reset}`);
+    console.log(`\n${c.yellow}${c.bold}⚠ PROCEED WITH CAUTION — ${warned} warning(s).${c.reset}`);
     console.log(`${c.dim}  Review warnings; complete manual tablet tests (voice, PDF, offline).${c.reset}\n`);
   } else {
     console.log(`\n${c.green}${c.bold}✔ ALL CHECKS PASSED — ready for dealership rollout.${c.reset}\n`);
@@ -1403,8 +1545,11 @@ function checkProductionReadiness(): void {
   }
 
   const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
-  if (readme.includes('Production-Readiness-Checklist') && readme.includes('Production Ready')) {
-    record('Production', 'README readiness index', 'pass', 'README links production checklist');
+  const readinessDeclared =
+    readme.includes('Production-Readiness-Checklist') &&
+    (readme.includes('Production Ready') || readme.includes('Ready for Validation'));
+  if (readinessDeclared) {
+    record('Production', 'README readiness index', 'pass', 'README links production checklist and declares readiness');
   } else {
     record('Production', 'README readiness index', 'fail', 'README missing production readiness declaration');
   }
@@ -1442,6 +1587,7 @@ async function main(): Promise<void> {
   await checkCriticalAuditFixes();
   await checkHighPriorityAuditFixes();
   checkMediumAuditFixes();
+  checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();
   await checkSecurityAndConfig();

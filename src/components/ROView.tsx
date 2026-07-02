@@ -6,7 +6,7 @@ import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
-import type { ImageAttachment, PendingImage, RepairOrder } from '../types';
+import type { ExtractedData, ImageAttachment, PendingImage, RepairOrder } from '../types';
 
 interface ROViewProps {
   ro: RepairOrder;
@@ -15,6 +15,7 @@ interface ROViewProps {
   xentryStatusMessage: string;
   xentrySavedImages: ImageAttachment[];
   xentryPendingImages: PendingImage[];
+  xentryExtractedData?: ExtractedData;
   onDone: () => void;
   onUpdateRONumber: (value: string) => void;
   onUpdateVehicle: (field: 'vin' | 'year' | 'make' | 'model' | 'engine' | 'mileageIn' | 'mileageOut', value: string) => void;
@@ -45,6 +46,7 @@ export function ROView({
   xentryStatusMessage,
   xentrySavedImages,
   xentryPendingImages,
+  xentryExtractedData,
   onDone,
   onUpdateRONumber,
   onUpdateVehicle,
@@ -276,7 +278,7 @@ export function ROView({
           isProcessing={isProcessingOCR}
           ocrProgress={ocrProgress}
           statusMessage={xentryStatusMessage}
-          extractedData={ro.repairLines[0]?.extractedData}
+          extractedData={xentryExtractedData}
           onCapturePhoto={onCaptureRoXentryPhoto}
           onAddFromGallery={onAddRoXentryFromGallery}
           onProcessImages={onProcessRoXentryImages}

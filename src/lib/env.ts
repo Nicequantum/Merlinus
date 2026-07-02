@@ -64,7 +64,7 @@ export function getBuildDate(): string {
 }
 
 export function getAppVersion(): string {
-  return process.env.npm_package_version || '2.0.0';
+  return process.env.npm_package_version || '2.1.0';
 }
 
 export function validateEnvironment(options: { throwOnError?: boolean; production?: boolean } = {}): EnvironmentValidationResult {

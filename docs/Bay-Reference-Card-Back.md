@@ -38,11 +38,12 @@
 ║  STORY ACTIONS                                                   ║
 ║  ─────────────                                                   ║
 ║                                                                  ║
-║  Review with AI     Check story before CDK submit                ║
+║  Audit Story        MI quality score before certification        ║
+║  Review with AI     Coaching feedback on clarity                 ║
 ║  Edit the text      Fix codes & wording — you own accuracy         ║
 ║  Regenerate         Notes changed a lot? Get a fresh draft       ║
-║  Copy for CDK       Paste into DMS                               ║
-║  Download PDF       Branded PDF for records                      ║
+║  Copy for CDK       Paste into DMS (after certification)         ║
+║  Export PDF         Branded PDF for records                      ║
 ║                                                                  ║
 ║  Merlin never invents tests — document what you actually did.    ║
 ║                                                                  ║
@@ -68,7 +69,7 @@
 ║  Red audit warning?  STOP · tell Service Manager immediately     ║
 ║                                                                  ║
 ║  ─────────────────────────────────────────────────────────────   ║
-║  [DEALERSHIP NAME]  ·  Merlin v3.0.1  ·  [MERLIN URL]           ║
+║  [DEALERSHIP NAME]  ·  Merlin v2.1.0  ·  [MERLIN URL]           ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
@@ -107,11 +108,12 @@
 
 | Button | Use when |
 |--------|----------|
-| **Review with AI** | Check story before CDK |
+| **Audit Story** | MI score before certification |
+| **Review with AI** | Coaching feedback on clarity |
 | **Edit the text** | Fix codes — you own accuracy |
 | **Regenerate** | Notes changed significantly |
 | **Copy for CDK** | Paste into DMS |
-| **Download PDF** | Branded export for records |
+| **Export PDF** | Branded export for records |
 
 *Merlin never invents tests — document what you actually did.*
 
@@ -137,7 +139,7 @@ Link: `[MERLIN URL or hosted PDF]`
 
 ---
 
-*[DEALERSHIP NAME] · Merlin v3.0.1 · [MERLIN URL]*
+*[DEALERSHIP NAME] · Merlin v2.1.0 · [MERLIN URL]*
 
 ---
 
