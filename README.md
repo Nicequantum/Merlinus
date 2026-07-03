@@ -100,6 +100,8 @@ Production rollout: [Deployment Checklist & Operations](./docs/Deployment-Checkl
 
 Merlinus v3.0.0 completed a full enterprise hardening cycle and pre-rollout validation across **75 automated checks** — architecture, security, audit integrity, shop-floor UX, and production operations.
 
+**Production Hardened & Ready for Deployment** — Production Ready per the [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md).
+
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║           MERLINUS ENTERPRISE AUDIT CERTIFICATE              ║
