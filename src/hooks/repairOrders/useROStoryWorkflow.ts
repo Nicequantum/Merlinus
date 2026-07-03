@@ -292,7 +292,10 @@ export function useROStoryWorkflow(
           toast.success('Audit complete — reopen the repair line to view the score');
           return;
         }
-        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
+          toast.message('Story changed during audit — run Audit Story again.');
+          return;
+        }
 
         const baseline = (quality.scoredAgainstStory ?? storyText).trim();
         const persistedQuality = { ...quality, scoredAgainstStory: baseline };
@@ -384,7 +387,10 @@ export function useROStoryWorkflow(
           toast.success('Review complete — reopen the repair line to view feedback');
           return;
         }
-        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
+          toast.message('Story changed during review — run the review again.');
+          return;
+        }
 
         if (review.scoredAgainstStory?.trim() !== storyText) {
           review.scoredAgainstStory = storyText;

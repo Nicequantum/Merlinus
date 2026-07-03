@@ -37,7 +37,12 @@ import {
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
 import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
-import { readXentryViewState, type XentryTarget } from '@/hooks/repairOrders/xentryDataModel';
+import {
+  readXentryBaseline,
+  readXentryViewState,
+  type XentryTarget,
+} from '@/hooks/repairOrders/xentryDataModel';
+import { countXentryImagesNeedingAnalysis } from '@/lib/xentryAnalysisState';
 import { useROXentryScan } from '@/hooks/repairOrders/useROXentryScan';
 import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPipeline';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
@@ -190,6 +195,7 @@ export function useRepairOrders({
     processPendingScan,
     clearPendingScan,
     cancelScan,
+    removePendingScanPage,
   } = useROScan({
     prepareForScan,
     openScanResultView,
@@ -521,16 +527,22 @@ export function useRepairOrders({
   const buildXentrySection = useCallback(
     (target: XentryTarget) => {
       const viewState = readXentryViewState(currentRO, target);
+      const baseline = currentRO ? readXentryBaseline(currentRO, target) : null;
+      const imagesNeedingAnalysisCount = baseline
+        ? countXentryImagesNeedingAnalysis(baseline.images, baseline.ocrTexts)
+        : 0;
 
       return {
         savedImages: viewState.images,
         pendingImages: xentryScan.getPendingImages(target),
+        imagesNeedingAnalysisCount,
         extractedData: viewState.extracted,
         onCapturePhoto: () => xentryScan.capturePhoto(target),
         onAddFromGallery: () => xentryScan.addFromGallery(target),
         onProcessImages: () => void xentryScan.processPending(target),
         onClearPending: () => xentryScan.clearPending(target),
         onCancelProcessing: () => xentryScan.cancelProcessing(),
+        onDeletePendingImage: (imageId: string) => xentryScan.removePendingImage(target, imageId),
         onDeleteSavedImage:
           target.scope === 'line'
             ? (imageId: string) => void deleteLineXentryImage(target.lineId, imageId)
@@ -792,6 +804,7 @@ export function useRepairOrders({
     processPendingScan,
     clearPendingScan,
     cancelScan,
+    removePendingScanPage,
     createManualRO,
     updateLine,
     updateVehicle,

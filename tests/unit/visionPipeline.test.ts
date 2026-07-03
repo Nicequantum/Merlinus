@@ -49,10 +49,10 @@ describe('Vision pipeline mutex (C1/C4)', () => {
     assert.match(route, /extractStartedAt/);
   });
 
-  it('Xentry batch persists once at end of analysis loop (H2)', () => {
+  it('Xentry auto-saves photos on capture and persists analysis at end (H2)', () => {
     const xentry = readSrc('src/hooks/repairOrders/useROXentryScan.ts');
-    const persistCount = (xentry.match(/await saveROImmediate/g) || []).length;
-    assert.equal(persistCount, 1);
+    assert.match(xentry, /persistAutoSavedImage/);
+    assert.match(xentry, /await saveROImmediate\(persisted/);
     assert.match(xentry, /syncROView/);
   });
 

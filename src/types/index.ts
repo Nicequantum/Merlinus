@@ -21,11 +21,17 @@ export interface ImageAttachment {
   name: string;
 }
 
+export type PendingImageUploadStatus = 'uploading' | 'saved' | 'error';
+
 export interface PendingImage {
   id: string;
   previewUrl: string;
   name: string;
-  file: File;
+  /** Present until blob upload completes; optional when `attachment` is already saved. */
+  file?: File;
+  /** Set after immediate blob upload — survives refresh when backed by ro-scan draft storage. */
+  attachment?: ImageAttachment;
+  uploadStatus?: PendingImageUploadStatus;
 }
 
 export interface RepairLine {

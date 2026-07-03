@@ -28,6 +28,7 @@ interface HomeViewProps {
   onProcessScan: () => void;
   onClearPendingScan: () => void;
   onCancelScan: () => void;
+  onDeletePendingPage?: (imageId: string) => void;
   onCreateManualRO: () => void;
   openingROId: string | null;
   onOpenRO: (ro: RepairOrderSummary) => void;
@@ -58,6 +59,7 @@ export function HomeView({
   onProcessScan,
   onClearPendingScan,
   onCancelScan,
+  onDeletePendingPage,
   onCreateManualRO,
   openingROId,
   onOpenRO,
@@ -93,6 +95,7 @@ export function HomeView({
           onProcessScan={onProcessScan}
           onClearPendingScan={onClearPendingScan}
           onCancelScan={onCancelScan}
+          onDeletePendingPage={onDeletePendingPage}
           onCreateManualRO={onCreateManualRO}
           scanButtonLabel="Scan RO"
         />

@@ -64,11 +64,12 @@ async function fetchWithNetworkRetry(
   path: string,
   init: RequestInit,
   timeoutMs?: number,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  maxRetries: number = NETWORK_RETRY_MAX_ATTEMPTS
 ): Promise<Response> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= NETWORK_RETRY_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (externalSignal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
@@ -88,7 +89,7 @@ async function fetchWithNetworkRetry(
       if (
         !res.ok &&
         isRetriableHttpStatus(res.status) &&
-        attempt < NETWORK_RETRY_MAX_ATTEMPTS
+        attempt < maxRetries
       ) {
         const retryAfterMs =
           res.status === 429 ? parseRetryAfterMs(res.headers.get('Retry-After')) : undefined;
@@ -106,7 +107,7 @@ async function fetchWithNetworkRetry(
       }
 
       lastError = error;
-      if (!isNetworkFailure(error) || attempt === NETWORK_RETRY_MAX_ATTEMPTS) {
+      if (!isNetworkFailure(error) || attempt === maxRetries) {
         throw error;
       }
 
@@ -122,9 +123,9 @@ async function fetchWithNetworkRetry(
 
 async function apiFetch<T>(
   path: string,
-  options?: RequestInit & { timeoutMs?: number; signal?: AbortSignal }
+  options?: RequestInit & { timeoutMs?: number; signal?: AbortSignal; maxRetries?: number }
 ): Promise<T> {
-  const { timeoutMs, signal, ...fetchOptions } = options || {};
+  const { timeoutMs, signal, maxRetries, ...fetchOptions } = options || {};
   const res = await fetchWithNetworkRetry(
     path,
     {
@@ -136,7 +137,8 @@ async function apiFetch<T>(
       credentials: 'include',
     },
     timeoutMs,
-    signal
+    signal,
+    maxRetries
   );
 
   if (!res.ok) {
@@ -373,7 +375,12 @@ export const api = {
   scoreStory: (roId: string, lineId: string, warrantyStory: string) =>
     apiFetch<{ quality: StoryQualityResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/score-story`,
-      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: STORY_SCORE_CLIENT_MS }
+      {
+        method: 'POST',
+        body: JSON.stringify({ warrantyStory }),
+        timeoutMs: STORY_SCORE_CLIENT_MS,
+        maxRetries: 0,
+      }
     ),
 
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>

@@ -1,12 +1,18 @@
 'use client';
 
-import { useCallback, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
+import {
+  clearRoScanDraft,
+  loadRoScanDraft,
+  saveRoScanDraft,
+  type RoScanDraftEntry,
+} from '@/lib/roScanDraftStorage';
 import { formatScanApiError, isStrongGrokExtraction } from '@/lib/scanPipeline';
 import { runFastRoScanOcr, warmupOcrWorker } from '@/services/ocr';
-import type { PendingImage, RepairOrder } from '@/types';
+import type { ImageAttachment, PendingImage, RepairOrder } from '@/types';
 import {
   extractCustomerName,
   extractRoNumberFromText,
@@ -26,7 +32,12 @@ import {
   combineVmiPages,
 } from '@/utils/scanDocumentClassifier';
 import { extractVmiWarrantyInfo, mergeVehicleWarrantyInfo } from '@/utils/vmiExtractor';
-import { uploadRoScanAttachments } from '@/utils/uploadHelpers';
+import {
+  resolvePendingImageFile,
+  uploadFileAsAttachment,
+  uploadRoScanAttachments,
+} from '@/utils/uploadHelpers';
+import { compressImageForRoScan } from '@/utils/imageCompression';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 import {
   type VisionPipelineControls,
@@ -55,10 +66,81 @@ export function useROScan({
   const [pendingROImages, setPendingROImages] = useState<PendingImage[]>([]);
   const scanCancelledRef = useRef(false);
   const scanSessionRef = useRef(0);
+  const discardedPendingIdsRef = useRef<Set<string>>(new Set());
+  const draftRestoredRef = useRef(false);
 
   const clearPendingPreviews = useCallback((images: PendingImage[]) => {
-    images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+    images.forEach((img) => {
+      if (img.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(img.previewUrl);
+      }
+    });
   }, []);
+
+  const syncDraftFromImages = useCallback((images: PendingImage[]) => {
+    const entries: RoScanDraftEntry[] = images
+      .filter((img) => img.attachment && img.uploadStatus === 'saved')
+      .map((img) => ({
+        id: img.id,
+        name: img.name,
+        attachment: img.attachment!,
+      }));
+    saveRoScanDraft(entries);
+  }, []);
+
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    draftRestoredRef.current = true;
+    const draft = loadRoScanDraft();
+    if (draft.length === 0) return;
+    setPendingROImages(
+      draft.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        previewUrl: entry.attachment.url,
+        attachment: entry.attachment,
+        uploadStatus: 'saved' as const,
+      }))
+    );
+    toast.message(`Restored ${draft.length} saved scan page${draft.length === 1 ? '' : 's'} from last session`);
+  }, []);
+
+  const uploadAndSavePendingPage = useCallback(
+    async (pendingId: string, file: File) => {
+      try {
+        const attachment = await uploadFileAsAttachment(file, 'roimg', compressImageForRoScan);
+        if (discardedPendingIdsRef.current.has(pendingId)) {
+          discardedPendingIdsRef.current.delete(pendingId);
+          return;
+        }
+
+        setPendingROImages((prev) => {
+          const next = prev.map((img) =>
+            img.id === pendingId
+              ? { ...img, attachment, uploadStatus: 'saved' as const, file: undefined }
+              : img
+          );
+          syncDraftFromImages(next);
+          return next;
+        });
+      } catch (error) {
+        if (discardedPendingIdsRef.current.has(pendingId)) {
+          discardedPendingIdsRef.current.delete(pendingId);
+          return;
+        }
+        setPendingROImages((prev) =>
+          prev.map((img) =>
+            img.id === pendingId ? { ...img, uploadStatus: 'error' as const } : img
+          )
+        );
+        clientLog.error('ro.scan.auto_save_failed', error);
+        toast.error(
+          error instanceof Error ? error.message : 'Page upload failed — delete and try again.'
+        );
+      }
+    },
+    [syncDraftFromImages]
+  );
 
   const createROFromExtracted = useCallback(
     async (extracted: {
@@ -168,14 +250,42 @@ export function useROScan({
         await prepareForScan();
         if (!isActiveSession()) return;
 
-        roScanPipeline.start('Uploading documents…');
+        const stillUploading = images.some((img) => img.uploadStatus === 'uploading');
+        if (stillUploading) {
+          throw new Error('Wait for all pages to finish saving before processing.');
+        }
+
+        roScanPipeline.start('Preparing documents…');
         setPendingROImages(images);
         roScanPipeline.setProgress(8);
-        roScanPipeline.setStatusMessage(`Uploading ${images.length} page${images.length === 1 ? '' : 's'}…`);
         void warmupOcrWorker().catch((error) => {
           clientLog.warn('OCR worker warmup failed', error);
         });
-        const attachments = await uploadRoScanAttachments(images.map((img) => img.file));
+
+        const attachments: ImageAttachment[] = [];
+        const needsUpload = images.filter((img) => !img.attachment?.pathname);
+        if (needsUpload.length > 0) {
+          roScanPipeline.setStatusMessage(
+            `Uploading ${needsUpload.length} page${needsUpload.length === 1 ? '' : 's'}…`
+          );
+          const uploaded = await uploadRoScanAttachments(
+            needsUpload.map((img) => img.file!).filter(Boolean)
+          );
+          let uploadIndex = 0;
+          for (const img of images) {
+            if (img.attachment?.pathname) {
+              attachments.push(img.attachment);
+            } else {
+              attachments.push(uploaded[uploadIndex]!);
+              uploadIndex += 1;
+            }
+          }
+        } else {
+          roScanPipeline.setStatusMessage('Pages already saved — starting extraction…');
+          for (const img of images) {
+            attachments.push(img.attachment!);
+          }
+        }
         if (!isActiveSession()) return;
 
         const imagePathnames = attachments.map((a) => a.pathname);
@@ -202,7 +312,8 @@ export function useROScan({
 
             let ocrResult;
             try {
-              ocrResult = await runFastRoScanOcr(img.file, (p) => {
+              const ocrFile = await resolvePendingImageFile(img);
+              ocrResult = await runFastRoScanOcr(ocrFile, (p) => {
                 if (!isActiveSession()) return;
                 roScanPipeline.setProgress(Math.round(45 + (i / images.length) * 35 + (p / images.length) * 35));
               });
@@ -332,6 +443,7 @@ export function useROScan({
           if (createdSuccessfully) {
             clearPendingPreviews(images);
             setPendingROImages([]);
+            clearRoScanDraft();
           } else {
             scanInFlightRef.current = false;
           }
@@ -366,19 +478,44 @@ export function useROScan({
           previewUrl: URL.createObjectURL(file),
           name: file.name || `page-${baseIndex + i + 1}.jpg`,
           file,
+          uploadStatus: 'uploading' as const,
         }));
 
         setPendingROImages((prev) => [...prev, ...newImages]);
         const total = baseIndex + newImages.length;
         toast.success(
-          `Added ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total). Tap Process RO when ready.`
+          `Saving ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total)…`
         );
+
+        for (const img of newImages) {
+          if (img.file) {
+            void uploadAndSavePendingPage(img.id, img.file);
+          }
+        }
       } catch (error) {
         clientLog.error('Scan file preparation failed', error);
         toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
       }
     },
-    [pendingROImages.length]
+    [pendingROImages.length, uploadAndSavePendingPage]
+  );
+
+  const removePendingScanPage = useCallback(
+    (imageId: string) => {
+      setPendingROImages((prev) => {
+        const img = prev.find((p) => p.id === imageId);
+        if (!img) return prev;
+        if (img.uploadStatus === 'uploading') {
+          discardedPendingIdsRef.current.add(imageId);
+        }
+        clearPendingPreviews([img]);
+        const next = prev.filter((p) => p.id !== imageId);
+        syncDraftFromImages(next);
+        return next;
+      });
+      toast.message('Scan page removed');
+    },
+    [clearPendingPreviews, syncDraftFromImages]
   );
 
   const scanRO = useCallback(() => {
@@ -415,13 +552,23 @@ export function useROScan({
       toast.message('Add at least one page before processing.');
       return;
     }
+    if (pendingROImages.some((img) => img.uploadStatus === 'uploading')) {
+      toast.message('Wait for all pages to finish saving before processing.');
+      return;
+    }
     const snapshot = [...pendingROImages];
     await processScanImages(snapshot);
   }, [pendingROImages, processScanImages]);
 
   const clearPendingScan = useCallback(() => {
+    pendingROImages.forEach((img) => {
+      if (img.uploadStatus === 'uploading') {
+        discardedPendingIdsRef.current.add(img.id);
+      }
+    });
     clearPendingPreviews(pendingROImages);
     setPendingROImages([]);
+    clearRoScanDraft();
     toast.message('Scan pages cleared');
   }, [clearPendingPreviews, pendingROImages]);
 
@@ -429,8 +576,14 @@ export function useROScan({
     scanSessionRef.current += 1;
     scanCancelledRef.current = true;
     scanInFlightRef.current = false;
+    pendingROImages.forEach((img) => {
+      if (img.uploadStatus === 'uploading') {
+        discardedPendingIdsRef.current.add(img.id);
+      }
+    });
     clearPendingPreviews(pendingROImages);
     setPendingROImages([]);
+    clearRoScanDraft();
     roScanPipeline.finish();
     toast.message('Scan cancelled');
   }, [clearPendingPreviews, pendingROImages, roScanPipeline]);
@@ -443,6 +596,7 @@ export function useROScan({
     processPendingScan,
     clearPendingScan,
     cancelScan,
+    removePendingScanPage,
     createROFromText,
   };
 }

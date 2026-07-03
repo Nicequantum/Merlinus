@@ -125,11 +125,11 @@ describe('Xentry data model (M1/M3)', () => {
     assert.equal(src.includes('xentryImages: images,\n            xentryOcrTexts: ocrTexts'), false);
   });
 
-  it('Xentry cancel clears all pending queues (L5)', () => {
+  it('Xentry cancel aborts in-flight analysis without clearing auto-saved photos (L5)', () => {
     const src = readSrc('src/hooks/repairOrders/useROXentryScan.ts');
     const block = src.slice(src.indexOf('const cancelProcessing'));
-    assert.ok(block.includes('setPendingByKey'));
-    assert.ok(block.includes('return {}'));
+    assert.ok(block.includes('abortControllerRef'));
+    assert.equal(block.includes('return {}'), false);
   });
 
   it('deleteROXentryImage updates RO media and line-1 extracted only (M1)', () => {

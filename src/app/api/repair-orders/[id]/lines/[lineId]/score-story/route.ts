@@ -16,7 +16,7 @@ import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_SCORE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
-export const maxDuration = 45;
+export const maxDuration = 100;
 
 export async function POST(
   request: Request,

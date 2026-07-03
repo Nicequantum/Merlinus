@@ -1,4 +1,5 @@
 import { Camera, FolderOpen, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { DiagnosticPhotoGrid } from '@/components/DiagnosticPhotoGrid';
 import type { PendingImage } from '@/types';
 
 interface ScanROSectionProps {
@@ -11,6 +12,7 @@ interface ScanROSectionProps {
   onProcessScan: () => void;
   onClearPendingScan: () => void;
   onCancelScan: () => void;
+  onDeletePendingPage?: (imageId: string) => void;
   onCreateManualRO: () => void;
   scanButtonLabel?: string;
   compact?: boolean;
@@ -26,6 +28,7 @@ export function ScanROSection({
   onProcessScan,
   onClearPendingScan,
   onCancelScan,
+  onDeletePendingPage,
   onCreateManualRO,
   scanButtonLabel = 'Scan RO',
   compact = false,
@@ -33,6 +36,8 @@ export function ScanROSection({
   const buttonHeight = compact ? 'h-11' : 'h-13';
   const buttonText = compact ? 'text-xs' : 'text-sm';
   const hasPending = pendingROImages.length > 0;
+  const stillUploading = pendingROImages.some((img) => img.uploadStatus === 'uploading');
+  const canProcess = hasPending && !stillUploading;
 
   return (
     <div className="mb-5">
@@ -76,7 +81,7 @@ export function ScanROSection({
         </div>
       )}
 
-      {hasPending && !isProcessingOCR && (
+      {canProcess && !isProcessingOCR && (
         <div className="flex gap-2 mb-3">
           <button
             onClick={onProcessScan}
@@ -116,27 +121,22 @@ export function ScanROSection({
           <div className="benz-section-title mb-3">
             {isProcessingOCR
               ? `Processing ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'}`
-              : `Ready — ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'} captured`}
+              : stillUploading
+                ? `Saving — ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'}`
+                : `Ready — ${pendingROImages.length} page${pendingROImages.length === 1 ? '' : 's'} saved`}
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            {pendingROImages.map((img) => (
-              <div key={img.id} className="relative rounded-benz overflow-hidden border border-[var(--benz-border)]">
-                <img src={img.previewUrl} className="w-full h-20 object-cover" alt={img.name} />
-                {isProcessingOCR && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <Loader2 size={16} className="animate-spin text-white" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <DiagnosticPhotoGrid
+            images={pendingROImages}
+            isProcessing={isProcessingOCR}
+            onDeleteImage={onDeletePendingPage}
+          />
         </div>
       )}
 
       {!isProcessingOCR && !hasPending && (
         <p className="text-center benz-hint -mt-1 mb-2 px-2">
-          Capture each RO page (usually 3–5). Use even lighting and avoid shadows on colored paper. Add from Gallery for PDFs.
-          Tap Process RO when all pages are captured.
+          Capture each RO page (usually 3–5). Each page saves immediately. Use even lighting and avoid shadows on
+          colored paper. Add from Gallery for PDFs. Tap Process RO when all pages are captured.
         </p>
       )}
     </div>

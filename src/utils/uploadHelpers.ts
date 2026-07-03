@@ -79,3 +79,24 @@ export async function uploadRoScanAttachments(files: File[]): Promise<ImageAttac
     uploadFileAsAttachment(file, 'roimg', compressImageForRoScan)
   );
 }
+
+/** Fetch a persisted blob as a File for on-device OCR when the original capture File is gone. */
+export async function fetchImageAttachmentAsFile(attachment: ImageAttachment): Promise<File> {
+  const response = await fetch(attachment.url);
+  if (!response.ok) {
+    throw new Error(`Could not load saved image "${attachment.name}"`);
+  }
+  const blob = await response.blob();
+  const type = blob.type || 'image/jpeg';
+  return new File([blob], attachment.name || 'diagnostic.jpg', { type });
+}
+
+/** Resolve a pending scan/diagnostic image to a File for OCR — uses cache or blob URL. */
+export async function resolvePendingImageFile(img: {
+  file?: File;
+  attachment?: ImageAttachment;
+}): Promise<File> {
+  if (img.file) return img.file;
+  if (img.attachment) return fetchImageAttachmentAsFile(img.attachment);
+  throw new Error('Image file is missing — delete and recapture the photo.');
+}

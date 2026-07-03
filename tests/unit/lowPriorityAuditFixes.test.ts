@@ -47,12 +47,13 @@ describe('Low priority audit fixes (L1–L5)', () => {
     assert.ok(existsSync(resolve(root, 'scripts/reencrypt-legacy-data.ts')));
   });
 
-  it('L5: Xentry cancel clears queued photos like RO scan cancel', () => {
+  it('L5: Xentry cancel aborts analysis without wiping auto-saved photos', () => {
     const xentry = readSrc('src/hooks/repairOrders/useROXentryScan.ts');
     const scan = readSrc('src/hooks/repairOrders/useROScan.ts');
     const cancelBlock = xentry.slice(xentry.indexOf('const cancelProcessing'));
-    assert.ok(cancelBlock.includes('setPendingByKey'));
-    assert.ok(cancelBlock.includes('clearPendingPreviews'));
+    assert.ok(cancelBlock.includes('abortControllerRef'));
+    assert.ok(cancelBlock.includes('Diagnostic processing cancelled'));
+    assert.equal(cancelBlock.includes('setPendingByKey'), false);
     assert.ok(scan.includes('setPendingROImages([])'));
   });
 

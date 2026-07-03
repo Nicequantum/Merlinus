@@ -15,6 +15,7 @@ interface ROViewProps {
   xentryStatusMessage: string;
   xentrySavedImages: ImageAttachment[];
   xentryPendingImages: PendingImage[];
+  xentryImagesNeedingAnalysisCount: number;
   xentryExtractedData?: ExtractedData;
   onDone: () => void;
   onUpdateRONumber: (value: string) => void;
@@ -29,6 +30,7 @@ interface ROViewProps {
   onProcessRoXentryImages: () => void;
   onClearPendingRoXentry: () => void;
   onCancelRoXentryProcessing: () => void;
+  onDeletePendingRoXentryImage?: (imageId: string) => void;
   onDeleteROXentryImage: (imageId: string) => void;
   onAddRepairLine: () => void;
   onOpenLine: (lineId: string) => void;
@@ -46,6 +48,7 @@ export function ROView({
   xentryStatusMessage,
   xentrySavedImages,
   xentryPendingImages,
+  xentryImagesNeedingAnalysisCount,
   xentryExtractedData,
   onDone,
   onUpdateRONumber,
@@ -60,6 +63,7 @@ export function ROView({
   onProcessRoXentryImages,
   onClearPendingRoXentry,
   onCancelRoXentryProcessing,
+  onDeletePendingRoXentryImage,
   onDeleteROXentryImage,
   onAddRepairLine,
   onOpenLine,
@@ -275,6 +279,7 @@ export function ROView({
         <XentryDiagnosticSection
           savedImages={xentrySavedImages}
           pendingImages={xentryPendingImages}
+          imagesNeedingAnalysisCount={xentryImagesNeedingAnalysisCount}
           isProcessing={isProcessingOCR}
           ocrProgress={ocrProgress}
           statusMessage={xentryStatusMessage}
@@ -284,6 +289,7 @@ export function ROView({
           onProcessImages={onProcessRoXentryImages}
           onClearPending={onClearPendingRoXentry}
           onCancelProcessing={onCancelRoXentryProcessing}
+          onDeletePendingImage={onDeletePendingRoXentryImage}
           onDeleteSavedImage={onDeleteROXentryImage}
         />
       </div>

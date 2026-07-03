@@ -74,12 +74,14 @@ interface LineViewProps {
   onUpdateLine: (updates: Partial<RepairLine>) => void;
   xentrySavedImages: ImageAttachment[];
   xentryPendingImages: PendingImage[];
+  xentryImagesNeedingAnalysisCount: number;
   xentryStatusMessage: string;
   onCaptureXentryPhoto: () => void;
   onAddXentryFromGallery: () => void;
   onProcessXentryImages: () => void;
   onClearPendingXentry: () => void;
   onCancelXentryProcessing: () => void;
+  onDeletePendingXentryImage?: (imageId: string) => void;
   onDeleteXentryImage: (imageId: string) => void;
   onGenerateStory: () => void;
   onScoreStory: (storyText?: string) => void | Promise<void>;
@@ -111,12 +113,14 @@ export function LineView({
   onUpdateLine,
   xentrySavedImages,
   xentryPendingImages,
+  xentryImagesNeedingAnalysisCount,
   xentryStatusMessage,
   onCaptureXentryPhoto,
   onAddXentryFromGallery,
   onProcessXentryImages,
   onClearPendingXentry,
   onCancelXentryProcessing,
+  onDeletePendingXentryImage,
   onDeleteXentryImage,
   onGenerateStory,
   onScoreStory,
@@ -280,9 +284,9 @@ export function LineView({
 
         <XentryDiagnosticSection
           title="Diagnostic Evidence"
-          hint="Capture Xentry screens, fault codes, guided tests, and voltmeter readings. Queue multiple photos, then process them together for story generation."
           savedImages={xentrySavedImages}
           pendingImages={xentryPendingImages}
+          imagesNeedingAnalysisCount={xentryImagesNeedingAnalysisCount}
           isProcessing={isProcessingOCR}
           ocrProgress={ocrProgress}
           statusMessage={xentryStatusMessage}
@@ -292,6 +296,7 @@ export function LineView({
           onProcessImages={onProcessXentryImages}
           onClearPending={onClearPendingXentry}
           onCancelProcessing={onCancelXentryProcessing}
+          onDeletePendingImage={onDeletePendingXentryImage}
           onDeleteSavedImage={onDeleteXentryImage}
         />
 

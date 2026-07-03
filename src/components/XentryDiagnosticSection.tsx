@@ -1,6 +1,7 @@
 'use client';
 
 import { Camera, FolderOpen, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { DiagnosticPhotoGrid } from '@/components/DiagnosticPhotoGrid';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { XentryImageGallery } from '@/components/XentryImageGallery';
 import type { ExtractedData, ImageAttachment, PendingImage } from '@/types';
@@ -10,6 +11,7 @@ interface XentryDiagnosticSectionProps {
   hint?: string;
   savedImages: ImageAttachment[];
   pendingImages: PendingImage[];
+  imagesNeedingAnalysisCount: number;
   isProcessing: boolean;
   ocrProgress: number;
   statusMessage: string;
@@ -19,14 +21,16 @@ interface XentryDiagnosticSectionProps {
   onProcessImages: () => void;
   onClearPending: () => void;
   onCancelProcessing: () => void;
+  onDeletePendingImage?: (imageId: string) => void;
   onDeleteSavedImage?: (imageId: string) => void;
 }
 
 export function XentryDiagnosticSection({
   title = 'XENTRY / Diagnostic Images',
-  hint = 'Capture Quick Test screens, fault codes, guided tests, voltmeter readings, and wiring diagrams. Queue multiple photos, then process them together.',
+  hint = 'Capture Quick Test screens, fault codes, guided tests, voltmeter readings, and wiring diagrams. Each photo saves immediately — tap Process when ready to run AI extraction.',
   savedImages,
   pendingImages,
+  imagesNeedingAnalysisCount,
   isProcessing,
   ocrProgress,
   statusMessage,
@@ -36,10 +40,12 @@ export function XentryDiagnosticSection({
   onProcessImages,
   onClearPending,
   onCancelProcessing,
+  onDeletePendingImage,
   onDeleteSavedImage,
 }: XentryDiagnosticSectionProps) {
   const hasPending = pendingImages.length > 0;
   const hasSaved = savedImages.length > 0;
+  const canProcess = imagesNeedingAnalysisCount > 0 && !pendingImages.some((img) => img.uploadStatus === 'uploading');
 
   return (
     <div className="benz-card benz-diagnostic-card p-5 min-w-0 w-full">
@@ -54,7 +60,7 @@ export function XentryDiagnosticSection({
             className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium touch-target"
           >
             <Camera size={18} />
-            {hasPending ? 'Add diagnostic photo' : 'Take diagnostic photo'}
+            Take diagnostic photo
           </button>
           <button
             type="button"
@@ -67,7 +73,7 @@ export function XentryDiagnosticSection({
         </div>
       )}
 
-      {hasPending && !isProcessing && (
+      {canProcess && !isProcessing && (
         <div className="flex gap-2 mb-3">
           <button
             type="button"
@@ -75,16 +81,18 @@ export function XentryDiagnosticSection({
             className="primary-btn flex-[2] h-13 flex items-center justify-center gap-2 text-sm font-semibold touch-target"
           >
             <Sparkles size={18} />
-            Process images ({pendingImages.length})
+            Process images ({imagesNeedingAnalysisCount})
           </button>
-          <button
-            type="button"
-            onClick={onClearPending}
-            className="benz-danger-btn flex-1 h-13 flex items-center justify-center gap-2 text-sm"
-          >
-            <Trash2 size={18} />
-            Clear
-          </button>
+          {hasPending && (
+            <button
+              type="button"
+              onClick={onClearPending}
+              className="benz-danger-btn flex-1 h-13 flex items-center justify-center gap-2 text-sm"
+            >
+              <Trash2 size={18} />
+              Clear
+            </button>
+          )}
         </div>
       )}
 
@@ -114,24 +122,14 @@ export function XentryDiagnosticSection({
         <div className="benz-card p-4 mb-3">
           <div className="benz-section-title mb-3 text-sm">
             {isProcessing
-              ? `Processing ${pendingImages.length} queued photo${pendingImages.length === 1 ? '' : 's'}`
-              : `Queued — ${pendingImages.length} photo${pendingImages.length === 1 ? '' : 's'} ready`}
+              ? 'Processing diagnostic photos'
+              : `Saving — ${pendingImages.length} photo${pendingImages.length === 1 ? '' : 's'} in queue`}
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            {pendingImages.map((img) => (
-              <div
-                key={img.id}
-                className="relative rounded-benz overflow-hidden border border-[var(--benz-border)]"
-              >
-                <img src={img.previewUrl} className="w-full h-20 object-cover" alt={img.name} />
-                {isProcessing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <Loader2 size={16} className="animate-spin text-white" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <DiagnosticPhotoGrid
+            images={pendingImages}
+            isProcessing={isProcessing}
+            onDeleteImage={onDeletePendingImage}
+          />
         </div>
       )}
 

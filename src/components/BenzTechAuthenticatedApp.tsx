@@ -225,6 +225,7 @@ export function BenzTechAuthenticatedApp({
             onProcessScan={ro.processPendingScan}
             onClearPendingScan={ro.clearPendingScan}
             onCancelScan={ro.cancelScan}
+            onDeletePendingPage={ro.removePendingScanPage}
             onCreateManualRO={ro.createManualRO}
             isProcessingOCR={ocr.roScan.isProcessing}
             ocrProgress={ocr.roScan.progress}
@@ -259,6 +260,7 @@ export function BenzTechAuthenticatedApp({
           onProcessScan={ro.processPendingScan}
           onClearPendingScan={ro.clearPendingScan}
           onCancelScan={ro.cancelScan}
+          onDeletePendingPage={ro.removePendingScanPage}
           onCreateManualRO={ro.createManualRO}
           openingROId={ro.openingROId}
           onOpenRO={ro.openRO}
@@ -278,6 +280,7 @@ export function BenzTechAuthenticatedApp({
             xentryStatusMessage={ocr.xentry.statusMessage}
             xentrySavedImages={roXentry.savedImages}
             xentryPendingImages={roXentry.pendingImages}
+            xentryImagesNeedingAnalysisCount={roXentry.imagesNeedingAnalysisCount}
             xentryExtractedData={roXentry.extractedData}
             onDone={() => ro.setView('home')}
             onUpdateRONumber={ro.updateRONumber}
@@ -292,6 +295,7 @@ export function BenzTechAuthenticatedApp({
             onProcessRoXentryImages={roXentry.onProcessImages}
             onClearPendingRoXentry={roXentry.onClearPending}
             onCancelRoXentryProcessing={roXentry.onCancelProcessing}
+            onDeletePendingRoXentryImage={roXentry.onDeletePendingImage}
             onDeleteROXentryImage={(imageId) =>
               runAction('Delete Xentry photo', () => ro.deleteROXentryImage(imageId))
             }
@@ -320,6 +324,7 @@ export function BenzTechAuthenticatedApp({
             ocrProgress={ocr.xentry.progress}
             xentrySavedImages={lineXentry.savedImages}
             xentryPendingImages={lineXentry.pendingImages}
+            xentryImagesNeedingAnalysisCount={lineXentry.imagesNeedingAnalysisCount}
             xentryStatusMessage={ocr.xentry.statusMessage}
             isGenerating={ro.isGeneratingForLine}
             isScoring={ro.isScoringForLine}
@@ -339,6 +344,7 @@ export function BenzTechAuthenticatedApp({
             onProcessXentryImages={lineXentry.onProcessImages}
             onClearPendingXentry={lineXentry.onClearPending}
             onCancelXentryProcessing={lineXentry.onCancelProcessing}
+            onDeletePendingXentryImage={lineXentry.onDeletePendingImage}
             onDeleteXentryImage={(imageId) =>
               runAction('Delete diagnostic photo', () =>
                 ro.deleteLineXentryImage(ro.currentLine!.id, imageId)
