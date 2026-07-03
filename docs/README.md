@@ -1,7 +1,7 @@
 # Merlin Documentation Library
 
-**Product:** Merlin — Mercedes-Benz Warranty Story Generator  
-**Version:** 3.0.1  
+**Product:** Merlinus — Mercedes-Benz Warranty Narrative Platform  
+**Version:** 3.0.0  
 **Entry point:** [Main README](../README.md)
 
 ---
@@ -25,6 +25,14 @@
 |----------|---------|
 | [Master-Rollout-Document.md](./Master-Rollout-Document.md) | Single authoritative rollout overview (< 10 min) |
 | [Go-Live-Summary.md](./Go-Live-Summary.md) | One-page executive approval brief |
+
+### Enterprise reference (IT, legal, due diligence)
+| Document | Purpose |
+|----------|---------|
+| [Technical-Specification-and-Architecture.md](./Technical-Specification-and-Architecture.md) | System design, workflows, API routes, voice architecture |
+| [Compliance-Security-Audit-and-Legal.md](./Compliance-Security-Audit-and-Legal.md) | Security controls, audit spec, legal framework |
+| [Full-Enterprise-Audit-History-and-Validation.md](./Full-Enterprise-Audit-History-and-Validation.md) | 99/100 audit certificate, C1–L5 registry, validation results |
+| [Deployment-Checklist-and-Operations.md](./Deployment-Checklist-and-Operations.md) | Environment variables, pre-rollout, Vercel KV, go-live checklists |
 
 ### Technical setup
 | Document | Purpose |
