@@ -55,6 +55,24 @@ describe('desktop companion sync', () => {
     const bridge = readSrc('src/components/CompanionSyncBridge.tsx');
     assert.ok(bridge.includes('ensureCompanionLineContext'));
     assert.ok(bridge.includes('await ensureCompanionLineContext(repairOrderId, lineId)'));
+    assert.ok(bridge.includes('ensureRepairOrderOpen'));
+  });
+
+  it('uses subscriber role on desktop and polls KV as SSE fallback', () => {
+    const role = readSrc('src/lib/companionSyncRole.ts');
+    const hook = readSrc('src/hooks/useCompanionSync.ts');
+    const pollRoute = readSrc('src/app/api/companion/poll/route.ts');
+    assert.ok(role.includes("return isDesktopViewport ? 'subscriber' : 'publisher'"));
+    assert.ok(hook.includes('/api/companion/poll'));
+    assert.ok(hook.includes('canAutoPublish'));
+    assert.ok(pollRoute.includes('drainKvCompanionEvents'));
+  });
+
+  it('waits for in-flight openROById before companion handlers apply state', () => {
+    const roHook = readSrc('src/hooks/useRepairOrders.ts');
+    assert.ok(roHook.includes('openingROPromisesRef'));
+    assert.ok(roHook.includes('ensureRepairOrderOpen'));
+    assert.ok(roHook.includes('companionRevision'));
   });
 
   it('merges companion story state from active line and persisted audit fields', () => {

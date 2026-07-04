@@ -85,8 +85,10 @@ export function useRepairOrders({
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewingLineId, setReviewingLineId] = useState<string | null>(null);
   const [openingROId, setOpeningROId] = useState<string | null>(null);
+  const [companionRevision, setCompanionRevision] = useState(0);
   const roRef = useRef<RepairOrder | null>(null);
   const openingROInFlightRef = useRef<string | null>(null);
+  const openingROPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const scanInFlightRef = useRef(false);
   const xentryInFlightRef = useRef(false);
   const generateStorySeqRef = useRef(0);
@@ -277,77 +279,100 @@ export function useRepairOrders({
 
   const openROById = useCallback(
     async (id: string) => {
-      if (openingROInFlightRef.current === id) return;
-      openingROInFlightRef.current = id;
-      setOpeningROId(id);
-      await flushPendingSave();
-      try {
-        const { repairOrder } = await api.getRepairOrder(id);
-        const normalized = ensureComplaintIds(repairOrder);
-        if (normalized.piiDecryptWarnings?.length) {
-          const preview = normalized.piiDecryptWarnings.slice(0, 3).join(', ');
-          const extra =
-            normalized.piiDecryptWarnings.length > 3
-              ? ` (+${normalized.piiDecryptWarnings.length - 3} more)`
-              : '';
-          toast.warning(
-            `Some encrypted fields could not be read: ${preview}${extra}. Contact your manager if data looks missing.`
+      const inFlight = openingROPromisesRef.current.get(id);
+      if (inFlight) {
+        await inFlight;
+        return;
+      }
+
+      const loadPromise = (async () => {
+        openingROInFlightRef.current = id;
+        setOpeningROId(id);
+        await flushPendingSave();
+        try {
+          const { repairOrder } = await api.getRepairOrder(id);
+          const normalized = ensureComplaintIds(repairOrder);
+          if (normalized.piiDecryptWarnings?.length) {
+            const preview = normalized.piiDecryptWarnings.slice(0, 3).join(', ');
+            const extra =
+              normalized.piiDecryptWarnings.length > 3
+                ? ` (+${normalized.piiDecryptWarnings.length - 3} more)`
+                : '';
+            toast.warning(
+              `Some encrypted fields could not be read: ${preview}${extra}. Contact your manager if data looks missing.`
+            );
+          }
+          roRef.current = normalized;
+          setCurrentRO(normalized);
+          const preservedLineId = currentLineIdRef.current;
+          setCurrentLineId(
+            preservedLineId && normalized.repairLines.some((line) => line.id === preservedLineId)
+              ? preservedLineId
+              : null
           );
+          const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
+          const { certificationByLine, lastGeneratedByLine } = hydrateStoryWorkflowFromRO(normalized);
+          setLastGeneratedStoryByLine(lastGeneratedByLine);
+          setStoryCertificationByLine(certificationByLine);
+          setStoryQualityByLine(qualityByLine);
+          setStoryReviewByLine(reviewByLine);
+          resetStoryWorkflowUiState(
+            {
+              generateStorySeqRef,
+              scoreStorySeqRef,
+              reviewStorySeqRef,
+              storyGenerationInFlightRef,
+              storyScoringInFlightRef,
+              storyReviewInFlightRef,
+            },
+            {
+              setIsGenerating,
+              setGeneratingLineId,
+              setIsScoring,
+              setScoringLineId,
+              setIsReviewing,
+              setReviewingLineId,
+            }
+          );
+          setAllROs((prev) => {
+            const summary = repairOrderToSummary(normalized);
+            const idx = prev.findIndex((r) => r.id === normalized.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = summary;
+              return copy;
+            }
+            return [summary, ...prev];
+          });
+          await navigateView('ro');
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : 'Failed to load repair order');
+          throw e;
+        } finally {
+          if (openingROInFlightRef.current === id) {
+            openingROInFlightRef.current = null;
+          }
+          setOpeningROId((current) => (current === id ? null : current));
         }
-        roRef.current = normalized;
-        setCurrentRO(normalized);
-        const preservedLineId = currentLineIdRef.current;
-        setCurrentLineId(
-          preservedLineId && normalized.repairLines.some((line) => line.id === preservedLineId)
-            ? preservedLineId
-            : null
-        );
-        const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
-        const { certificationByLine, lastGeneratedByLine } = hydrateStoryWorkflowFromRO(normalized);
-        setLastGeneratedStoryByLine(lastGeneratedByLine);
-        setStoryCertificationByLine(certificationByLine);
-        setStoryQualityByLine(qualityByLine);
-        setStoryReviewByLine(reviewByLine);
-        resetStoryWorkflowUiState(
-          {
-            generateStorySeqRef,
-            scoreStorySeqRef,
-            reviewStorySeqRef,
-            storyGenerationInFlightRef,
-            storyScoringInFlightRef,
-            storyReviewInFlightRef,
-          },
-          {
-            setIsGenerating,
-            setGeneratingLineId,
-            setIsScoring,
-            setScoringLineId,
-            setIsReviewing,
-            setReviewingLineId,
-          }
-        );
-        setAllROs((prev) => {
-          const summary = repairOrderToSummary(normalized);
-          const idx = prev.findIndex((r) => r.id === normalized.id);
-          if (idx >= 0) {
-            const copy = [...prev];
-            copy[idx] = summary;
-            return copy;
-          }
-          return [summary, ...prev];
-        });
-        await navigateView('ro');
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to load repair order');
+      })();
+
+      openingROPromisesRef.current.set(id, loadPromise);
+      try {
+        await loadPromise;
       } finally {
-        if (openingROInFlightRef.current === id) {
-          openingROInFlightRef.current = null;
-        }
-        setOpeningROId((current) => (current === id ? null : current));
+        openingROPromisesRef.current.delete(id);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
     [flushPendingSave, navigateView]
+  );
+
+  const ensureRepairOrderOpen = useCallback(
+    async (repairOrderId: string) => {
+      if (roRef.current?.id === repairOrderId) return;
+      await openROById(repairOrderId);
+    },
+    [openROById]
   );
 
   const openRO = useCallback(
@@ -770,21 +795,32 @@ export function useRepairOrders({
     [flushPendingSave, navigateView]
   );
 
+  const bumpCompanionRevision = useCallback(() => {
+    setCompanionRevision((value) => value + 1);
+  }, []);
+
   const mergeCompanionPatch = useCallback(
     (payload: Parameters<typeof applyCompanionROPatch>[1]) => {
       const latest = roRef.current;
-      if (!latest) return;
+      if (!latest || latest.id !== payload.repairOrderId) return;
       const merged = applyCompanionROPatch(latest, payload);
       if (!merged) return;
+      const patchedStory = payload.lineId
+        ? payload.linePatch?.warrantyStory?.trim()
+        : undefined;
       flushSync(() => {
+        if (payload.lineId && patchedStory) {
+          setLastGeneratedStoryByLine((prev) => ({ ...prev, [payload.lineId!]: patchedStory }));
+        }
         roRef.current = merged;
         setCurrentRO(merged);
         setAllROs((prev) =>
           prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
         );
+        bumpCompanionRevision();
       });
     },
-    [setAllROs]
+    [bumpCompanionRevision, setAllROs]
   );
 
   const applyCompanionStoryQuality = useCallback(
@@ -815,9 +851,10 @@ export function useRepairOrders({
         setAllROs((prev) =>
           prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
         );
+        bumpCompanionRevision();
       });
     },
-    [setAllROs]
+    [bumpCompanionRevision, setAllROs]
   );
 
   const applyCompanionCertification = useCallback(
@@ -861,9 +898,10 @@ export function useRepairOrders({
         setAllROs((prev) =>
           prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
         );
+        bumpCompanionRevision();
       });
     },
-    [session?.technicianId, setAllROs]
+    [bumpCompanionRevision, session?.technicianId, setAllROs]
   );
 
   return {
@@ -941,5 +979,7 @@ export function useRepairOrders({
     mergeCompanionPatch,
     applyCompanionStoryQuality,
     applyCompanionCertification,
+    ensureRepairOrderOpen,
+    companionRevision,
   };
 }

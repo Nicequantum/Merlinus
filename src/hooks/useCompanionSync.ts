@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { getCompanionDeviceId } from '@/lib/companionDeviceId';
 import { COMPANION_DEVICE_HEADER } from '@/lib/companionPublish';
+import {
+  companionRolePublishes,
+  companionRoleSubscribes,
+  type CompanionSyncRole,
+} from '@/lib/companionSyncRole';
+import { clientLog } from '@/lib/clientLog';
 import type {
   CompanionActivityEntry,
   CompanionConnectionState,
@@ -14,8 +20,11 @@ import type { AppView, RepairLine, StoryQualityResult } from '@/types';
 
 const STREAM_URL = '/api/companion/stream';
 const PUBLISH_URL = '/api/companion/publish';
+const POLL_URL = '/api/companion/poll';
 const MAX_ACTIVITY = 40;
 const RECONNECT_MS = 2_000;
+const POLL_MS = 1_500;
+const POLL_LOOKBACK_MS = 120_000;
 
 interface CompanionHandlers {
   onNavigation: (payload: {
@@ -28,7 +37,7 @@ interface CompanionHandlers {
     repairOrderId: string;
     lineId?: string;
     linePatch?: Partial<RepairLine>;
-  }) => void;
+  }) => void | Promise<void>;
   onStoryQuality: (payload: {
     repairOrderId: string;
     lineId: string;
@@ -46,10 +55,12 @@ interface CompanionHandlers {
 
 interface UseCompanionSyncOptions extends CompanionHandlers {
   enabled: boolean;
+  role?: CompanionSyncRole;
 }
 
 export function useCompanionSync({
   enabled,
+  role = 'full',
   onNavigation,
   onRORefresh,
   onROPatch,
@@ -70,6 +81,9 @@ export function useCompanionSync({
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionGenerationRef = useRef(0);
+  const lastPollAtRef = useRef(new Date(Date.now() - POLL_LOOKBACK_MS).toISOString());
+  const canAutoPublish = companionRolePublishes(role);
+  const shouldPoll = companionRoleSubscribes(role);
 
   const handlersRef = useRef({
     onNavigation,
@@ -115,8 +129,12 @@ export function useCompanionSync({
     async (event: CompanionEvent) => {
       if (shouldIgnoreEvent(event)) return;
       seenIdsRef.current.add(event.id);
+      if (Date.parse(event.timestamp) >= Date.parse(lastPollAtRef.current)) {
+        lastPollAtRef.current = event.timestamp;
+      }
 
       const handlers = handlersRef.current;
+      try {
       switch (event.type) {
         case 'navigation':
           applyingRemoteRef.current = true;
@@ -135,16 +153,38 @@ export function useCompanionSync({
           await handlers.onRORefresh(event.repairOrderId);
           break;
         case 'ro.patch':
-          handlers.onROPatch({
+          await handlers.onROPatch({
             repairOrderId: event.repairOrderId,
             lineId: event.lineId,
             linePatch: event.linePatch,
           });
+          if (event.linePatch?.warrantyStory !== undefined) {
+            pushActivity({
+              id: `${event.id}:story`,
+              label: 'Warranty story updated',
+              timestamp: event.timestamp,
+              repairOrderId: event.repairOrderId,
+              lineId: event.lineId,
+            });
+          } else if (
+            event.linePatch?.technicianNotes !== undefined ||
+            event.linePatch?.customerConcern !== undefined
+          ) {
+            pushActivity({
+              id: `${event.id}:line`,
+              label: 'Line notes updated',
+              timestamp: event.timestamp,
+              repairOrderId: event.repairOrderId,
+              lineId: event.lineId,
+            });
+          }
           break;
         case 'status':
-          setWorkflowStatus(event.status);
-          setStatusMessage(event.message ?? null);
-          setStatusProgress(typeof event.progress === 'number' ? event.progress : null);
+          flushSync(() => {
+            setWorkflowStatus(event.status);
+            setStatusMessage(event.message ?? null);
+            setStatusProgress(typeof event.progress === 'number' ? event.progress : null);
+          });
           if (event.status !== 'idle' && event.message?.trim()) {
             pushActivity({
               id: `${event.id}:workflow`,
@@ -200,8 +240,15 @@ export function useCompanionSync({
         default:
           break;
       }
+      } catch (error) {
+        clientLog.error('companion.event_handler_failed', {
+          type: event.type,
+          eventId: event.id,
+          error,
+        });
+      }
     },
-    [deviceId, pushActivity, shouldIgnoreEvent]
+    [pushActivity, shouldIgnoreEvent]
   );
 
   const handleEventRef = useRef(handleEvent);
@@ -231,6 +278,7 @@ export function useCompanionSync({
 
   const publishNavigation = useCallback(
     (state: { view: AppView; repairOrderId: string | null; lineId: string | null }) => {
+      if (!canAutoPublish) return;
       if (applyingRemoteRef.current) return;
       const key = `${state.view}:${state.repairOrderId}:${state.lineId}`;
       if (key === lastPublishedNavRef.current) return;
@@ -243,7 +291,7 @@ export function useCompanionSync({
         lineId: state.lineId,
       });
     },
-    [postEvent]
+    [canAutoPublish, postEvent]
   );
 
   const publishStatus = useCallback(
@@ -257,9 +305,12 @@ export function useCompanionSync({
       }
     ) => {
       const publishKey = `${status}:${options?.message ?? ''}:${options?.progress ?? ''}:${options?.repairOrderId ?? ''}:${options?.lineId ?? ''}`;
-      setWorkflowStatus(status);
-      setStatusMessage(options?.message ?? null);
-      setStatusProgress(typeof options?.progress === 'number' ? options.progress : null);
+      if (canAutoPublish) {
+        setWorkflowStatus(status);
+        setStatusMessage(options?.message ?? null);
+        setStatusProgress(typeof options?.progress === 'number' ? options.progress : null);
+      }
+      if (!canAutoPublish) return;
       if (publishKey === lastPublishedStatusRef.current) return;
       lastPublishedStatusRef.current = publishKey;
       const id = crypto.randomUUID();
@@ -274,7 +325,7 @@ export function useCompanionSync({
         lineId: options?.lineId,
       });
     },
-    [postEvent, rememberEventId]
+    [canAutoPublish, postEvent, rememberEventId]
   );
 
   const publishActivity = useCallback(
@@ -314,6 +365,35 @@ export function useCompanionSync({
     },
     [postEvent]
   );
+
+  useEffect(() => {
+    if (!enabled || !shouldPoll) return;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const since = encodeURIComponent(lastPollAtRef.current);
+        const response = await fetch(`${POLL_URL}?since=${since}`, { credentials: 'include' });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { events?: CompanionEvent[] };
+        const events = payload.events ?? [];
+        for (const event of events) {
+          await handleEventRef.current(event);
+        }
+      } catch (error) {
+        clientLog.warn('companion.poll_failed', { error });
+      }
+    };
+
+    void poll();
+    const timer = setInterval(() => void poll(), POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [enabled, shouldPoll]);
 
   useEffect(() => {
     if (!enabled) {

@@ -5,6 +5,10 @@ import { subscribeCompanionVoice } from '@/lib/companionVoiceBridge';
 import { useCompanionSync } from '@/hooks/useCompanionSync';
 import type { useOcrProgress } from '@/hooks/useOcrProgress';
 import type { useRepairOrders } from '@/hooks/useRepairOrders';
+import {
+  companionRolePublishes,
+  type CompanionSyncRole,
+} from '@/lib/companionSyncRole';
 import type { TechnicianSession } from '@/types';
 
 type RepairOrdersApi = ReturnType<typeof useRepairOrders>;
@@ -13,21 +17,21 @@ type OcrApi = ReturnType<typeof useOcrProgress>;
 interface CompanionSyncBridgeProps {
   session: TechnicianSession;
   enabled: boolean;
+  role: CompanionSyncRole;
   ro: RepairOrdersApi;
   ocr: OcrApi;
   children: (companion: ReturnType<typeof useCompanionSync>) => React.ReactNode;
 }
 
 /** Wires SSE companion sync to repair-order state without changing tablet UI. */
-export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: CompanionSyncBridgeProps) {
+export function CompanionSyncBridge({ session, enabled, role, ro, ocr, children }: CompanionSyncBridgeProps) {
   const roRef = useRef(ro);
   roRef.current = ro;
+  const autoPublish = companionRolePublishes(role);
 
   const ensureCompanionLineContext = async (repairOrderId: string, lineId?: string | null) => {
+    await roRef.current.ensureRepairOrderOpen(repairOrderId);
     const api = roRef.current;
-    if (api.currentRO?.id !== repairOrderId) {
-      await api.openROById(repairOrderId);
-    }
     if (lineId && (api.view !== 'line' || api.currentLineId !== lineId)) {
       await api.navigateToLine(lineId);
     }
@@ -35,6 +39,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
 
   const companion = useCompanionSync({
     enabled,
+    role,
     onNavigation: async ({ view, repairOrderId, lineId }) => {
       const api = roRef.current;
       if (view === 'home') {
@@ -42,22 +47,18 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
         return;
       }
       if (!repairOrderId) return;
-      if (api.currentRO?.id !== repairOrderId) {
-        await api.openROById(repairOrderId);
-      }
+      await api.ensureRepairOrderOpen(repairOrderId);
       if (view === 'line' && lineId) {
-        api.navigateToLine(lineId);
+        await api.navigateToLine(lineId);
       } else if (view === 'ro') {
         api.setView('ro');
       }
     },
     onRORefresh: async (repairOrderId) => {
-      const api = roRef.current;
-      if (api.currentRO?.id === repairOrderId) {
-        await api.openROById(repairOrderId);
-      }
+      await roRef.current.ensureRepairOrderOpen(repairOrderId);
     },
-    onROPatch: (payload) => {
+    onROPatch: async (payload) => {
+      await roRef.current.ensureRepairOrderOpen(payload.repairOrderId);
       roRef.current.mergeCompanionPatch(payload);
     },
     onStoryQuality: async ({ repairOrderId, lineId, quality }) => {
@@ -85,16 +86,16 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
   const { publishNavigation, publishStatus } = companion;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !autoPublish) return;
     publishNavigation({
       view: ro.view,
       repairOrderId: ro.currentRO?.id ?? null,
       lineId: ro.currentLineId,
     });
-  }, [enabled, publishNavigation, ro.view, ro.currentRO?.id, ro.currentLineId]);
+  }, [autoPublish, enabled, publishNavigation, ro.view, ro.currentRO?.id, ro.currentLineId]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !autoPublish) return;
     return subscribeCompanionVoice((listening) => {
       if (listening) {
         publishStatus('listening', {
@@ -108,10 +109,10 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
         publishStatus('idle');
       }
     });
-  }, [enabled, publishStatus]);
+  }, [autoPublish, enabled, publishStatus]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !autoPublish) return;
     const onLine = ro.view === 'line';
     const activePipeline = onLine ? ocr.xentry : ocr.roScan;
     if (activePipeline.isProcessing) {
@@ -159,6 +160,7 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
     }
     publishStatus('idle');
   }, [
+    autoPublish,
     enabled,
     publishStatus,
     ocr.roScan.isProcessing,

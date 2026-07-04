@@ -30,7 +30,15 @@ function notifyLocal(technicianId: string, event: CompanionEvent): void {
 }
 
 async function persistToKv(technicianId: string, event: CompanionEvent): Promise<void> {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return;
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+      logger.warn('companion.kv_not_configured', {
+        type: event.type,
+        hint: 'Companion live sync requires KV_REST_API_URL and KV_REST_API_TOKEN in production',
+      });
+    }
+    return;
+  }
   try {
     const { kv } = await import('@vercel/kv');
     const key = kvQueueKey(technicianId);

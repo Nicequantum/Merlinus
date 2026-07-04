@@ -16,6 +16,7 @@ import { SettingsView } from '@/components/SettingsView';
 import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { CompanionSyncBridge } from '@/components/CompanionSyncBridge';
 import { useDesktopCompanion } from '@/hooks/useDesktopCompanion';
+import { deriveCompanionSyncRole } from '@/lib/companionSyncRole';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { clientLog } from '@/lib/clientLog';
@@ -94,6 +95,7 @@ export function BenzTechAuthenticatedApp({
 
   const isServiceAdvisor = session.role === 'service_advisor';
   const isDesktop = useDesktopCompanion();
+  const companionSyncRole = deriveCompanionSyncRole(isDesktop);
   const isManager = session.role === 'manager';
 
   useEffect(() => {
@@ -203,7 +205,7 @@ export function BenzTechAuthenticatedApp({
   const companionMode = showDesktopCompanion;
 
   return (
-    <CompanionSyncBridge session={session} enabled ro={ro} ocr={ocr}>
+    <CompanionSyncBridge session={session} enabled role={companionSyncRole} ro={ro} ocr={ocr}>
       {(companion) => (
     <div
       className={`app-container${wideLayout ? ' benz-app-wide' : ''}${companionMode ? ' benz-companion-mode' : ''}`}
@@ -288,6 +290,7 @@ export function BenzTechAuthenticatedApp({
         <div className="benz-desktop-only">
           <ViewErrorBoundary viewName="the desktop companion">
             <DesktopCompanionLayout
+              key={`companion-${ro.currentRO.id}-${ro.companionRevision}`}
               view={ro.view}
               ro={ro.currentRO}
               line={ro.view === 'line' ? (ro.currentLine ?? null) : null}

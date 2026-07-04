@@ -130,9 +130,10 @@ export async function POST(
       });
 
       void broadcastCompanionEvent(session.technicianId, {
-        type: 'ro.refresh',
+        type: 'ro.patch',
         repairOrderId: id,
-        reason: 'story.generate',
+        lineId,
+        linePatch: { warrantyStory },
       });
       void broadcastCompanionEvent(session.technicianId, {
         type: 'activity',
