@@ -105,18 +105,71 @@ export function isProductionEnv(): boolean {
   return process.env.VERCEL_ENV === 'production';
 }
 
+/** Loopback or RFC1918 host — local dev, next start, vercel dev, shop-floor LAN tablets. */
+export function isLocalhostRequest(request: Request): boolean {
+  try {
+    const hostname = new URL(request.url).hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname.endsWith('.local')) return true;
+    if (hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]') return true;
+
+    const ipv4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!ipv4) return false;
+    const octets = ipv4.slice(1, 5).map((part) => Number(part));
+    if (octets.some((part) => part > 255)) return false;
+    const [a, b] = octets;
+    if (a === 10 || a === 127) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function shouldFailClosedWithoutKv(request: Request): boolean {
+  if (isLocalhostRequest(request)) {
+    return false;
+  }
+  return isProductionEnv();
+}
+
+export function getRateLimitRuntimeSnapshot(request: Request) {
+  return {
+    nodeEnv: process.env.NODE_ENV ?? null,
+    vercel: process.env.VERCEL ?? null,
+    vercelEnv: process.env.VERCEL_ENV ?? null,
+    kvConfigured: isKvConfigured(),
+    isProductionEnv: isProductionEnv(),
+    isLocalhost: isLocalhostRequest(request),
+    failClosedWithoutKv: shouldFailClosedWithoutKv(request),
+  };
+}
+
+function logRateLimitDecision(
+  routeKey: string,
+  request: Request,
+  decision: 'kv' | 'memory' | 'kv_fallback_memory' | 'fail_closed_kv_required' | 'fail_closed_kv_unavailable'
+): void {
+  logger.info('rate_limit.check', {
+    routeKey,
+    decision,
+    ...getRateLimitRuntimeSnapshot(request),
+  });
+}
+
 function rateLimitUnavailableResponse(): Response {
   return apiError(RATE_LIMIT_UNAVAILABLE_MESSAGE, 503);
 }
 
-function logKvRateLimitError(routeKey: string, ip: string, error: unknown): void {
+function logKvRateLimitError(routeKey: string, request: Request, ip: string, error: unknown): void {
   const errorMessage = error instanceof Error ? error.message : 'unknown';
   const context = {
     routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     error: errorMessage,
+    ...getRateLimitRuntimeSnapshot(request),
   };
-  if (isProductionEnv()) {
+  if (shouldFailClosedWithoutKv(request)) {
     logger.error('rate_limit.kv_unavailable', context);
     return;
   }
@@ -142,18 +195,22 @@ export async function checkRateLimit(
 
   if (isKvConfigured()) {
     try {
-      return await checkKvRateLimit(key, config);
+      const result = await checkKvRateLimit(key, config);
+      logRateLimitDecision(routeKey, request, 'kv');
+      return result;
     } catch (error) {
-      logKvRateLimitError(routeKey, ip, error);
-      if (isProductionEnv()) {
+      logKvRateLimitError(routeKey, request, ip, error);
+      if (shouldFailClosedWithoutKv(request)) {
+        logRateLimitDecision(routeKey, request, 'fail_closed_kv_unavailable');
         return rateLimitUnavailableResponse();
       }
-      // Dev-only: preserve local iteration when KV is misconfigured or briefly unavailable.
+      logRateLimitDecision(routeKey, request, 'kv_fallback_memory');
       return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
     }
   }
 
-  if (!isProductionEnv()) {
+  if (!shouldFailClosedWithoutKv(request)) {
+    logRateLimitDecision(routeKey, request, 'memory');
     return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
   }
 
@@ -161,7 +218,9 @@ export async function checkRateLimit(
     routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
+    ...getRateLimitRuntimeSnapshot(request),
   });
+  logRateLimitDecision(routeKey, request, 'fail_closed_kv_required');
   return rateLimitUnavailableResponse();
 }
 
