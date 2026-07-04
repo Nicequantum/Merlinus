@@ -36,6 +36,7 @@ import {
 } from '@/lib/timeouts';
 import { parseStructuredROText } from '@/utils/roExtractor';
 import { logger } from '@/lib/logger';
+import { parseGrokApiErrorBody } from '@/lib/scanRouteErrors';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
 
@@ -106,11 +107,16 @@ async function grokChat(
 
     if (!response.ok) {
       const errBody = await response.text();
+      const detail = parseGrokApiErrorBody(errBody);
       logger.warn('grok.api_error', {
         status: response.status,
         bodyLength: errBody.length,
+        detail: detail || undefined,
+        perfLabel: options.perfLabel,
+        model,
       });
-      throw new Error(`Grok API error: ${response.status}`);
+      const suffix = detail ? ` — ${detail}` : '';
+      throw new Error(`Grok API error: ${response.status}${suffix}`);
     }
 
     const apiResponse = await response.json();
@@ -174,11 +180,16 @@ export async function scoreWarrantyStory(
       responseFormat: 'json_object',
     }
   );
-  const quality = parseStoryQualityResponse(raw);
-  if (isStoryQualityParseFailure(quality)) {
+  const parsed = parseStoryQualityResponse(raw);
+  if (isStoryQualityParseFailure(parsed)) {
+    logger.error('grok.story.score_parse_failed', {
+      rawLength: raw.length,
+      rawPreview: raw.slice(0, 500),
+      summary: parsed.summary,
+    });
     throw new Error('AI quality score returned unreadable JSON.');
   }
-  return quality;
+  return parsed;
 }
 
 export async function reviewWarrantyStory(
@@ -197,9 +208,18 @@ export async function reviewWarrantyStory(
       timeoutMs: STORY_REVIEW_GROK_MS,
       perfLabel: 'grok.story.review',
       reasoningEffort: 'none',
+      responseFormat: 'json_object',
     }
   );
-  return parseStoryReviewResponse(raw);
+  const parsed = parseStoryReviewResponse(raw);
+  if (parsed.parseFailed) {
+    logger.error('grok.story.review_parse_failed', {
+      rawLength: raw.length,
+      rawPreview: raw.slice(0, 500),
+      summary: parsed.summary,
+    });
+  }
+  return parsed;
 }
 
 export async function extractDiagnosticsFromImage(imageDataUrl: string): Promise<ExtractedData> {
@@ -232,7 +252,13 @@ export async function extractROFromImages(imageDataUrls: string[]) {
         content: [{ type: 'text', text: RO_EXTRACTION_PROMPT }, ...imageContents],
       },
     ],
-    { temperature: 0.05, max_tokens: 2800, timeoutMs: RO_EXTRACT_GROK_MS, perfLabel: 'grok.ro.extract' }
+    {
+      temperature: 0.05,
+      max_tokens: 2200,
+      timeoutMs: RO_EXTRACT_GROK_MS,
+      perfLabel: 'grok.ro.extract',
+      reasoningEffort: 'none',
+    }
   );
   return parseStructuredROText(extractedText);
 }

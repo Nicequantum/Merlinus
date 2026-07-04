@@ -54,12 +54,12 @@ describe('story generation pipeline audit', () => {
     assert.equal(resolveStoryReasoningEffort('grok-4.3'), 'none');
   });
 
-  test('audit reports compact prompts and no optional context', () => {
+  test('audit reports veteran-voice prompts and no optional context bloat', () => {
     const audit = auditStoryGenerationPipeline(baseRo, baseLine);
-    assert.ok(audit.systemPromptChars < 1_400);
-    assert.ok(audit.userMessageChars < 1_400);
-    assert.ok(audit.totalPromptChars < 2_600);
-    assert.equal(audit.maxOutputTokens, 500);
+    assert.ok(audit.systemPromptChars > 1_400);
+    assert.ok(audit.userMessageChars > 400);
+    assert.ok(audit.totalPromptChars < 6_000);
+    assert.equal(audit.maxOutputTokens, 750);
     assert.ok(audit.excludedFromPrompt.includes('knowledgeBase'));
     assert.ok(audit.excludedFromPrompt.includes('historyContext'));
     assert.equal(audit.timeouts.grokMs, 25_000);

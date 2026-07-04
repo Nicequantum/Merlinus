@@ -22,6 +22,8 @@ import { logger } from './logger';
  * - Rate-limited login endpoint
  *
  * Planned Phase 2: corporate SSO (e.g. Entra ID) and MFA — track in enterprise roadmap.
+ *
+ * See also: src/lib/encryption.ts (L4 key rotation accepted risk) and docs/Reencryption-Runbook.md.
  */
 
 export const SESSION_COOKIE = 'benz_tech_session';
@@ -40,7 +42,9 @@ export interface SessionPayload {
   dealershipName: string;
   serviceAdvisorId: string | null;
   consentAt: string | null;
+  consentVersion: string | null;
   legalDisclaimerAt: string | null;
+  legalDisclaimerVersion: string | null;
   sessionVersion: number;
 }
 
@@ -140,7 +144,9 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     dealershipName: tech.dealership.name,
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    consentVersion: tech.consentVersion ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }
@@ -153,7 +159,7 @@ function readSessionTokenFromRequest(request?: Request): string | undefined {
   return match?.[1];
 }
 
-export async function getSession(request?: Request): Promise<SessionPayload | null> {
+async function readSessionToken(request?: Request): Promise<string | undefined> {
   let token: string | undefined;
 
   try {
@@ -166,12 +172,27 @@ export async function getSession(request?: Request): Promise<SessionPayload | nu
   if (!token) {
     token = readSessionTokenFromRequest(request);
   }
-  if (!token) return null;
 
-  const tokenPayload = await verifySessionToken(token);
-  if (!tokenPayload) return null;
+  return token;
+}
 
-  return resolveSessionPayload(tokenPayload);
+export async function getSessionContext(request?: Request): Promise<{
+  session: SessionPayload | null;
+  jwtPayload: SessionPayload | null;
+}> {
+  const token = await readSessionToken(request);
+  if (!token) return { session: null, jwtPayload: null };
+
+  const jwtPayload = await verifySessionToken(token);
+  if (!jwtPayload) return { session: null, jwtPayload: null };
+
+  const session = await resolveSessionPayload(jwtPayload);
+  return { session, jwtPayload };
+}
+
+export async function getSession(request?: Request): Promise<SessionPayload | null> {
+  const { session } = await getSessionContext(request);
+  return session;
 }
 
 export async function requireSession(): Promise<SessionPayload> {
@@ -214,7 +235,9 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     dealershipName: tech.dealership.name,
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
+    consentVersion: tech.consentVersion ?? null,
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
   };
 }

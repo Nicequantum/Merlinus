@@ -12,10 +12,15 @@ import { PrismaClient } from '@prisma/client';
 import { POST as postLogin } from '../../src/app/api/auth/login/route';
 import { POST as postExtract } from '../../src/app/api/repair-orders/extract/route';
 import { POST as postGenerateStory } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route';
-import { createSessionToken, SESSION_COOKIE } from '../../src/lib/auth';
-import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
+import { SESSION_COOKIE } from '../../src/lib/auth';
+import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
-import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import {
+  captureTechnicianCompliance,
+  createCompliantSessionToken,
+  restoreTechnicianCompliance,
+  type TechnicianComplianceSnapshot,
+} from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -41,6 +46,7 @@ describe('critical path HTTP routes', () => {
   let techToken = '';
   let testRoId = '';
   let testLineId = '';
+  let originalCompliance: TechnicianComplianceSnapshot | null = null;
   const extractPathname = `benz-tech/critical-path-${Date.now()}.png`;
   const originalFetch = globalThis.fetch;
 
@@ -65,26 +71,15 @@ describe('critical path HTTP routes', () => {
     }) as typeof fetch;
 
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || getCanonicalSeedPassword();
 
     const technician = await prisma.technician.findUnique({ where: { d7Number: techD7 } });
     assert.ok(technician, 'Seed technician required — run npm run db:seed first');
     technicianId = technician.id;
     dealershipId = technician.dealershipId;
+    originalCompliance = captureTechnicianCompliance(technician);
 
-    techToken = await createSessionToken({
-      technicianId: technician.id,
-      d7Number: technician.d7Number,
-      name: technician.name,
-      role: technician.role,
-      isAdmin: technician.isAdmin,
-      dealershipId: technician.dealershipId,
-      dealershipName: 'Integration Dealership',
-      consentAt: technician.consentAt?.toISOString() ?? new Date().toISOString(),
-      legalDisclaimerAt: technician.legalDisclaimerAt?.toISOString() ?? new Date().toISOString(),
-      legalDisclaimerVersion: technician.legalDisclaimerVersion ?? LEGAL_DISCLAIMER_VERSION,
-      sessionVersion: technician.sessionVersion,
-    });
+    techToken = await createCompliantSessionToken(prisma, technician, 'Integration Dealership');
 
     const roInput = {
       roNumber: `CP-${Date.now().toString().slice(-6)}`,
@@ -147,13 +142,16 @@ describe('critical path HTTP routes', () => {
     if (testRoId) {
       await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
     }
+    if (originalCompliance) {
+      await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
+    }
     await prisma.$disconnect();
   });
 
   test('POST /api/auth/login succeeds for seeded service manager', async () => {
     const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
     const managerPassword =
-      process.env.ADMIN_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+      process.env.ADMIN_SEED_PASSWORD?.trim() || getCanonicalSeedPassword();
 
     const manager = await prisma.technician.findUnique({ where: { d7Number: managerD7 } });
     assert.ok(manager, 'Seed service manager required — run npm run db:seed first');
@@ -184,7 +182,7 @@ describe('critical path HTTP routes', () => {
 
   test('POST /api/auth/login succeeds with valid credentials and audit trail', async () => {
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || getCanonicalSeedPassword();
     assert.ok(techPassword);
 
     const auditBefore = await prisma.auditLog.count({

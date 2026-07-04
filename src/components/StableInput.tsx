@@ -26,9 +26,11 @@ export function StableInput({
   const isFocusedRef = useRef(false);
   const lastEmittedRef = useRef(value);
 
+  // Reset draft only when the field identity changes — value sync is handled below.
   useEffect(() => {
     lastEmittedRef.current = value;
     setDraft(value);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fieldKey-only reset
   }, [fieldKey]);
 
   useEffect(() => {

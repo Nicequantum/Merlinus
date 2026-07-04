@@ -2,7 +2,7 @@ import 'server-only';
 
 import { verifyPassword } from './auth';
 import { prisma } from './db';
-import { CANONICAL_SEED_PASSWORD, PRIMARY_MANAGER_D7, PRIMARY_TECH_D7 } from './seedDatabase';
+import { getCanonicalSeedPassword, PRIMARY_MANAGER_D7, PRIMARY_TECH_D7 } from './seedDatabase';
 
 function getSeedD7Numbers(): { managerD7: string; techD7: string } {
   return {
@@ -27,8 +27,19 @@ export async function checkSeedPasswordSecurity(): Promise<SeedSecurityStatus> {
   const accountsUsingDefaults: string[] = [];
   const warnings: string[] = [];
 
+  let canonicalSeedPassword = '';
+  try {
+    canonicalSeedPassword = getCanonicalSeedPassword();
+  } catch {
+    return {
+      usingDefaultSeedPasswords: false,
+      warnings: [],
+      accountsUsingDefaults: [],
+    };
+  }
+
   for (const account of accounts) {
-    const matchesCanonicalSeed = await verifyPassword(CANONICAL_SEED_PASSWORD, account.passwordHash);
+    const matchesCanonicalSeed = await verifyPassword(canonicalSeedPassword, account.passwordHash);
     if (!matchesCanonicalSeed) continue;
 
     accountsUsingDefaults.push(account.d7Number);

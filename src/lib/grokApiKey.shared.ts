@@ -1,11 +1,15 @@
-const PUBLIC_GROK_ENV_KEYS = [
+/** xAI keys that must NEVER be prefixed with NEXT_PUBLIC_ — they expose secrets to the browser. */
+export const FORBIDDEN_PUBLIC_GROK_ENV_KEYS = [
   'NEXT_PUBLIC_GROK_API_KEY',
   'NEXT_PUBLIC_XAI_API_KEY',
   'NEXT_PUBLIC_XAI_KEY',
 ] as const;
 
+/** @deprecated Use FORBIDDEN_PUBLIC_GROK_ENV_KEYS */
+const PUBLIC_GROK_ENV_KEYS = FORBIDDEN_PUBLIC_GROK_ENV_KEYS;
+
 export function getExposedPublicGrokEnvKeys(): string[] {
-  return PUBLIC_GROK_ENV_KEYS.filter((name) => Boolean(process.env[name]?.trim()));
+  return FORBIDDEN_PUBLIC_GROK_ENV_KEYS.filter((name) => Boolean(process.env[name]?.trim()));
 }
 
 export function assertNoPublicGrokKeyExposure(): void {
@@ -26,3 +30,5 @@ export function getGrokApiKey(): string {
   }
   return key;
 }
+
+export { PUBLIC_GROK_ENV_KEYS };

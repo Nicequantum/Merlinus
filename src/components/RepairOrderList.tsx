@@ -5,22 +5,22 @@ import { ChevronRight, ClipboardList, Loader2, Trash2 } from 'lucide-react';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { StoryStatusBadge } from '@/components/StoryStatusBadge';
 import { formatDisplayDate } from '@/lib/dateFormat';
-import type { RepairOrder } from '@/types';
+import type { RepairOrderSummary } from '@/types';
 
 interface RepairOrderListProps {
-  repairOrders: RepairOrder[];
+  repairOrders: RepairOrderSummary[];
   openingROId: string | null;
-  onOpenRO: (ro: RepairOrder) => void;
+  onOpenRO: (ro: RepairOrderSummary) => void;
   onDeleteRO?: (id: string) => void;
   emptyMessage?: string;
   emptyHint?: string;
 }
 
 interface RepairOrderRowProps {
-  ro: RepairOrder;
+  ro: RepairOrderSummary;
   isThisOpening: boolean;
   isOpening: boolean;
-  onOpenRO: (ro: RepairOrder) => void;
+  onOpenRO: (ro: RepairOrderSummary) => void;
   onDeleteRO?: (id: string) => void;
 }
 
@@ -64,10 +64,10 @@ const RepairOrderRow = memo(function RepairOrderRow({
           {vehicleSummary || 'Vehicle TBD'} · {ro.repairLines.length} line{ro.repairLines.length === 1 ? '' : 's'}
           {ro.technicianName ? ` · ${ro.technicianName}` : ''}
         </div>
-        {ro.complaints[0] && (
+        {ro.firstComplaintPreview && (
           <div className="text-xs text-benz-muted mt-1 truncate">
-            {ro.complaints[0].slice(0, 72)}
-            {ro.complaints[0].length > 72 ? '…' : ''}
+            {ro.firstComplaintPreview.slice(0, 72)}
+            {ro.firstComplaintPreview.length > 72 ? '…' : ''}
           </div>
         )}
         {ro.createdAt && (

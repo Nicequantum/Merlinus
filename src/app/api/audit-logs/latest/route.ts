@@ -3,7 +3,13 @@ import { prisma } from '@/lib/db';
 import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 import { auditLatestQuerySchema, parseQueryParams } from '@/lib/validation';
 
-const WARRANTY_STORY_ACTIONS = ['story.generate', 'story.review', 'story.edit', 'story.certify'] as const;
+const WARRANTY_STORY_ACTIONS = [
+  'story.generate',
+  'story.score',
+  'story.review',
+  'story.edit',
+  'story.certify',
+] as const;
 const CUSTOMER_PAY_STORY_ACTIONS = [
   'customerPayTemplateApplied',
   'customerPayStory.edit',

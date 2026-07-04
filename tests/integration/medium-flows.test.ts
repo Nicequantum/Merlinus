@@ -6,8 +6,8 @@ import { GET as getSecurityStatus } from '../../src/app/api/auth/security-status
 import { GET as getLogout } from '../../src/app/api/auth/logout/route';
 import { POST as postApplyCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/apply-customer-pay-template/route';
 import { POST as postClearCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route';
-import { createSessionToken } from '../../src/lib/auth';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import { createCompliantSessionToken } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 
 const prisma = new PrismaClient();
@@ -31,17 +31,7 @@ describe('medium-priority route flows', () => {
     });
     assert.ok(manager, 'Seed manager required');
     managerId = manager.id;
-    managerToken = await createSessionToken({
-      technicianId: manager.id,
-      d7Number: manager.d7Number,
-      name: manager.name,
-      role: manager.role,
-      isAdmin: manager.isAdmin,
-      dealershipId: manager.dealershipId,
-      dealershipName: dealership.name,
-      consentAt: manager.consentAt?.toISOString() ?? new Date().toISOString(),
-      sessionVersion: manager.sessionVersion,
-    });
+    managerToken = await createCompliantSessionToken(prisma, manager, dealership.name);
 
     const cpTemplate = await prisma.template.findFirst({
       where: { isCustomerPay: true },

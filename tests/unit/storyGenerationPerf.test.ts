@@ -55,18 +55,18 @@ describe('story generation performance settings', () => {
     assert.match(grokSrc, /!model\.includes\('non-reasoning'\)/);
   });
 
-  test('caps generation output tokens for fast responses', () => {
-    assert.equal(WARRANTY_STORY_MAX_TOKENS, 500);
-    assert.ok(WARRANTY_STORY_TEMPERATURE <= 0.25);
+  test('allows richer generation output and voice variation temperature', () => {
+    assert.equal(WARRANTY_STORY_MAX_TOKENS, 750);
+    assert.ok(WARRANTY_STORY_TEMPERATURE >= 0.35);
   });
 
-  test('prompts stay compact for sub-30s generation', () => {
+  test('prompts include master-technician system rules and persona user message', () => {
     const userMessage = buildWarrantyStoryUserMessage(baseRo, baseLine);
-    assert.ok(SYSTEM_PROMPT.length < 1_400);
-    assert.ok(userMessage.length < 1_400);
     assert.match(SYSTEM_PROMPT, /3C|Concern|Cause|Correction/i);
+    assert.match(SYSTEM_PROMPT, /Critical Quality Rules/i);
     assert.match(userMessage, /P0300/);
-    assert.doesNotMatch(userMessage, /Style variation/i);
+    assert.match(userMessage, /STYLE VARIATION/i);
+    assert.match(userMessage, /10-step/i);
   });
 
   test('score system prompt uses compact MI criteria', () => {

@@ -17,6 +17,7 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /loginTechnician/);
     assert.match(src, /applySessionCookieToResponse/);
     assert.match(src, /action: 'auth\.login'/);
+    assert.match(src, /entityId: session\.technicianId/);
     assert.match(src, /logApiWriteRequest/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });
@@ -27,8 +28,9 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /blockServiceAdvisorAi/);
     assert.match(src, /imagePathnamesSchema/);
     assert.match(src, /userCanAccessImage/);
-    assert.match(src, /fetchPrivateBlobAsDataUrl/);
+    assert.match(src, /fetchPrivateBlobAsVisionDataUrl/);
     assert.match(src, /extractROFromImages/);
+    assert.match(src, /writeRoExtractAudit/);
     assert.match(src, /rateLimitKey: 'ro\.extract'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });
@@ -41,10 +43,9 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /scopedRepairLineWhere/);
     assert.match(src, /warrantyStoryEncrypted/);
 
-    const auditIdx = src.indexOf("action: 'story.generate'");
-    const persistIdx = src.indexOf('prisma.repairLine.updateMany');
-    assert.ok(auditIdx >= 0 && persistIdx >= 0);
-    assert.ok(auditIdx < persistIdx, 'story.generate audit must precede DB persist');
+    assert.match(src, /persistRepairLineStoryInTransaction/);
+    assert.match(src, /prisma\.\$transaction/);
+    assert.match(src, /action: 'story\.generate'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });
 
@@ -67,5 +68,9 @@ describe('critical path HTTP route coverage', () => {
     const mock = readSrc('tests/setup/cookiesMock.mjs');
     assert.match(mock, /next\/headers/);
     assert.match(mock, /\.\/dist\/server\/request\/cookies/);
+    assert.match(mock, /fetchPrivateBlobAsVisionDataUrl/);
+    const loader = readSrc('tests/setup/server-only-loader.mjs');
+    assert.match(loader, /isBlobModuleRequest/);
+    assert.match(loader, /BLOB_MOCK_SOURCE/);
   });
 });

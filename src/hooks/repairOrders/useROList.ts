@@ -1,24 +1,43 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
-import type { RepairOrder, TechnicianSession } from '@/types';
+import type { RepairOrderSummary, TechnicianSession } from '@/types';
 import {
   filterTodayRepairOrders,
   mergeRepairOrders,
-  normalizeRepairOrder,
   PREVIOUS_PAGE_SIZE,
 } from '@/hooks/repairOrders/roListUtils';
 
+function isComplianceBlockedError(error: ApiError): boolean {
+  return (
+    error.status === 403 &&
+    (error.message.includes('Legal disclaimer') || error.message.includes('consent'))
+  );
+}
+
+interface UseROListOptions {
+  onComplianceRequired?: () => void;
+}
+
+function useStableComplianceCallback(
+  callback: (() => void) | undefined
+): MutableRefObject<(() => void) | undefined> {
+  const ref = useRef(callback);
+  ref.current = callback;
+  return ref;
+}
+
 /** Today + previous pagination for the repair order home lists. */
-export function useROList(session: TechnicianSession | null) {
-  const [allROs, setAllROs] = useState<RepairOrder[]>([]);
+export function useROList(session: TechnicianSession | null, options: UseROListOptions = {}) {
+  const onComplianceRequiredRef = useStableComplianceCallback(options.onComplianceRequired);
+  const [allROs, setAllROs] = useState<RepairOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [listRetrying, setListRetrying] = useState(false);
   const [todayStartIso, setTodayStartIso] = useState<string | null>(null);
-  const [previousROs, setPreviousROs] = useState<RepairOrder[]>([]);
+  const [previousROs, setPreviousROs] = useState<RepairOrderSummary[]>([]);
   const [previousExpanded, setPreviousExpanded] = useState(false);
   const [previousLoading, setPreviousLoading] = useState(false);
   const [previousLoadingMore, setPreviousLoadingMore] = useState(false);
@@ -52,8 +71,7 @@ export function useROList(session: TechnicianSession | null) {
     setListError(null);
     try {
       const { repairOrders, todayStart } = await api.listRepairOrders({ scope: 'today' });
-      const normalized = repairOrders.map(normalizeRepairOrder);
-      setAllROs(normalized);
+      setAllROs(repairOrders);
       if (todayStart) setTodayStartIso(todayStart);
       setPreviousROs([]);
       setPreviousCursor(null);
@@ -66,13 +84,19 @@ export function useROList(session: TechnicianSession | null) {
         setListError(null);
         return;
       }
+      if (error instanceof ApiError && isComplianceBlockedError(error)) {
+        setAllROs([]);
+        setListError(null);
+        onComplianceRequiredRef.current?.();
+        return;
+      }
       setListError('Could not load repair orders. Check your connection and try again.');
       throw error;
     } finally {
       setLoading(false);
       setListRetrying(false);
     }
-  }, [session]);
+  }, [onComplianceRequiredRef, session]);
 
   const loadPreviousPage = useCallback(
     async (append: boolean) => {
@@ -86,23 +110,27 @@ export function useROList(session: TechnicianSession | null) {
           limit: PREVIOUS_PAGE_SIZE,
           cursor: append ? previousCursor ?? undefined : undefined,
         });
-        const normalized = repairOrders.map(normalizeRepairOrder);
-        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, normalized) : normalized));
-        setAllROs((prev) => mergeRepairOrders(prev, normalized));
+        setPreviousROs((prev) => (append ? mergeRepairOrders(prev, repairOrders) : repairOrders));
+        setAllROs((prev) => mergeRepairOrders(prev, repairOrders));
         setPreviousCursor(nextCursor ?? null);
         setPreviousHasMore(Boolean(hasMore));
         if (todayStart) setTodayStartIso(todayStart);
         previousLoadedRef.current = true;
       } catch (error) {
-        if (!(error instanceof ApiError && error.status === 401)) {
-          toast.error('Could not load previous repair orders — try again.');
+        if (error instanceof ApiError && error.status === 401) {
+          return;
         }
+        if (error instanceof ApiError && isComplianceBlockedError(error)) {
+          onComplianceRequiredRef.current?.();
+          return;
+        }
+        toast.error('Could not load previous repair orders — try again.');
       } finally {
         setPreviousLoading(false);
         setPreviousLoadingMore(false);
       }
     },
-    [previousCursor, session]
+    [onComplianceRequiredRef, previousCursor, session]
   );
 
   const togglePreviousExpanded = useCallback(() => {
@@ -140,9 +168,7 @@ export function useROList(session: TechnicianSession | null) {
     }
 
     setLoading(true);
-    refreshList().catch(() => {
-      toast.error('Could not load repair orders — check your connection');
-    });
+    void refreshList();
   }, [session, refreshList]);
 
   const todayROs = useMemo(

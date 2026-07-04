@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 
 import { getRequestIp } from '@/lib/rate-limit';
+import { jsonWithFreshSessionCookie, toTechnicianSession } from '@/lib/sessionRefresh';
 import { CONSENT_VERSION } from '@/types';
 
 export async function POST(request: Request) {
@@ -28,7 +29,20 @@ export async function POST(request: Request) {
         });
       });
 
-      return { consentAt: now.toISOString() };
+      const refreshedSession = {
+        ...session,
+        consentAt: now.toISOString(),
+        consentVersion: CONSENT_VERSION,
+      };
+
+      return jsonWithFreshSessionCookie(
+        {
+          consentAt: now.toISOString(),
+          consentVersion: CONSENT_VERSION,
+          session: toTechnicianSession(refreshedSession),
+        },
+        refreshedSession
+      );
     },
     { rateLimitKey: 'consent', skipConsent: true, skipLegalDisclaimer: true }
   );

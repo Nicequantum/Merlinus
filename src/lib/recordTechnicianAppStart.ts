@@ -30,7 +30,7 @@ export async function recordTechnicianAppStart(payload: {
         role: payload.role as 'technician' | 'manager',
         todayRoCount: payload.todayRoCount,
         previousRoCount: payload.previousRoCount,
-        appVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? '2.0.0',
+        appVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? '3.0.0',
       },
     });
   } catch {

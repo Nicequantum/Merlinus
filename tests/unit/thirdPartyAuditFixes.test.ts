@@ -117,6 +117,26 @@ describe('Third-party audit hardening', () => {
     assert.equal(src.includes('errBody'), true);
   });
 
+  it('bootstrap seed is hard-disabled in production with audit logging', () => {
+    const middleware = readSrc('src/middleware.ts');
+    const seedRoute = readSrc('src/app/api/setup/seed/route.ts');
+    const env = readSrc('src/lib/env.ts');
+    assert.ok(middleware.includes('denyBootstrapSeedInProduction'));
+    assert.ok(seedRoute.includes('isBootstrapSeedAllowed'));
+    assert.ok(seedRoute.includes('logBootstrapSeedBlockedAttempt'));
+    assert.equal(seedRoute.includes('ALLOW_BOOTSTRAP'), false);
+    assert.ok(env.includes('ALLOW_BOOTSTRAP is set in production'));
+  });
+
+  it('unified route errors replace generic fallback for critical routes', () => {
+    const errors = readSrc('src/lib/errors.ts');
+    const mapper = readSrc('src/lib/routeErrorMapper.ts');
+    assert.ok(errors.includes('mapRouteError'));
+    assert.ok(mapper.includes('mapAuditRouteFailure'));
+    assert.ok(mapper.includes('mapDatabaseConnectionError'));
+    assert.equal(errors.includes('return apiError(GENERIC_ERROR, 500)'), false);
+  });
+
   it('service advisors are blocked from Grok extraction routes', () => {
     assert.ok(readSrc('src/app/api/diagnostics/extract/route.ts').includes('blockServiceAdvisorAi'));
     assert.ok(readSrc('src/app/api/repair-orders/extract/route.ts').includes('blockServiceAdvisorAi'));
@@ -126,12 +146,17 @@ describe('Third-party audit hardening', () => {
     const consent = readSrc('src/app/api/consent/route.ts');
     const disclaimer = readSrc('src/app/api/legal-disclaimer/route.ts');
     const certify = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts');
+    const roPut = readSrc('src/app/api/repair-orders/[id]/route.ts');
     assert.ok(consent.includes('prisma.$transaction'));
     assert.ok(consent.includes('appendAuditLogInTransaction'));
     assert.ok(disclaimer.includes('prisma.$transaction'));
     assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
     assert.ok(certify.includes('prisma.$transaction'));
     assert.ok(certify.includes('appendAuditLogInTransaction'));
+    assert.ok(roPut.includes('appendAuditLogInTransaction'));
+    assert.ok(roPut.includes("action: 'story.edit'"));
+    assert.ok(roPut.includes('previousStoryHash'));
+    assert.ok(CRITICAL_AUDIT_ACTIONS.has('story.edit'));
   });
 
   it('service advisors are blocked from customer-pay template routes', () => {
@@ -237,6 +262,61 @@ describe('Third-party audit hardening', () => {
     assert.equal(roRoute.includes('repairLine.upsert'), false);
     assert.ok(generateStory.includes('scopedRepairLineWhere'));
     assert.ok(changePassword.includes('dealershipId: session.dealershipId'));
+  });
+
+  it('post-login compliance gates match server policy versions', () => {
+    const shell = readSrc('src/components/BenzTechApp.tsx');
+    assert.ok(shell.includes('needsConsent'));
+    assert.ok(shell.includes('needsLegalDisclaimer'));
+    assert.ok(shell.includes('acceptConsentSession'));
+    assert.ok(shell.includes('setSession(accepted)'));
+    const useSession = readSrc('src/hooks/useSession.ts');
+    assert.ok(useSession.includes('consentVersion'));
+    assert.ok(useSession.includes('legalDisclaimerVersion'));
+    assert.ok(readSrc('src/lib/complianceSession.ts').includes('CONSENT_VERSION'));
+    assert.ok(readSrc('src/lib/sessionRefresh.ts').includes('complianceFieldsDiffer'));
+    const scoreRoute = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts');
+    const certifyRoute = readSrc(
+      'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts'
+    );
+    assert.ok(scoreRoute.includes('parseFailed'));
+    assert.ok(scoreRoute.includes("action: 'story.score'"));
+    assert.equal(scoreRoute.includes('scoreOnly'), false);
+    assert.ok(certifyRoute.includes('validateStoryCertificationPrerequisites'));
+  });
+
+  it('openROById warns when encrypted fields fail to decrypt (M2)', () => {
+    const src = readSrc('src/hooks/useRepairOrders.ts');
+    assert.ok(src.includes('piiDecryptWarnings'));
+    assert.ok(src.includes('toast.warning'));
+    assert.ok(src.includes('Some encrypted fields could not be read'));
+    const mapper = readSrc('src/lib/roMapper.ts');
+    assert.ok(mapper.includes('piiDecryptWarnings'));
+    assert.ok(mapper.includes('appendPiiDecryptWarning'));
+    assert.ok(mapper.includes('readSensitiveTextTolerant'));
+    assert.ok(mapper.includes('readOptionalSensitiveTextTolerant'));
+  });
+
+  it('previous RO pagination handles compliance 403 like today list (M9)', () => {
+    const src = readSrc('src/hooks/repairOrders/useROList.ts');
+    const loadPreviousBlock = src.slice(src.indexOf('const loadPreviousPage'));
+    assert.ok(loadPreviousBlock.includes('isComplianceBlockedError'));
+    assert.ok(loadPreviousBlock.includes('onComplianceRequiredRef.current?.()'));
+  });
+
+  it('initial RO list load relies on listError UI instead of duplicate toast (M4)', () => {
+    const src = readSrc('src/hooks/repairOrders/useROList.ts');
+    const effectBlock = src.slice(src.indexOf('useEffect(() => {'));
+    assert.equal(effectBlock.includes("toast.error('Could not load repair orders"), false);
+    assert.ok(src.includes('setListError('));
+    assert.ok(src.includes('void refreshList()'));
+  });
+
+  it('withAuth uses session compliance versions without extra DB lookups (M5)', () => {
+    const src = readSrc('src/lib/apiRoute.ts');
+    assert.ok(src.includes('session.consentVersion'));
+    assert.ok(src.includes('session.legalDisclaimerVersion'));
+    assert.equal(src.includes('prisma.technician.findUnique'), false);
   });
 
   it('login shell paints before session gate and keeps post-auth chunks off critical path', () => {

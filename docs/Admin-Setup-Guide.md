@@ -25,7 +25,7 @@ This guide walks through setup from empty environment to production-ready rollou
 |-------------|--------|
 | **Hosting** | Vercel (recommended) or Node.js 20+ server |
 | **Database** | PostgreSQL with SSL for remote hosts (`?sslmode=require`) |
-| **Repository access** | `viti-ai-clone` main branch |
+| **Repository access** | `Merlinus` main branch |
 | **Node.js** | 20 LTS for local validation and migrations |
 | **Tablets** | Rugged shop-floor tablets — **Chrome or Edge** (Chromium) |
 | **Network** | Stable Wi‑Fi in service bays; voice uses cloud speech recognition |
@@ -37,8 +37,8 @@ This guide walks through setup from empty environment to production-ready rollou
 ### Step 1 — Clone and install
 
 ```bash
-git clone https://github.com/Nicequantum/viti-ai-clone.git
-cd viti-ai-clone
+git clone https://github.com/Nicequantum/Merlinus.git
+cd Merlinus
 npm install
 ```
 
@@ -246,7 +246,7 @@ curl -s https://your-dealership-url/api/health
 curl -s https://your-dealership-url/api/status
 ```
 
-Returns `maintenance`, `version`, `grokConfigured`, and `voiceEnabled` — suitable for uptime dashboards.
+Returns `maintenance`, `version`, `promptVersion`, and `voiceEnabled` — suitable for uptime dashboards. AI configuration is checked on authenticated `/api/health` (manager-only).
 
 ### Recommended monitoring
 

@@ -1,4 +1,6 @@
 import {
+  BLOB_MOCK_SOURCE,
+  isBlobModuleRequest,
   isNextHeadersRequest,
   isRequestCookiesModule,
   isRequestCookiesUrl,
@@ -26,6 +28,14 @@ export async function resolve(specifier, context, nextResolve) {
       format: 'module',
       shortCircuit: true,
       url: `data:text/javascript,${encodeURIComponent(NEXT_HEADERS_MOCK_SOURCE)}`,
+    };
+  }
+
+  if (isBlobModuleRequest(specifier)) {
+    return {
+      format: 'module',
+      shortCircuit: true,
+      url: `data:text/javascript,${encodeURIComponent(BLOB_MOCK_SOURCE)}`,
     };
   }
 

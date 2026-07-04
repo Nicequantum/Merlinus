@@ -3,19 +3,18 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
-import type { RepairOrder, TechnicianSession } from '@/types';
+import type { RepairOrderSummary, TechnicianSession } from '@/types';
 import {
   matchesROSearch,
   mergeRepairOrders,
-  normalizeRepairOrder,
   SEARCH_PAGE_SIZE,
   sortRepairOrdersNewestFirst,
 } from '@/hooks/repairOrders/roListUtils';
 
 interface UseROSearchOptions {
   session: TechnicianSession | null;
-  allROs: RepairOrder[];
-  setAllROs: Dispatch<SetStateAction<RepairOrder[]>>;
+  allROs: RepairOrderSummary[];
+  setAllROs: Dispatch<SetStateAction<RepairOrderSummary[]>>;
   setTodayStartIso: Dispatch<SetStateAction<string | null>>;
 }
 
@@ -41,8 +40,7 @@ export function useROSearch({
       api
         .listRepairOrders({ q, limit: SEARCH_PAGE_SIZE })
         .then(({ repairOrders, todayStart }) => {
-          const normalized = repairOrders.map(normalizeRepairOrder);
-          setAllROs((prev) => mergeRepairOrders(prev, normalized));
+          setAllROs((prev) => mergeRepairOrders(prev, repairOrders));
           if (todayStart) setTodayStartIso(todayStart);
         })
         .catch((error: unknown) => {

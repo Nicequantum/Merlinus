@@ -1,4 +1,3 @@
-import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { generateWarrantyStory } from '@/lib/grok';
@@ -16,6 +15,7 @@ import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
+import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -73,36 +73,45 @@ export async function POST(
         return apiError(mapped.message, mapped.status);
       }
 
-      // C3: durable audit trail before persisting story — if audit fails, story is not saved.
-      await writeAuditLog({
-        action: 'story.generate',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairLine',
-        entityId: lineId,
-        metadata: buildStoryGenerateAuditMetadata({
-          repairOrderId: id,
-          lineNumber: line.lineNumber,
-          advisorIntelligenceUsed: false,
-          advisorContextHash: null,
-          knowledgeBaseEntryIds: [],
-          historyContextLineCount: 0,
-          qualityScore: null,
-          qualityGrade: null,
-          serviceAdvisorId: null,
-        }),
-        ipAddress: getRequestIp(request),
-      });
-
-      const lineUpdated = await prisma.repairLine.updateMany({
-        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-        data: {
-          warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
-          storyQualityAuditEncrypted: '',
-          ...CLEAR_STORY_CERTIFICATION_DB,
-        },
-      });
-      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
+      try {
+        await prisma.$transaction(async (tx) => {
+          await persistRepairLineStoryInTransaction(
+            tx,
+            {
+              action: 'story.generate',
+              dealershipId: session.dealershipId,
+              technicianId: session.technicianId,
+              entityType: 'repairLine',
+              entityId: lineId,
+              metadata: buildStoryGenerateAuditMetadata({
+                repairOrderId: id,
+                lineNumber: line.lineNumber,
+                advisorIntelligenceUsed: false,
+                advisorContextHash: null,
+                knowledgeBaseEntryIds: [],
+                historyContextLineCount: 0,
+                qualityScore: null,
+                qualityGrade: null,
+                serviceAdvisorId: null,
+              }),
+              ipAddress: getRequestIp(request),
+            },
+            {
+              where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+              data: {
+                warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+                storyQualityAuditEncrypted: '',
+                ...CLEAR_STORY_CERTIFICATION_DB,
+              },
+            }
+          );
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Repair line not found for story persist') {
+          return apiError(NOT_FOUND_ERROR, 404);
+        }
+        throw error;
+      }
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,

@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         [advisor.id],
         new Map([[advisor.id, advisor.csiScore ?? null]])
       );
-      const profileData = parseAdvisorProfileData(advisor.profile?.profileData);
+      const profileData = parseAdvisorProfileData(advisor.profile?.profileDataEncrypted);
 
       return {
         advisor: {
@@ -115,7 +115,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             select: {
               observationCount: true,
               lastComputedAt: true,
-              profileData: true,
+              profileDataEncrypted: true,
             },
           },
         },

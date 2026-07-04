@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { NextResponse } from 'next/server';
 import { setSessionCookie, SESSION_COOKIE } from '../../src/lib/auth';
+import { fetchPrivateBlobAsVisionDataUrl } from '../../src/lib/blob';
 import { getMockSessionCookie } from '../setup/criticalPathMocks';
 
 /** Verifies traced CJS path next/headers -> dist/server/request/cookies is mocked before DB-dependent routes run. */
@@ -20,5 +21,11 @@ describe('next/headers cookies intercept', () => {
     await setSessionCookie('name-check');
     assert.equal(getMockSessionCookie(), 'name-check');
     assert.equal(SESSION_COOKIE, 'benz_tech_session');
+  });
+
+  test('blob module mock exports fetchPrivateBlobAsVisionDataUrl for ro.extract', async () => {
+    assert.equal(typeof fetchPrivateBlobAsVisionDataUrl, 'function');
+    const dataUrl = await fetchPrivateBlobAsVisionDataUrl('benz-tech/integration-test.png');
+    assert.match(dataUrl, /^data:image\/png;base64,/);
   });
 });

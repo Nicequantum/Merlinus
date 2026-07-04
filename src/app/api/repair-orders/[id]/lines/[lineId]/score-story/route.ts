@@ -1,4 +1,3 @@
-import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
@@ -10,13 +9,16 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { PROMPT_VERSION } from '@/prompts/version';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_SCORE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
-export const maxDuration = 45;
+export const maxDuration = 100;
 
 export async function POST(
   request: Request,
@@ -58,13 +60,19 @@ export async function POST(
       let quality;
       try {
         const scored = await scoreWarrantyStory(mapped, line, warrantyStory);
-        if (isStoryQualityParseFailure(scored)) {
+        quality = { ...scored, scoredAgainstStory: warrantyStory };
+        if (isStoryQualityParseFailure(quality)) {
+          logger.error('story.score.parse_failed', {
+            repairOrderId: id,
+            lineId,
+            technicianId: session.technicianId,
+            summary: quality.summary,
+          });
           return apiError(
-            'Story audit could not read the AI score. AI quality score returned unreadable JSON.',
+            `Story audit could not read the AI score. ${quality.summary} Tap Audit Story to try again.`,
             502
           );
         }
-        quality = { ...scored, scoredAgainstStory: warrantyStory };
       } catch (error) {
         const mappedError = mapGrokRouteError(error, 'Story scoring');
         const message =
@@ -76,29 +84,41 @@ export async function POST(
         return apiError(message, status);
       }
 
-      await writeAuditLog({
-        action: 'story.review',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairLine',
-        entityId: lineId,
-        promptVersion: PROMPT_VERSION,
-        metadata: {
-          repairOrderId: id,
-          lineNumber: line.lineNumber,
-          promptVersion: PROMPT_VERSION,
-          qualityScore: quality.score,
-          qualityGrade: quality.grade,
-          scoreOnly: true,
-        },
-        ipAddress: getRequestIp(request),
-      });
+      const storyHash = hashWarrantyStory(warrantyStory);
 
-      const lineUpdated = await prisma.repairLine.updateMany({
-        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-        data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
-      });
-      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
+      try {
+        await prisma.$transaction(async (tx) => {
+          await persistRepairLineStoryInTransaction(
+            tx,
+            {
+              action: 'story.score',
+              dealershipId: session.dealershipId,
+              technicianId: session.technicianId,
+              entityType: 'repairLine',
+              entityId: lineId,
+              promptVersion: PROMPT_VERSION,
+              metadata: {
+                repairOrderId: id,
+                lineNumber: line.lineNumber,
+                promptVersion: PROMPT_VERSION,
+                qualityScore: quality.score,
+                qualityGrade: quality.grade,
+                storyHash,
+              },
+              ipAddress: getRequestIp(request),
+            },
+            {
+              where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+              data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
+            }
+          );
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Repair line not found for story persist') {
+          return apiError(NOT_FOUND_ERROR, 404);
+        }
+        throw error;
+      }
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,
@@ -112,7 +132,7 @@ export async function POST(
         metadata: {
           qualityScore: quality.score,
           qualityGrade: quality.grade,
-          scoreOnly: true,
+          storyHash,
           promptVersion: PROMPT_VERSION,
         },
       });

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
+import { CONSENT_VERSION } from '@/types';
 import { internalEmailForD7, normalizeD7Number } from './d7Number';
 import { prisma } from './db';
 import { seedTemplateLibraryIfEmpty } from './templateLibrary';
@@ -7,16 +7,25 @@ import { seedTemplateLibraryIfEmpty } from './templateLibrary';
 /** Canonical seed credentials — login works immediately after db:seed or deploy auto-seed. */
 export const PRIMARY_MANAGER_D7 = 'D7HARRIH';
 export const PRIMARY_TECH_D7 = 'D7TECH001';
-export const CANONICAL_SEED_PASSWORD = 'password123';
 
-/** @deprecated Use CANONICAL_SEED_PASSWORD */
-export const DOCUMENTED_DEV_SEED_PASSWORD = CANONICAL_SEED_PASSWORD;
+/** Seed password from env only — never hardcoded in source or docs. */
+export function getCanonicalSeedPassword(): string {
+  const password =
+    process.env.ADMIN_SEED_PASSWORD?.trim() || process.env.TECH_SEED_PASSWORD?.trim();
+  if (!password) {
+    throw new Error(
+      'ADMIN_SEED_PASSWORD or TECH_SEED_PASSWORD is required — set in .env.local before npm run db:seed'
+    );
+  }
+  return password;
+}
 
-const seedOnboarding = {
+/** Seed accounts complete legal disclaimer in-app after login — never pre-accept at seed time. */
+const seedConsentOnly = {
   consentAt: new Date(),
   consentVersion: CONSENT_VERSION,
-  legalDisclaimerAt: new Date(),
-  legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+  legalDisclaimerAt: null,
+  legalDisclaimerVersion: null,
 };
 
 interface SeedAccountInput {
@@ -100,7 +109,7 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
     isActive: true,
     deletedAt: null,
     dealershipId: input.dealershipId,
-    ...seedOnboarding,
+    ...seedConsentOnly,
   };
 
   const primary = pickPrimaryCandidate(candidates, d7, canonicalEmail, legacyEmail);
@@ -147,7 +156,7 @@ export interface SeedResult {
 export async function runDatabaseSeed(): Promise<SeedResult> {
   const managerD7 = normalizeD7Number(process.env.ADMIN_SEED_D7?.trim() || PRIMARY_MANAGER_D7);
   const techD7 = normalizeD7Number(process.env.TECH_SEED_D7?.trim() || PRIMARY_TECH_D7);
-  const passwordHash = await bcrypt.hash(CANONICAL_SEED_PASSWORD, 12);
+  const passwordHash = await bcrypt.hash(getCanonicalSeedPassword(), 12);
 
   const dealership = await prisma.dealership.upsert({
     where: { id: 'seed-dealership' },

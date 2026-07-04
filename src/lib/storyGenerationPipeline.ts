@@ -48,7 +48,7 @@ export function auditStoryGenerationPipeline(ro: RepairOrder, line: RepairLine):
       'knowledgeBase',
       'historyContext',
       'advisorIntelligence',
-      'styleVariation',
+
       'storyTemplates',
       'roLevelOcr',
       'allRepairLineDescriptions',

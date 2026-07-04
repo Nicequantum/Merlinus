@@ -21,11 +21,17 @@ export interface ImageAttachment {
   name: string;
 }
 
+export type PendingImageUploadStatus = 'uploading' | 'saved' | 'error';
+
 export interface PendingImage {
   id: string;
   previewUrl: string;
   name: string;
-  file: File;
+  /** Present until blob upload completes; optional when `attachment` is already saved. */
+  file?: File;
+  /** Set after immediate blob upload — survives refresh when backed by ro-scan draft storage. */
+  attachment?: ImageAttachment;
+  uploadStatus?: PendingImageUploadStatus;
 }
 
 export interface RepairLine {
@@ -112,6 +118,30 @@ export interface RepairOrder {
   updatedAt?: string;
   technicianId?: string;
   technicianName?: string;
+  /** Present when one or more encrypted fields failed to decrypt (legacy key mismatch, corruption). */
+  piiDecryptWarnings?: string[];
+}
+
+/** Lightweight line shape for RO list views — no decrypted PII or story text. */
+export interface RepairLineSummary {
+  id: string;
+  lineNumber: number;
+  isCustomerPay?: boolean;
+  hasWarrantyStory: boolean;
+  soldMetrics?: RepairLineSoldMetrics;
+}
+
+/** Lightweight RO shape for list/search endpoints — avoids decrypting every line field. */
+export interface RepairOrderSummary {
+  id: string;
+  roNumber: string;
+  vehicle: Pick<VehicleInfo, 'year' | 'make' | 'model'>;
+  firstComplaintPreview?: string;
+  repairLines: RepairLineSummary[];
+  createdAt?: string;
+  updatedAt?: string;
+  technicianId?: string;
+  technicianName?: string;
 }
 
 export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors' | 'technicians';
@@ -167,6 +197,8 @@ export interface StoryQualityResult {
   technicianDetails: TechnicianDetailPrompt[];
   summary: string;
   scoredAgainstStory?: string;
+  /** True when Grok returned unreadable output — not a real zero score. */
+  parseFailed?: boolean;
 }
 
 export interface StoryReviewFeedback {
@@ -338,7 +370,9 @@ export interface TechnicianSession {
   dealershipName: string;
   serviceAdvisorId: string | null;
   consentAt: string | null;
+  consentVersion: string | null;
   legalDisclaimerAt: string | null;
+  legalDisclaimerVersion: string | null;
 }
 
 export interface TechnicianUsageSummary {
@@ -433,7 +467,10 @@ export const AUDIT_ACTIONS = [
   'ro.create',
   'ro.update',
   'ro.delete',
+  'ro.extract',
+  'diagnostics.extract',
   'story.generate',
+  'story.score',
   'story.review',
   'story.edit',
   'story.certify',
@@ -452,6 +489,8 @@ export const AUDIT_ACTIONS = [
   'advisor.delete',
   'advisor.sold_metrics',
   'template.save',
+  'template.use',
+  'customerPay.clear',
   'customerPayTemplateApplied',
   'customerPayStory.edit',
   'customerPayStory.pdf_export',

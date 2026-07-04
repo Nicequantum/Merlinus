@@ -3,6 +3,21 @@ import 'server-only';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'crypto';
 import { logger } from './logger';
 
+/**
+ * L4 — Encryption key rotation (Phase 1 accepted risk)
+ *
+ * Phase 1 uses a single static DATA_ENCRYPTION_KEY per deployment. Rotating the key
+ * requires a planned maintenance window and `npm run db:reencrypt` (see docs/Reencryption-Runbook.md).
+ * There is no automatic online re-key or multi-key envelope encryption in this release.
+ *
+ * Accepted for initial pilot with compensating controls:
+ * - Keys stored only in Vercel env (never in repo); 64-hex format validated at build
+ * - Legacy scrypt salt fallback for rows encrypted before H7 hardening
+ * - Tolerant decrypt reads surface piiDecryptWarnings instead of silent data loss
+ *
+ * Planned Phase 2: dual-key envelope rotation with background re-encryption job.
+ */
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 
@@ -10,25 +25,22 @@ const IV_LENGTH = 12;
 function getScryptSalt(): string {
   const explicit = process.env.ENCRYPTION_SALT?.trim();
   if (explicit) return explicit;
-  const secret = process.env.ENCRYPTION_KEY;
-  if (!secret) {
-    throw new Error('ENCRYPTION_KEY must be set for PII encryption');
-  }
+  const secret = getDataEncryptionSecret();
   return createHash('sha256').update(`merlin-pii-salt:${secret}`).digest('hex');
 }
 
 const LEGACY_SCRYPT_SALT = 'benz-tech-pii-salt';
 
-function getEncryptionSecret(): string {
-  const secret = process.env.ENCRYPTION_KEY;
+function getDataEncryptionSecret(): string {
+  const secret = process.env.DATA_ENCRYPTION_KEY?.trim();
   if (!secret || secret.length < 32) {
-    throw new Error('ENCRYPTION_KEY must be set (min 32 chars) for PII encryption');
+    throw new Error('DATA_ENCRYPTION_KEY must be set (min 32 chars) for PII encryption');
   }
   return secret;
 }
 
 function deriveKeyFromSalt(salt: string): Buffer {
-  return scryptSync(getEncryptionSecret(), salt, 32);
+  return scryptSync(getDataEncryptionSecret(), salt, 32);
 }
 
 /** New encryptions use key-derived salt (H7); legacy rows used LEGACY_SCRYPT_SALT. */
@@ -77,7 +89,9 @@ export function decryptPII(ciphertext: string): string {
   logger.error('encryption.decrypt_failed', {
     error: lastError instanceof Error ? lastError.message : 'unknown',
   });
-  throw new Error('PII decryption failed — verify ENCRYPTION_KEY matches the key used to encrypt data');
+  throw new Error(
+    'PII decryption failed — verify DATA_ENCRYPTION_KEY matches the key used to encrypt data'
+  );
 }
 
 export function encryptStringArray(items: string[]): string {
@@ -100,7 +114,12 @@ export function decryptStringArray(ciphertext: string): string[] {
       return [];
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return [];
+  }
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -156,7 +175,12 @@ export function decryptComplaintsPayload(ciphertext: string): ComplaintsPayload 
       return { complaints: [] };
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return { complaints: [] };
+  }
   if (!raw) return { complaints: [] };
   try {
     const parsed = JSON.parse(raw);
@@ -217,7 +241,12 @@ export function decryptJsonObject<T>(ciphertext: string, fallback: T): T {
       return fallback;
     }
   }
-  const raw = decryptPII(ciphertext);
+  let raw: string;
+  try {
+    raw = decryptPII(ciphertext);
+  } catch {
+    return fallback;
+  }
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;

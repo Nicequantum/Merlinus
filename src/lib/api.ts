@@ -7,6 +7,7 @@ import type {
   DashboardSummary,
   KnowledgeBaseEntry,
   RepairOrder,
+  RepairOrderSummary,
   SaveTemplateFromStoryPayload,
   StoryQualityResult,
   StoryReviewResult,
@@ -29,6 +30,7 @@ import {
   parseRetryAfterMs,
   sleep,
 } from '@/lib/networkErrors';
+import { isRequestAborted } from '@/lib/requestAbort';
 import {
   DIAGNOSTIC_EXTRACT_CLIENT_MS,
   RO_EXTRACT_CLIENT_MS,
@@ -61,12 +63,20 @@ export class ApiError extends Error {
 async function fetchWithNetworkRetry(
   path: string,
   init: RequestInit,
-  timeoutMs?: number
+  timeoutMs?: number,
+  externalSignal?: AbortSignal,
+  maxRetries: number = NETWORK_RETRY_MAX_ATTEMPTS
 ): Promise<Response> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt <= NETWORK_RETRY_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (externalSignal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    externalSignal?.addEventListener('abort', onExternalAbort);
     const timer =
       timeoutMs && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
 
@@ -79,7 +89,7 @@ async function fetchWithNetworkRetry(
       if (
         !res.ok &&
         isRetriableHttpStatus(res.status) &&
-        attempt < NETWORK_RETRY_MAX_ATTEMPTS
+        attempt < maxRetries
       ) {
         const retryAfterMs =
           res.status === 429 ? parseRetryAfterMs(res.headers.get('Retry-After')) : undefined;
@@ -89,17 +99,21 @@ async function fetchWithNetworkRetry(
 
       return res;
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isRequestAborted(error)) {
+        if (externalSignal?.aborted) {
+          throw error;
+        }
         throw new ApiError(`Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s`, 408);
       }
 
       lastError = error;
-      if (!isNetworkFailure(error) || attempt === NETWORK_RETRY_MAX_ATTEMPTS) {
+      if (!isNetworkFailure(error) || attempt === maxRetries) {
         throw error;
       }
 
       await sleep(networkRetryDelayMs(attempt));
     } finally {
+      externalSignal?.removeEventListener('abort', onExternalAbort);
       if (timer) clearTimeout(timer);
     }
   }
@@ -107,8 +121,11 @@ async function fetchWithNetworkRetry(
   throw lastError;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  const { timeoutMs, ...fetchOptions } = options || {};
+async function apiFetch<T>(
+  path: string,
+  options?: RequestInit & { timeoutMs?: number; signal?: AbortSignal; maxRetries?: number }
+): Promise<T> {
+  const { timeoutMs, signal, maxRetries, ...fetchOptions } = options || {};
   const res = await fetchWithNetworkRetry(
     path,
     {
@@ -119,7 +136,9 @@ async function apiFetch<T>(path: string, options?: RequestInit & { timeoutMs?: n
       },
       credentials: 'include',
     },
-    timeoutMs
+    timeoutMs,
+    signal,
+    maxRetries
   );
 
   if (!res.ok) {
@@ -160,10 +179,19 @@ export const api = {
 
   me: () => apiFetch<{ session: TechnicianSession | null }>('/api/auth/me'),
 
-  acceptConsent: () => apiFetch<{ consentAt: string }>('/api/consent', { method: 'POST' }),
+  acceptConsent: () =>
+    apiFetch<{
+      consentAt: string;
+      consentVersion: string;
+      session: TechnicianSession;
+    }>('/api/consent', { method: 'POST' }),
 
   acceptLegalDisclaimer: () =>
-    apiFetch<{ legalDisclaimerAt: string; legalDisclaimerVersion: string }>('/api/legal-disclaimer', {
+    apiFetch<{
+      legalDisclaimerAt: string;
+      legalDisclaimerVersion: string;
+      session: TechnicianSession;
+    }>('/api/legal-disclaimer', {
       method: 'POST',
     }),
 
@@ -186,7 +214,7 @@ export const api = {
     if (params?.q?.trim()) query.set('q', params.q.trim());
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiFetch<{
-      repairOrders: RepairOrder[];
+      repairOrders: RepairOrderSummary[];
       nextCursor?: string | null;
       hasMore?: boolean;
       scope?: 'today' | 'previous' | 'search';
@@ -330,11 +358,12 @@ export const api = {
       timeoutMs: RO_EXTRACT_CLIENT_MS,
     }),
 
-  extractDiagnostics: (imagePathname: string) =>
+  extractDiagnostics: (imagePathname: string, options?: { signal?: AbortSignal }) =>
     apiFetch<ExtractedData>('/api/diagnostics/extract', {
       method: 'POST',
       body: JSON.stringify({ imagePathnames: [imagePathname] }),
       timeoutMs: DIAGNOSTIC_EXTRACT_CLIENT_MS,
+      signal: options?.signal,
     }),
 
   generateStory: (roId: string, lineId: string) =>
@@ -346,7 +375,12 @@ export const api = {
   scoreStory: (roId: string, lineId: string, warrantyStory: string) =>
     apiFetch<{ quality: StoryQualityResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/score-story`,
-      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: STORY_SCORE_CLIENT_MS }
+      {
+        method: 'POST',
+        body: JSON.stringify({ warrantyStory }),
+        timeoutMs: STORY_SCORE_CLIENT_MS,
+        maxRetries: 0,
+      }
     ),
 
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>

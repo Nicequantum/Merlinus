@@ -15,14 +15,14 @@ import { GET as listRepairOrders } from '../../src/app/api/repair-orders/route';
 import { createSessionToken } from '../../src/lib/auth';
 import { CONSENT_REQUIRED_ERROR } from '../../src/lib/errors';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
-import { LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 
 const prisma = new PrismaClient();
 
 const integrationOnboarding = {
   consentAt: new Date(),
-  consentVersion: '2026-06-07-v1' as const,
+  consentVersion: CONSENT_VERSION,
   legalDisclaimerAt: new Date(),
   legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
 };

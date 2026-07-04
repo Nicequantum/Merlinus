@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import type { ImageAttachment } from '@/types';
 import { ImageLightbox } from './ImageLightbox';
@@ -23,10 +24,10 @@ export function XentryImageGallery({ images, onDeleteImage }: XentryImageGallery
             key={img.id}
             type="button"
             onClick={() => setActiveImageId(img.id)}
-            className="benz-photo-thumb focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
+            className="benz-photo-thumb relative focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
             aria-label={`View ${img.name}`}
           >
-            <img src={img.url} alt={img.name} />
+            <Image src={img.url} alt={img.name} fill unoptimized className="object-cover" sizes="120px" />
           </button>
         ))}
       </div>

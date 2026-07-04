@@ -65,6 +65,43 @@ function normalize(value) {
   return String(value).replace(/\\/g, '/');
 }
 
+/** Shared integration-test stub for @/lib/blob (CJS _load + ESM loader). */
+export const BLOB_MOCK_SOURCE = `
+export async function fetchPrivateBlobAsDataUrl() {
+  return 'data:image/png;base64,aW50ZWdyYXRpb24=';
+}
+export async function fetchPrivateBlobAsVisionDataUrl() {
+  return 'data:image/png;base64,aW50ZWdyYXRpb24=';
+}
+export async function uploadImageToBlob() {
+  throw new Error('uploadImageToBlob not mocked for integration tests');
+}
+export async function streamPrivateBlob() {
+  return null;
+}
+`;
+
+export function isBlobModuleRequest(request) {
+  const normalized = normalize(request);
+  return (
+    normalized.endsWith('/src/lib/blob') ||
+    normalized.endsWith('/src/lib/blob.ts') ||
+    request === '@/lib/blob'
+  );
+}
+
+export function createBlobCjsExports() {
+  const mockVisionDataUrl = async () => 'data:image/png;base64,aW50ZWdyYXRpb24=';
+  return {
+    fetchPrivateBlobAsDataUrl: mockVisionDataUrl,
+    fetchPrivateBlobAsVisionDataUrl: mockVisionDataUrl,
+    uploadImageToBlob: async () => {
+      throw new Error('uploadImageToBlob not mocked for integration tests');
+    },
+    streamPrivateBlob: async () => null,
+  };
+}
+
 export function isNextHeadersRequest(request) {
   const req = normalize(request);
   return req === 'next/headers' || req.endsWith('/next/headers') || req.endsWith('/next/headers.js');
@@ -163,19 +200,8 @@ export function patchCjsModuleLoader() {
       return createRequestCookiesCjsExports();
     }
 
-    const normalized = normalize(request);
-    if (
-      normalized.endsWith('/src/lib/blob') ||
-      normalized.endsWith('/src/lib/blob.ts') ||
-      request === '@/lib/blob'
-    ) {
-      return {
-        fetchPrivateBlobAsDataUrl: async () => 'data:image/png;base64,aW50ZWdyYXRpb24=',
-        uploadImageToBlob: async () => {
-          throw new Error('uploadImageToBlob not mocked for integration tests');
-        },
-        streamPrivateBlob: async () => null,
-      };
+    if (isBlobModuleRequest(request)) {
+      return createBlobCjsExports();
     }
 
     return originalLoad.call(this, request, parent, isMain);

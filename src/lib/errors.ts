@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
+import { mapRouteError } from './routeErrorMapper';
 
 export const GENERIC_ERROR = 'Something went wrong. Please try again or contact your administrator.';
 export const UNAUTHORIZED_ERROR = 'You must be signed in to perform this action.';
@@ -39,13 +40,17 @@ export function handleRouteError(error: unknown, context: string): NextResponse 
   }
 
   const err = error instanceof Error ? error : new Error('unknown route error');
-  logger.error('route.error', {
+  const mapped = mapRouteError(error, context);
+
+  logger.error(mapped.status >= 500 ? 'route.error' : 'route.client_error', {
     context,
     error: err.message,
+    logDetail: mapped.logDetail,
+    status: mapped.status,
   });
   Sentry.captureException(err, {
     tags: { routeContext: context },
-    extra: { routeContext: context },
+    extra: { routeContext: context, logDetail: mapped.logDetail, status: mapped.status },
   });
-  return apiError(GENERIC_ERROR, 500);
+  return apiError(mapped.message, mapped.status);
 }

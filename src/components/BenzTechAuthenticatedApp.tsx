@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { AppFooter } from '@/components/AppFooter';
 import { AppHeader } from '@/components/AppHeader';
@@ -71,21 +71,30 @@ function runAction(label: string, action: () => void | Promise<void>): void {
 interface BenzTechAuthenticatedAppProps {
   session: TechnicianSession;
   onLogout: () => Promise<void>;
+  onSessionRefresh: () => Promise<TechnicianSession | null>;
 }
 
 /** Post-auth Merlinus shell — isolated from login so heavy RO/OCR modules never load on sign-in. */
-export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenticatedAppProps) {
+export function BenzTechAuthenticatedApp({
+  session,
+  onLogout,
+  onSessionRefresh,
+}: BenzTechAuthenticatedAppProps) {
   const ocr = useOcrProgress();
+  const handleComplianceRequired = useCallback(() => {
+    void onSessionRefresh();
+  }, [onSessionRefresh]);
   const ro = useRepairOrders({
     session,
-    onOcrStart: ocr.startOcr,
-    onOcrFinish: ocr.finishOcr,
-    setOcrProgress: ocr.setOcrProgress,
-    setScanStatusMessage: ocr.setScanStatusMessage,
+    roScanPipeline: ocr.roScan,
+    xentryPipeline: ocr.xentry,
+    getActivePipeline: ocr.getActivePipeline,
+    onComplianceRequired: handleComplianceRequired,
   });
 
   const isServiceAdvisor = session.role === 'service_advisor';
   const isDesktop = useDesktopCompanion();
+  const isManager = session.role === 'manager';
 
   useEffect(() => {
     if (isServiceAdvisor || ro.loading || ro.listError) return;
@@ -103,11 +112,11 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
     session.role,
   ]);
 
-  if (!isServiceAdvisor && ro.loading && !ro.listError) {
+  if (!isServiceAdvisor && !isManager && ro.loading && !ro.listError) {
     return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
   }
 
-  if (!isServiceAdvisor && ro.listError) {
+  if (!isServiceAdvisor && ro.listError && !isManager) {
     return (
       <LoadErrorScreen
         title="Could not load repair orders"
@@ -119,7 +128,6 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
   }
 
   const goToSettings = () => ro.setView('settings');
-  const isManager = session.role === 'manager';
 
   if (isServiceAdvisor) {
     return (
@@ -146,7 +154,27 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
   }
 
   const roListSection = (
-    <RepairOrderHomeLists
+    <>
+      {ro.loading && isManager && (
+        <div className="benz-card p-4 mb-4 text-sm text-benz-secondary text-center">
+          Loading today&apos;s repair orders…
+        </div>
+      )}
+      {ro.listError && (
+        <div className="benz-card border border-benz-amber/40 bg-benz-amber/5 p-4 mb-4 text-sm text-benz-secondary">
+          <p className="font-medium text-benz-primary mb-2">Could not load repair orders</p>
+          <p className="mb-3">{ro.listError}</p>
+          <button
+            type="button"
+            onClick={() => runAction('Retry loading repair orders', () => ro.retryListLoad())}
+            disabled={ro.listRetrying}
+            className="secondary-btn h-10 px-4 touch-target disabled:opacity-60"
+          >
+            {ro.listRetrying ? 'Retrying…' : 'Try again'}
+          </button>
+        </div>
+      )}
+      <RepairOrderHomeLists
       searchTerm={ro.searchTerm}
       searchLoading={ro.searchLoading}
       searchResults={ro.searchROs}
@@ -162,6 +190,7 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
       onOpenRO={ro.openRO}
       onDeleteRO={ro.deleteRO}
     />
+    </>
   );
 
   const openingRoNumber =
@@ -211,10 +240,11 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
             onProcessScan={ro.processPendingScan}
             onClearPendingScan={ro.clearPendingScan}
             onCancelScan={ro.cancelScan}
+            onDeletePendingPage={ro.removePendingScanPage}
             onCreateManualRO={ro.createManualRO}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
-            scanStatusMessage={ocr.scanStatusMessage}
+            isProcessingOCR={ocr.roScan.isProcessing}
+            ocrProgress={ocr.roScan.progress}
+            scanStatusMessage={ocr.roScan.statusMessage}
           >
             {roListSection}
           </ManagerDashboard>
@@ -237,14 +267,15 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
           previousHasMore={ro.previousHasMore}
           onLoadMorePrevious={ro.loadMorePrevious}
           pendingROImages={ro.pendingROImages}
-          isProcessingOCR={ocr.isProcessingOCR}
-          ocrProgress={ocr.ocrProgress}
-          scanStatusMessage={ocr.scanStatusMessage}
+          isProcessingOCR={ocr.roScan.isProcessing}
+          ocrProgress={ocr.roScan.progress}
+          scanStatusMessage={ocr.roScan.statusMessage}
           onScanRO={ro.scanRO}
           onAddFromGallery={ro.addScanPagesFromGallery}
           onProcessScan={ro.processPendingScan}
           onClearPendingScan={ro.clearPendingScan}
           onCancelScan={ro.cancelScan}
+          onDeletePendingPage={ro.removePendingScanPage}
           onCreateManualRO={ro.createManualRO}
           openingROId={ro.openingROId}
           onOpenRO={ro.openRO}
@@ -275,13 +306,20 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
         </div>
       )}
 
-      {ro.view === 'ro' && ro.currentRO && (
+      {ro.view === 'ro' && ro.currentRO && (() => {
+        const roXentry = ro.buildXentrySection({ scope: 'ro', roId: ro.currentRO.id });
+        return (
         <ViewErrorBoundary viewName="the repair order">
           <div className={showDesktopCompanion ? 'benz-tablet-only' : undefined}>
           <ROView
             ro={ro.currentRO}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
+            isProcessingOCR={ocr.xentry.isProcessing}
+            ocrProgress={ocr.xentry.progress}
+            xentryStatusMessage={ocr.xentry.statusMessage}
+            xentrySavedImages={roXentry.savedImages}
+            xentryPendingImages={roXentry.pendingImages}
+            xentryImagesNeedingAnalysisCount={roXentry.imagesNeedingAnalysisCount}
+            xentryExtractedData={roXentry.extractedData}
             onDone={() => ro.setView('home')}
             onUpdateRONumber={ro.updateRONumber}
             onUpdateVehicle={(field, value) => ro.updateVehicle({ [field]: value })}
@@ -290,7 +328,12 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
             onEditComplaint={ro.editComplaint}
             onRemoveComplaint={ro.removeComplaint}
             onDecodeVin={ro.decodeVinForRO}
-            onAddROXentryPhotos={ro.addROXentryPhotos}
+            onCaptureRoXentryPhoto={roXentry.onCapturePhoto}
+            onAddRoXentryFromGallery={roXentry.onAddFromGallery}
+            onProcessRoXentryImages={roXentry.onProcessImages}
+            onClearPendingRoXentry={roXentry.onClearPending}
+            onCancelRoXentryProcessing={roXentry.onCancelProcessing}
+            onDeletePendingRoXentryImage={roXentry.onDeletePendingImage}
             onDeleteROXentryImage={(imageId) =>
               runAction('Delete Xentry photo', () => ro.deleteROXentryImage(imageId))
             }
@@ -302,17 +345,27 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
           />
           </div>
         </ViewErrorBoundary>
-      )}
+        );
+      })()}
 
-      {ro.view === 'line' && ro.currentRO && ro.currentLine && (
+      {ro.view === 'line' && ro.currentRO && ro.currentLine && (() => {
+        const lineXentry = ro.buildXentrySection({
+          scope: 'line',
+          lineId: ro.currentLine!.id,
+        });
+        return (
         <ViewErrorBoundary viewName="the repair line">
           <div className={showDesktopCompanion ? 'benz-tablet-only' : undefined}>
           <LineView
             ro={ro.currentRO}
             line={ro.currentLine}
             technicianName={session.name}
-            isProcessingOCR={ocr.isProcessingOCR}
-            ocrProgress={ocr.ocrProgress}
+            isProcessingOCR={ocr.xentry.isProcessing}
+            ocrProgress={ocr.xentry.progress}
+            xentrySavedImages={lineXentry.savedImages}
+            xentryPendingImages={lineXentry.pendingImages}
+            xentryImagesNeedingAnalysisCount={lineXentry.imagesNeedingAnalysisCount}
+            xentryStatusMessage={ocr.xentry.statusMessage}
             isGenerating={ro.isGeneratingForLine}
             isScoring={ro.isScoringForLine}
             isReviewing={ro.isReviewingForLine}
@@ -329,7 +382,11 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
               const lineId = ro.currentLine!.id;
               const roId = ro.currentRO!.id;
               ro.updateLine(lineId, updates);
-              if (updates.warrantyStory !== undefined || updates.technicianNotes !== undefined || updates.customerConcern !== undefined) {
+              if (
+                updates.warrantyStory !== undefined ||
+                updates.technicianNotes !== undefined ||
+                updates.customerConcern !== undefined
+              ) {
                 companion.publishROPatch({
                   repairOrderId: roId,
                   lineId,
@@ -341,7 +398,12 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
                 });
               }
             }}
-            onAddXentryPhotos={() => ro.addXentryPhotos(ro.currentLine!.id)}
+            onCaptureXentryPhoto={lineXentry.onCapturePhoto}
+            onAddXentryFromGallery={lineXentry.onAddFromGallery}
+            onProcessXentryImages={lineXentry.onProcessImages}
+            onClearPendingXentry={lineXentry.onClearPending}
+            onCancelXentryProcessing={lineXentry.onCancelProcessing}
+            onDeletePendingXentryImage={lineXentry.onDeletePendingImage}
             onDeleteXentryImage={(imageId) =>
               runAction('Delete diagnostic photo', () =>
                 ro.deleteLineXentryImage(ro.currentLine!.id, imageId)
@@ -402,7 +464,8 @@ export function BenzTechAuthenticatedApp({ session, onLogout }: BenzTechAuthenti
           />
           </div>
         </ViewErrorBoundary>
-      )}
+        );
+      })()}
 
       {ro.view === 'settings' && (
         <SettingsView

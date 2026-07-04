@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { encryptPII } from '@/lib/encryption';
+import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import {
   fingerprintAdvisorName,
   isPlausibleAdvisorName,
@@ -101,7 +101,7 @@ export async function createManualServiceAdvisor(
       },
       profile: {
         create: {
-          profileData: JSON.stringify(EMPTY_PROFILE),
+          profileDataEncrypted: encryptJsonObject(EMPTY_PROFILE),
         },
       },
     },

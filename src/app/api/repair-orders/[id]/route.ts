@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { appendAuditLogInTransaction, writeAuditLog } from '@/lib/audit';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
@@ -23,6 +23,7 @@ import {
 import { enrichRepairOrderCertification } from '@/lib/repairOrderCertificationEnrichment';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { emptyExtractedData } from '@/utils/diagnosticParser';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -90,7 +91,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         repairLines: data.repairLines,
       };
 
-      const storyEdits: Array<{ lineId: string; lineNumber: number; isCustomerPay: boolean }> = [];
+      const warrantyStoryEdits: Array<{
+        lineId: string;
+        lineNumber: number;
+        previousStoryHash: string;
+        storyHash: string;
+      }> = [];
+      const customerPayStoryEdits: Array<{ lineId: string; lineNumber: number }> = [];
       if (data.repairLines) {
         for (const line of data.repairLines) {
           if (!line.id || line.warrantyStory === undefined) continue;
@@ -99,11 +106,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           if (prev && prev.warrantyStory !== line.warrantyStory) {
             const isCustomerPay =
               line.isCustomerPay === true || existingLine?.isCustomerPay === true;
-            storyEdits.push({
-              lineId: line.id,
-              lineNumber: prev.lineNumber,
-              isCustomerPay,
-            });
+            if (isCustomerPay) {
+              customerPayStoryEdits.push({
+                lineId: line.id,
+                lineNumber: prev.lineNumber,
+              });
+            } else {
+              warrantyStoryEdits.push({
+                lineId: line.id,
+                lineNumber: prev.lineNumber,
+                previousStoryHash: hashWarrantyStory(prev.warrantyStory ?? ''),
+                storyHash: hashWarrantyStory(line.warrantyStory ?? ''),
+              });
+            }
           }
         }
       }
@@ -150,6 +165,26 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         });
         if (roUpdated.count === 0) {
           throw new Error('Repair order not found for update');
+        }
+
+        const requestIp = getRequestIp(request);
+        for (const edit of warrantyStoryEdits) {
+          await appendAuditLogInTransaction(tx, {
+            action: 'story.edit',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'repairLine',
+            entityId: edit.lineId,
+            promptVersion: PROMPT_VERSION,
+            metadata: {
+              repairOrderId: id,
+              lineNumber: edit.lineNumber,
+              promptVersion: PROMPT_VERSION,
+              previousStoryHash: edit.previousStoryHash,
+              storyHash: edit.storyHash,
+            },
+            ipAddress: requestIp,
+          });
         }
 
         if (data.repairLines && Array.isArray(data.repairLines)) {
@@ -285,30 +320,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         ipAddress: getRequestIp(request),
       });
 
-      for (const edit of storyEdits) {
-        // H3: Customer Pay manual edits use lightweight audit — not Merlin story.edit.
-        if (edit.isCustomerPay) {
-          await writeAuditLog({
-            action: 'customerPayStory.edit',
-            dealershipId: session.dealershipId,
-            technicianId: session.technicianId,
-            entityType: 'repairLine',
-            entityId: edit.lineId,
-            metadata: { repairOrderId: id, lineNumber: edit.lineNumber },
-            ipAddress: getRequestIp(request),
-          });
-        } else {
-          await writeAuditLog({
-            action: 'story.edit',
-            dealershipId: session.dealershipId,
-            technicianId: session.technicianId,
-            entityType: 'repairLine',
-            entityId: edit.lineId,
-            promptVersion: PROMPT_VERSION,
-            metadata: { repairOrderId: id, lineNumber: edit.lineNumber, promptVersion: PROMPT_VERSION },
-            ipAddress: getRequestIp(request),
-          });
-        }
+      for (const edit of customerPayStoryEdits) {
+        await writeAuditLog({
+          action: 'customerPayStory.edit',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'repairLine',
+          entityId: edit.lineId,
+          metadata: { repairOrderId: id, lineNumber: edit.lineNumber },
+          ipAddress: getRequestIp(request),
+        });
       }
 
       void broadcastCompanionEvent(session.technicianId, {

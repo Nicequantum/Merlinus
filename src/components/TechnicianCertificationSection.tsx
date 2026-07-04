@@ -14,6 +14,7 @@ interface TechnicianCertificationSectionProps {
   onNameChange: (name: string) => void;
   isComplete: boolean;
   isSaved: boolean;
+  pendingReaudit?: boolean;
 }
 
 export function TechnicianCertificationSection({
@@ -24,6 +25,7 @@ export function TechnicianCertificationSection({
   onNameChange,
   isComplete,
   isSaved,
+  pendingReaudit = false,
 }: TechnicianCertificationSectionProps) {
   return (
     <div className="benz-card p-4 mt-4 border border-benz-accent/25 bg-benz-accent/5">
@@ -34,12 +36,19 @@ export function TechnicianCertificationSection({
 
       <p className="text-sm text-benz-silver leading-relaxed mb-4">{CERTIFICATION_DISCLAIMER}</p>
 
+      {pendingReaudit && !isSaved && (
+        <p className="text-xs text-benz-amber mb-4 leading-snug">
+          You edited the story after the last audit. Tap <strong>Audit Story</strong> above to refresh the MI score,
+          then complete certification below.
+        </p>
+      )}
+
       <label className="flex items-start gap-3 cursor-pointer mb-4">
         <input
           type="checkbox"
           checked={checked}
           onChange={(e) => onCheckedChange(e.target.checked)}
-          disabled={isSaved}
+          disabled={isSaved || pendingReaudit}
           className="mt-1 h-4 w-4 shrink-0 accent-benz-blue"
         />
         <span className="text-sm text-benz-primary leading-snug">I have reviewed and verified this story</span>
@@ -54,14 +63,14 @@ export function TechnicianCertificationSection({
           fieldKey={`${lineId}-certify-name`}
           value={certifiedName}
           onChange={onNameChange}
-          disabled={isSaved}
+          disabled={isSaved || pendingReaudit}
           placeholder="Full legal name"
           className="benz-input w-full"
           autoComplete="name"
         />
       </div>
 
-      {!isComplete && !isSaved && (
+      {!isComplete && !isSaved && !pendingReaudit && (
         <p className="text-xs text-benz-amber mt-3 leading-snug">
           MI audit is complete. Check the box and enter your full name to certify — Copy for CDK stays
           locked until certification is saved.

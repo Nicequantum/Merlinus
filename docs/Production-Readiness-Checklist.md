@@ -1,6 +1,6 @@
 # Merlin Production Readiness Checklist
 
-**Version:** 3.0.1 · **Prompt:** 2.1.0  
+**Version:** 3.0.0 · **Prompt:** 3.0.0
 **Purpose:** Mandatory sign-off before deploying Merlin to any dealership tablet fleet.
 
 Complete every section. A deployment is **blocked** until all **Critical** items pass and signatories are recorded.

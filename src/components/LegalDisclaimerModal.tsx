@@ -17,16 +17,22 @@ export function LegalDisclaimerModal({ onAccept, loading }: LegalDisclaimerModal
   const checkScrollPosition = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const noScrollNeeded = el.scrollHeight <= el.clientHeight + 16;
     const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 16;
-    setScrolledToBottom(atBottom);
+    setScrolledToBottom(noScrollNeeded || atBottom);
   }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     checkScrollPosition();
+    const resizeObserver = new ResizeObserver(checkScrollPosition);
+    resizeObserver.observe(el);
     el.addEventListener('scroll', checkScrollPosition, { passive: true });
-    return () => el.removeEventListener('scroll', checkScrollPosition);
+    return () => {
+      resizeObserver.disconnect();
+      el.removeEventListener('scroll', checkScrollPosition);
+    };
   }, [checkScrollPosition]);
 
   const canAccept = scrolledToBottom && acknowledged;

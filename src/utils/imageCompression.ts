@@ -1,12 +1,31 @@
 import { clientLog } from '@/lib/clientLog';
 
-export async function compressImageForUpload(file: File, maxDim = 1600, quality = 0.72): Promise<File> {
+/** RO scan upload — balances Grok vision legibility with fast uplink transfer. */
+export const RO_SCAN_UPLOAD_MAX_DIM = 1400;
+export const RO_SCAN_UPLOAD_QUALITY = 0.82;
+export const RO_SCAN_UPLOAD_SKIP_BYTES = 700_000;
+
+export async function compressImageForRoScan(file: File): Promise<File> {
+  return compressImageForUpload(
+    file,
+    RO_SCAN_UPLOAD_MAX_DIM,
+    RO_SCAN_UPLOAD_QUALITY,
+    RO_SCAN_UPLOAD_SKIP_BYTES
+  );
+}
+
+export async function compressImageForUpload(
+  file: File,
+  maxDim = 1600,
+  quality = 0.72,
+  skipBelowBytes = 900_000
+): Promise<File> {
   if (!file.type.startsWith('image/')) return file;
 
   const img = await loadImage(file);
   try {
     let { width, height } = img;
-    if (Math.max(width, height) <= maxDim && file.size < 900_000) {
+    if (Math.max(width, height) <= maxDim && file.size < skipBelowBytes) {
       return file;
     }
     if (Math.max(width, height) > maxDim) {

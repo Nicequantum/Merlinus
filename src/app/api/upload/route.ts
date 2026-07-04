@@ -2,7 +2,9 @@ import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { uploadImageToBlob } from '@/lib/blob';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { mapAuditRouteError, mapBlobRouteError } from '@/lib/scanRouteErrors';
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([
@@ -46,25 +48,52 @@ export async function POST(request: Request) {
       }
 
       if (!ALLOWED_TYPES.has(file.type)) {
-        return apiError('Only JPEG, PNG, WebP, and GIF images are allowed.', 400);
+        return apiError(`Unsupported image type "${file.type}". Use JPEG, PNG, WebP, GIF, or HEIC.`, 400);
       }
 
       if (file.size > MAX_FILE_SIZE) {
         return apiError('Image must be smaller than 8 MB.', 400);
       }
 
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const uploaded = await uploadImageToBlob(buffer, file.name, file.type);
+      let uploaded;
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        uploaded = await uploadImageToBlob(buffer, file.name, file.type);
+      } catch (error) {
+        const mapped = mapBlobRouteError(error, 'upload');
+        logger.error('upload.blob_failed', {
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          status: mapped.status,
+          error: mapped.logDetail,
+        });
+        return apiError(mapped.message, mapped.status);
+      }
 
-      await writeAuditLog({
-        action: 'image.upload',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'image',
-        entityId: uploaded.pathname,
-        metadata: { pathname: uploaded.pathname, size: file.size },
-        ipAddress: getRequestIp(request),
-      });
+      try {
+        await writeAuditLog({
+          action: 'image.upload',
+          dealershipId: session.dealershipId,
+          technicianId: session.technicianId,
+          entityType: 'image',
+          entityId: uploaded.pathname,
+          metadata: { pathname: uploaded.pathname, size: file.size },
+          ipAddress: getRequestIp(request),
+        });
+      } catch (error) {
+        const mapped = mapAuditRouteError(error);
+        logger.error('upload.audit_failed', {
+          technicianId: session.technicianId,
+          dealershipId: session.dealershipId,
+          pathname: uploaded.pathname,
+          status: mapped.status,
+          error: mapped.logDetail,
+        });
+        return apiError(mapped.message, mapped.status);
+      }
 
       return { pathname: uploaded.pathname, url: uploaded.url, name: file.name };
     },

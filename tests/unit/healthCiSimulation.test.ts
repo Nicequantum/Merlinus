@@ -17,8 +17,10 @@ describe('health CI simulation', () => {
     process.env.CI = 'true';
     process.env.GROK_API_KEY = 'ci-grok-key';
     process.env.SESSION_SECRET = 'ci-test-session-secret-min-32-chars';
-    process.env.ENCRYPTION_KEY =
+    process.env.DATA_ENCRYPTION_KEY =
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    process.env.SEARCH_HMAC_KEY =
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     delete process.env.KV_REST_API_URL;
     delete process.env.KV_REST_API_TOKEN;
     delete process.env.NEXT_PUBLIC_GROK_API_KEY;

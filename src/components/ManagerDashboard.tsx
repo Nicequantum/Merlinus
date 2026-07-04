@@ -36,6 +36,7 @@ interface ManagerDashboardProps {
   onProcessScan: () => void;
   onClearPendingScan: () => void;
   onCancelScan: () => void;
+  onDeletePendingPage?: (imageId: string) => void;
   onCreateManualRO: () => void;
   isProcessingOCR: boolean;
   ocrProgress: number;
@@ -81,6 +82,7 @@ export function ManagerDashboard({
   onProcessScan,
   onClearPendingScan,
   onCancelScan,
+  onDeletePendingPage,
   onCreateManualRO,
   isProcessingOCR,
   ocrProgress,
@@ -250,6 +252,7 @@ export function ManagerDashboard({
               onProcessScan={onProcessScan}
               onClearPendingScan={onClearPendingScan}
               onCancelScan={onCancelScan}
+              onDeletePendingPage={onDeletePendingPage}
               onCreateManualRO={onCreateManualRO}
               scanButtonLabel="Scan RO"
               compact

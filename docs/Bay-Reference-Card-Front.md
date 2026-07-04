@@ -46,9 +46,11 @@
 ║   2  DOCUMENT  →  speak or type in TECHNICIAN NOTES              ║
 ║      (real tests, codes, parts — what you actually did)          ║
 ║                                                                  ║
-║   3  GENERATE  →  tap  "Generate warranty story"               ║
+║   3  DIAGNOSTIC  →  queue Xentry photos · Process images        ║
 ║                                                                  ║
-║   4  REVIEW  →  read · edit ·  Copy for CDK  or  Download PDF  ║
+║   4  GENERATE  →  tap  "Generate MI 4.3"                        ║
+║                                                                  ║
+║   5  REVIEW  →  Audit Story · edit · Copy for CDK · Export PDF  ║
 ║                                                                  ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║                                                                  ║
@@ -110,8 +112,9 @@ Use this block if your print tool does not support the box layout above.
 #### DAILY WORKFLOW
 1. **OPEN RO** → tap your repair line
 2. **DOCUMENT** → Technician Notes (voice or type)
-3. **GENERATE** → "Generate warranty story"
-4. **REVIEW** → edit → Copy for CDK or Download PDF
+3. **DIAGNOSTIC** → Diagnostic Evidence → Process images (optional)
+4. **GENERATE** → **Generate MI 4.3**
+5. **REVIEW** → Audit Story → edit → Copy for CDK or Export PDF
 
 #### SAY THIS (examples)
 - *Finding:* "Quick Test found fault code P0300."
@@ -128,4 +131,4 @@ Every field accepts keyboard input. Voice is a shortcut — never block the repa
 
 ---
 
-*Merlin v3.0.1 · [DEALERSHIP NAME]*
+*Merlin v3.0.0 · [DEALERSHIP NAME]*

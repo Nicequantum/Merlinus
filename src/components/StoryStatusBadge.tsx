@@ -2,16 +2,25 @@
 
 import { FileText, Sparkles } from 'lucide-react';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import type { RepairLine } from '@/types';
+import type { RepairLine, RepairLineSummary } from '@/types';
+
+type StoryStatusLine = Pick<RepairLine, 'isCustomerPay' | 'warrantyStory'> | RepairLineSummary;
 
 interface StoryStatusBadgeProps {
-  lines: RepairLine[];
+  lines: StoryStatusLine[];
   compact?: boolean;
+}
+
+function lineHasStory(line: StoryStatusLine): boolean {
+  if ('hasWarrantyStory' in line) {
+    return line.hasWarrantyStory;
+  }
+  return Boolean(line.warrantyStory?.trim());
 }
 
 /** Distinguishes instant Customer Pay stories from AI-generated warranty stories. */
 export function StoryStatusBadge({ lines, compact = false }: StoryStatusBadgeProps) {
-  const withStory = lines.filter((l) => l.warrantyStory?.trim());
+  const withStory = lines.filter((l) => lineHasStory(l));
   if (withStory.length === 0) return null;
 
   const cpCount = withStory.filter((l) => isCustomerPayRepairLine(l)).length;

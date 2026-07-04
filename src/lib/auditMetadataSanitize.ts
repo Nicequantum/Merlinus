@@ -38,6 +38,11 @@ const ALLOWED_STRING_KEYS = new Set([
   'certifiedAt',
   'storyHash',
   'legalDisclaimerVersion',
+  'reviewMode',
+  'model',
+  'extractionSource',
+  'extractionStrength',
+  'pathnameDigest',
 ]);
 
 function sanitizePrimitive(value: unknown): unknown {
@@ -89,7 +94,17 @@ export function sanitizeAuditMetadata(
       continue;
     }
 
-    if (key.endsWith('Count') || key.endsWith('Score') || key === 'lineNumber') {
+    if (
+      key.endsWith('Count') ||
+      key.endsWith('Score') ||
+      key === 'lineNumber' ||
+      key === 'durationMs'
+    ) {
+      sanitized[key] = value;
+      continue;
+    }
+
+    if (key === 'success' || key === 'hasRoNumber' || key === 'hasVin17' || key === 'hasVehicleIdentity') {
       sanitized[key] = value;
       continue;
     }

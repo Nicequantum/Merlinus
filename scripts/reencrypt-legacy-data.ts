@@ -5,7 +5,13 @@
  * Usage: npm run db:reencrypt
  * S2 dual-storage backfill (roNumber, description, displayName): npm run db:migrate-pii
  *
- * Requires: DATABASE_URL and ENCRYPTION_KEY in the environment.
+ * Requires: DATABASE_URL and DATA_ENCRYPTION_KEY in the environment.
+ *
+ * L4 — Key rotation operations (Phase 1 accepted risk)
+ * ─────────────────────────────────────────────────────
+ * This script is the ONLY supported path for re-encrypting PII after DATA_ENCRYPTION_KEY
+ * or SEARCH_HMAC_KEY rotation. Phase 1 does not support hot key rollover — run during
+ * a maintenance window with MERLIN_MAINTENANCE_MODE=true. Full checklist: docs/Reencryption-Runbook.md
  */
 import { PrismaClient } from '@prisma/client';
 import {
@@ -206,8 +212,8 @@ async function migrateKnowledgeBase(): Promise<MigrationStats> {
 }
 
 async function main(): Promise<void> {
-  if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
-    throw new Error('ENCRYPTION_KEY must be set (min 32 chars) before running db:reencrypt');
+  if (!process.env.DATA_ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY.length < 32) {
+    throw new Error('DATA_ENCRYPTION_KEY must be set (min 32 chars) before running db:reencrypt');
   }
 
   console.log('Re-encrypting legacy plaintext records...');

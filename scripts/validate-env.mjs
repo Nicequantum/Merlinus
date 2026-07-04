@@ -7,7 +7,15 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const REQUIRED = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'];
+const REQUIRED = ['DATABASE_URL', 'DATA_ENCRYPTION_KEY', 'SEARCH_HMAC_KEY', 'SESSION_SECRET'];
+/** Must never be set — exposes xAI keys to the browser bundle. Use GROK_API_KEY only. */
+const FORBIDDEN_PUBLIC_GROK_KEYS = [
+  'NEXT_PUBLIC_GROK_API_KEY',
+  'NEXT_PUBLIC_XAI_API_KEY',
+  'NEXT_PUBLIC_XAI_KEY',
+];
+/** Required in production — RO/Xentry scanning uploads photos to Vercel Blob before Grok vision. */
+const PRODUCTION_SCANNING_REQUIRED = ['BLOB_READ_WRITE_TOKEN', 'GROK_API_KEY'];
 /** Required in production — distributed rate limiting must not fall back to per-instance memory. */
 const PRODUCTION_REQUIRED = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
 
@@ -35,6 +43,17 @@ loadDotEnvFile('.env.production');
 
 const isProduction =
   process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+const exposedPublicGrokKeys = FORBIDDEN_PUBLIC_GROK_KEYS.filter((key) => process.env[key]?.trim());
+if (exposedPublicGrokKeys.length > 0) {
+  console.error(
+    `[merlin:build] FORBIDDEN public xAI API keys: ${exposedPublicGrokKeys.join(', ')}`
+  );
+  console.error(
+    '[merlin:build] Delete these from Vercel immediately. Use server-only GROK_API_KEY (no NEXT_PUBLIC_ prefix).'
+  );
+  process.exit(1);
+}
+
 const missing = REQUIRED.filter((key) => !process.env[key]?.trim());
 if (missing.length > 0) {
   console.error(`[merlin:build] Missing required environment variables: ${missing.join(', ')}`);
@@ -43,6 +62,26 @@ if (missing.length > 0) {
 }
 
 if (isProduction) {
+  const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingScanning.length > 0) {
+    console.error(
+      `[merlin:build] Missing required scanning environment variables: ${missingScanning.join(', ')}`
+    );
+    console.error(
+      '[merlin:build] RO and Xentry scanning require Vercel Blob (BLOB_READ_WRITE_TOKEN) and Grok vision (GROK_API_KEY).'
+    );
+    console.error(
+      '[merlin:build] Vercel: Project → Storage → Create Blob Store → connect to this project (auto-injects BLOB_READ_WRITE_TOKEN).'
+    );
+    process.exit(1);
+  }
+
+  if (process.env.ALLOW_BOOTSTRAP?.trim().toLowerCase() === 'true') {
+    console.warn(
+      '[merlin:build] ALLOW_BOOTSTRAP is set but /api/setup/seed is permanently disabled in production.'
+    );
+  }
+
   const missingProd = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingProd.length > 0) {
     console.error(
@@ -54,6 +93,12 @@ if (isProduction) {
     process.exit(1);
   }
 } else {
+  const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
+  if (missingScanning.length > 0) {
+    console.warn(
+      `[merlin:build] Scanning disabled until configured (optional for local builds): ${missingScanning.join(', ')}`
+    );
+  }
   const missingKv = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingKv.length > 0) {
     console.warn(

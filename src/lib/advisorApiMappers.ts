@@ -1,7 +1,13 @@
 import 'server-only';
 
 import type { AdvisorListItem, AdvisorPerformanceMetrics, AdvisorProfileData } from '@/types';
+import { decryptJsonObject } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
+
+const EMPTY_PROFILE_SUMMARY = {
+  typicallyAllCaps: false,
+  commonPhraseCount: 0,
+} as const;
 
 type AdvisorWithProfile = {
   id: string;
@@ -16,36 +22,37 @@ type AdvisorWithProfile = {
   profile: {
     observationCount: number;
     lastComputedAt: Date | null;
-    profileData: string;
+    profileDataEncrypted: string;
   } | null;
 };
 
-export function parseAdvisorProfileSummary(profileData: string | undefined | null): {
+export function parseAdvisorProfileSummary(profileDataEncrypted: string | undefined | null): {
   typicallyAllCaps: boolean;
   commonPhraseCount: number;
 } {
-  if (!profileData) {
-    return { typicallyAllCaps: false, commonPhraseCount: 0 };
+  if (!profileDataEncrypted) {
+    return EMPTY_PROFILE_SUMMARY;
   }
-  try {
-    const data = JSON.parse(profileData) as {
-      formatting?: { typicallyAllCaps?: boolean };
-      commonPhrases?: unknown[];
-    };
-    return {
-      typicallyAllCaps: Boolean(data.formatting?.typicallyAllCaps),
-      commonPhraseCount: data.commonPhrases?.length ?? 0,
-    };
-  } catch {
-    return { typicallyAllCaps: false, commonPhraseCount: 0 };
+  const data = decryptJsonObject<{
+    formatting?: { typicallyAllCaps?: boolean };
+    commonPhrases?: unknown[];
+  } | null>(profileDataEncrypted, null);
+  if (!data) {
+    return EMPTY_PROFILE_SUMMARY;
   }
+  return {
+    typicallyAllCaps: Boolean(data.formatting?.typicallyAllCaps),
+    commonPhraseCount: data.commonPhrases?.length ?? 0,
+  };
 }
 
 export function mapAdvisorListItem(
   advisor: AdvisorWithProfile,
   metrics: AdvisorPerformanceMetrics
 ): AdvisorListItem {
-  const { typicallyAllCaps, commonPhraseCount } = parseAdvisorProfileSummary(advisor.profile?.profileData);
+  const { typicallyAllCaps, commonPhraseCount } = parseAdvisorProfileSummary(
+    advisor.profile?.profileDataEncrypted
+  );
 
   return {
     id: advisor.id,
@@ -66,9 +73,5 @@ export function mapAdvisorListItem(
 
 export function parseAdvisorProfileData(raw: string | null | undefined): AdvisorProfileData | null {
   if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AdvisorProfileData;
-  } catch {
-    return null;
-  }
+  return decryptJsonObject<AdvisorProfileData | null>(raw, null);
 }

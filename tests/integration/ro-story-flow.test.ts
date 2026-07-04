@@ -3,7 +3,7 @@ import { after, before, describe, mock, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { writeAuditLog } from '../../src/lib/audit';
 import { loginTechnician } from '../../src/lib/auth';
-import { CANONICAL_SEED_PASSWORD } from '../../src/lib/seedDatabase';
+import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { encryptPII } from '../../src/lib/encryption';
 import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { createRepairOrderSchema, parseBody } from '../../src/lib/validation';
@@ -38,7 +38,7 @@ describe('RO → story generation integration', () => {
     }) as typeof fetch;
 
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
-    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || CANONICAL_SEED_PASSWORD;
+    const techPassword = process.env.TECH_SEED_PASSWORD?.trim() || getCanonicalSeedPassword();
     const session = await loginTechnician(techD7, techPassword);
     assert.ok(session, 'Seed technician must exist — run npm run db:seed first');
     technicianId = session.technicianId;

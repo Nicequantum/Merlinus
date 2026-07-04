@@ -9,6 +9,12 @@ import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { buildStoryCertificationDbFields } from '@/lib/storyCertification';
+import { logger } from '@/lib/logger';
+import {
+  lockRepairLineForCertification,
+  StoryCertificationGateError,
+  validateStoryCertificationPrerequisitesInTransaction,
+} from '@/lib/storyCertificationGate';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
@@ -72,61 +78,87 @@ export async function POST(
         return apiError('Customer Pay stories do not require technician certification.', 400);
       }
 
-      const hasGenerateAudit = await prisma.auditLog.findFirst({
-        where: {
-          dealershipId: session.dealershipId,
-          entityType: 'repairLine',
-          entityId: lineId,
-          action: 'story.generate',
-        },
-        select: { id: true },
-      });
-      if (!hasGenerateAudit) {
-        return apiError('Only AI-generated warranty stories require technician certification.', 400);
-      }
-
       const { text: warrantyStory } = sanitizeForCDKWithMeta(rawStory);
-      const storyHash = hashWarrantyStory(warrantyStory);
       const certifiedAt = new Date();
 
-      const auditLogId = await prisma.$transaction(async (tx) => {
-        const newAuditLogId = await appendAuditLogInTransaction(tx, {
-          action: 'story.certify',
-          dealershipId: session.dealershipId,
-          technicianId: session.technicianId,
-          entityType: 'repairLine',
-          entityId: lineId,
-          promptVersion: PROMPT_VERSION,
-          metadata: {
-            repairOrderId: id,
-            lineNumber: line.lineNumber,
-            certifiedByName,
-            certifiedAt: certifiedAt.toISOString(),
-            aiAssistedStoryCertified: true,
+      let auditLogId: string;
+      let storyHash: string;
+
+      try {
+        auditLogId = await prisma.$transaction(async (tx) => {
+          const lockedLine = await lockRepairLineForCertification(tx, {
+            repairLineId: lineId,
+            dealershipId: session.dealershipId,
+          });
+          if (!lockedLine) {
+            throw new Error('Repair line not found for certification');
+          }
+
+          const gate = await validateStoryCertificationPrerequisitesInTransaction(tx, {
+            dealershipId: session.dealershipId,
+            repairLineId: lineId,
+            warrantyStory,
+            lockedLine,
+          });
+          if (!gate.ok) {
+            throw new StoryCertificationGateError(gate);
+          }
+
+          storyHash = gate.storyHash ?? hashWarrantyStory(warrantyStory);
+
+          const newAuditLogId = await appendAuditLogInTransaction(tx, {
+            action: 'story.certify',
+            dealershipId: session.dealershipId,
+            technicianId: session.technicianId,
+            entityType: 'repairLine',
+            entityId: lineId,
             promptVersion: PROMPT_VERSION,
-            storyHash,
-          },
-          ipAddress: getRequestIp(request),
-        });
-
-        const lineUpdated = await tx.repairLine.updateMany({
-          where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-          data: {
-            warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
-            ...buildStoryCertificationDbFields({
-              certifiedAt,
-              certifiedByTechnicianId: session.technicianId,
+            metadata: {
+              repairOrderId: id,
+              lineNumber: line.lineNumber,
               certifiedByName,
+              certifiedAt: certifiedAt.toISOString(),
+              aiAssistedStoryCertified: true,
+              promptVersion: PROMPT_VERSION,
               storyHash,
-            }),
-          },
-        });
-        if (lineUpdated.count === 0) {
-          throw new Error('Repair line not found for certification');
-        }
+            },
+            ipAddress: getRequestIp(request),
+          });
 
-        return newAuditLogId;
-      });
+          const lineUpdated = await tx.repairLine.updateMany({
+            where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+            data: {
+              warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+              ...buildStoryCertificationDbFields({
+                certifiedAt,
+                certifiedByTechnicianId: session.technicianId,
+                certifiedByName,
+                storyHash,
+              }),
+            },
+          });
+          if (lineUpdated.count === 0) {
+            throw new Error('Repair line not found for certification');
+          }
+
+          return newAuditLogId;
+        });
+      } catch (error) {
+        if (error instanceof StoryCertificationGateError) {
+          logger.warn('story.certify.gate_rejected', {
+            repairOrderId: id,
+            lineId,
+            technicianId: session.technicianId,
+            reason: error.result.reason,
+            storyHash: error.result.storyHash,
+          });
+          return apiError(error.result.message, 400);
+        }
+        if (error instanceof Error && error.message === 'Repair line not found for certification') {
+          return apiError(NOT_FOUND_ERROR, 404);
+        }
+        throw error;
+      }
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,
@@ -140,7 +172,7 @@ export async function POST(
         metadata: {
           certifiedAt: certifiedAt.toISOString(),
           promptVersion: PROMPT_VERSION,
-          storyHash,
+          storyHash: storyHash!,
         },
       });
 
@@ -173,7 +205,12 @@ export async function POST(
         lineId,
       });
 
-      return { warrantyStory, certifiedAt: certifiedAt.toISOString(), certifiedByName, storyHash };
+      return {
+        warrantyStory,
+        certifiedAt: certifiedAt.toISOString(),
+        certifiedByName,
+        storyHash: storyHash!,
+      };
     },
     {
       rateLimitKey: 'story.certify',

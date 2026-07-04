@@ -51,7 +51,7 @@ const PII_WRITE_GUARDS = [
   {
     file: 'src/lib/advisorIntelligence/recomputeProfile.ts',
     region: 'advisorWritingProfile.upsert',
-    requiredSnippets: ['S2 PLAINTEXT WRITE', 'profileData:'],
+    requiredSnippets: ['S2 PLAINTEXT WRITE', 'profileDataEncrypted', 'encryptJsonObject'],
   },
 ];
 
@@ -116,6 +116,37 @@ function checkProductionEnv() {
   } catch {
     fail('Core production environment validation failed — see messages above');
   }
+}
+
+const FORBIDDEN_PUBLIC_GROK_KEYS = [
+  'NEXT_PUBLIC_GROK_API_KEY',
+  'NEXT_PUBLIC_XAI_API_KEY',
+  'NEXT_PUBLIC_XAI_KEY',
+];
+
+function checkForbiddenPublicGrokKeys() {
+  const exposed = FORBIDDEN_PUBLIC_GROK_KEYS.filter((key) => process.env[key]?.trim());
+  if (exposed.length > 0) {
+    fail(
+      `Forbidden public xAI API keys detected: ${exposed.join(', ')}. ` +
+        'Delete from Vercel and use server-only GROK_API_KEY.'
+    );
+    return;
+  }
+  pass('No forbidden NEXT_PUBLIC_* xAI API keys (GROK_API_KEY is server-only)');
+}
+
+function checkScanningEnvironment() {
+  const scanningRequired = ['BLOB_READ_WRITE_TOKEN', 'GROK_API_KEY'];
+  const missing = scanningRequired.filter((key) => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    fail(
+      `Scanning environment incomplete (missing: ${missing.join(', ')}) — RO and Xentry photo scanning will fail. ` +
+        'On Vercel: Project → Storage → connect a Blob store, then confirm BLOB_READ_WRITE_TOKEN in Environment Variables.'
+    );
+    return;
+  }
+  pass('Scanning environment (BLOB_READ_WRITE_TOKEN + GROK_API_KEY)');
 }
 
 function checkSentryDsn() {
@@ -253,6 +284,8 @@ async function main() {
   loadDotEnvFile('.env.production');
 
   checkProductionEnv();
+  checkForbiddenPublicGrokKeys();
+  checkScanningEnvironment();
   checkSentryDsn();
   checkAiRouteMaxDuration();
   checkPlaintextPiiWriteGuards();

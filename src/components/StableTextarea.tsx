@@ -17,9 +17,11 @@ function useStableDraft(value: string, fieldKey: string, suppressExternalSync: b
   const lastEmittedRef = useRef(value);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
 
+  // Reset draft only when the field identity changes — value sync is handled below.
   useEffect(() => {
     lastEmittedRef.current = value;
     setDraft(value);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fieldKey-only reset
   }, [fieldKey]);
 
   useEffect(() => {

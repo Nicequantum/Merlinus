@@ -127,6 +127,7 @@ export function useROStoryWorkflow(
         toast.error(getStoryWorkflowErrorMessage(error, 'Failed to apply Customer Pay template'));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters object is stable for hook lifetime
     [deps, refs.roRef]
   );
 
@@ -292,7 +293,10 @@ export function useROStoryWorkflow(
           toast.success('Audit complete — reopen the repair line to view the score');
           return;
         }
-        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
+          toast.message('Story changed during audit — run Audit Story again.');
+          return;
+        }
 
         const baseline = (quality.scoredAgainstStory ?? storyText).trim();
         const persistedQuality = { ...quality, scoredAgainstStory: baseline };
@@ -384,7 +388,10 @@ export function useROStoryWorkflow(
           toast.success('Review complete — reopen the repair line to view feedback');
           return;
         }
-        if (isWarrantyStoryStale(activeRO, lineId, storyText)) return;
+        if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
+          toast.message('Story changed during review — run the review again.');
+          return;
+        }
 
         if (review.scoredAgainstStory?.trim() !== storyText) {
           review.scoredAgainstStory = storyText;

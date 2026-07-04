@@ -6,11 +6,24 @@ import { createHmac } from 'crypto';
 const MIN_RO_SEARCH_FRAGMENT_LEN = 2;
 
 function getSearchHmacSecret(): string {
-  const secret = process.env.ENCRYPTION_KEY?.trim();
+  const secret = process.env.SEARCH_HMAC_KEY?.trim();
   if (!secret || secret.length < 32) {
-    throw new Error('ENCRYPTION_KEY must be set (min 32 chars) for PII search tokens');
+    throw new Error('SEARCH_HMAC_KEY must be set (min 32 chars) for PII search tokens');
   }
   return secret;
+}
+
+/** Legacy deployments indexed RO numbers with ENCRYPTION_KEY before SEARCH_HMAC_KEY split. */
+function getLegacySearchHmacSecrets(): string[] {
+  const legacy = process.env.ENCRYPTION_KEY?.trim();
+  if (!legacy || legacy.length < 32) return [];
+  const current = getSearchHmacSecret();
+  return legacy === current ? [] : [legacy];
+}
+
+function getSearchHmacSecretsForQuery(): string[] {
+  const secrets = [getSearchHmacSecret(), ...getLegacySearchHmacSecrets()];
+  return [...new Set(secrets)];
 }
 
 /** Normalize RO numbers for consistent blind-index hashing. */
@@ -19,10 +32,11 @@ export function normalizeRoNumberForSearch(roNumber: string): string {
 }
 
 /** HMAC-SHA256 blind index for a normalized RO search fragment. */
-export function hashRoNumberSearchFragment(fragment: string): string {
+export function hashRoNumberSearchFragment(fragment: string, secret?: string): string {
   const normalized = normalizeRoNumberForSearch(fragment);
   if (!normalized) return '';
-  return createHmac('sha256', getSearchHmacSecret())
+  const hmacSecret = secret ?? getSearchHmacSecret();
+  return createHmac('sha256', hmacSecret)
     .update(`merlinus-ro-search:${normalized}`)
     .digest('hex');
 }
@@ -50,16 +64,21 @@ export function buildRoNumberSearchQueryTokens(term: string): string[] {
   const normalized = normalizeRoNumberForSearch(term);
   if (!normalized) return [];
 
-  if (normalized.length < MIN_RO_SEARCH_FRAGMENT_LEN) {
-    const single = hashRoNumberSearchFragment(normalized);
-    return single ? [single] : [];
-  }
-
+  const secrets = getSearchHmacSecretsForQuery();
   const tokens = new Set<string>();
-  for (let len = MIN_RO_SEARCH_FRAGMENT_LEN; len <= normalized.length; len += 1) {
-    for (let start = 0; start <= normalized.length - len; start += 1) {
-      const token = hashRoNumberSearchFragment(normalized.slice(start, start + len));
-      if (token) tokens.add(token);
+
+  for (const secret of secrets) {
+    if (normalized.length < MIN_RO_SEARCH_FRAGMENT_LEN) {
+      const single = hashRoNumberSearchFragment(normalized, secret);
+      if (single) tokens.add(single);
+      continue;
+    }
+
+    for (let len = MIN_RO_SEARCH_FRAGMENT_LEN; len <= normalized.length; len += 1) {
+      for (let start = 0; start <= normalized.length - len; start += 1) {
+        const token = hashRoNumberSearchFragment(normalized.slice(start, start + len), secret);
+        if (token) tokens.add(token);
+      }
     }
   }
 

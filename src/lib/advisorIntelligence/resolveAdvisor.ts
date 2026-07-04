@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { encryptPII } from '@/lib/encryption';
+import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import {
   fingerprintAdvisorName,
@@ -145,13 +145,14 @@ export async function resolveServiceAdvisor(
       roCount: incrementRoCount ? 1 : 0,
       aliases: {
         create: {
+          // S2 PLAINTEXT WRITE: aliasText has no encrypted twin column yet (see schema migration plan).
           aliasText: displayName || rawName.trim(),
           aliasFingerprint: nameFingerprint,
         },
       },
       profile: {
         create: {
-          profileData: JSON.stringify({
+          profileDataEncrypted: encryptJsonObject({
             formatting: {},
             abbreviations: {},
             commonPhrases: [],

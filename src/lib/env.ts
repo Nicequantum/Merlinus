@@ -3,11 +3,22 @@
  * Called at Node startup (instrumentation) and before production builds (scripts/validate-env.mjs).
  */
 
+import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
+import { APP_VERSION } from '@/lib/version';
 
-const REQUIRED_ENV_VARS = ['DATABASE_URL', 'ENCRYPTION_KEY', 'SESSION_SECRET'] as const;
+const REQUIRED_ENV_VARS = [
+  'DATABASE_URL',
+  'DATA_ENCRYPTION_KEY',
+  'SEARCH_HMAC_KEY',
+  'SESSION_SECRET',
+] as const;
 
-const RECOMMENDED_ENV_VARS = ['GROK_API_KEY', 'BLOB_READ_WRITE_TOKEN'] as const;
+/** Production hard requirement — RO and Xentry scanning cannot work without blob + vision AI. */
+export const PRODUCTION_SCANNING_REQUIRED_ENV_VARS = [
+  'BLOB_READ_WRITE_TOKEN',
+  'GROK_API_KEY',
+] as const;
 
 /** H8: KV recommended in production for distributed rate limiting across serverless instances. */
 const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
@@ -15,6 +26,8 @@ const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN']
 export interface EnvironmentValidationResult {
   missing: string[];
   warnings: string[];
+  /** NEXT_PUBLIC_* xAI keys — security violation; must be deleted from all environments. */
+  forbiddenPublicKeys: string[];
   valid: boolean;
 }
 
@@ -52,7 +65,7 @@ export function getBuildDate(): string {
 }
 
 export function getAppVersion(): string {
-  return process.env.npm_package_version || '2.0.0';
+  return process.env.npm_package_version?.trim() || APP_VERSION;
 }
 
 export function validateEnvironment(options: { throwOnError?: boolean; production?: boolean } = {}): EnvironmentValidationResult {
@@ -66,13 +79,26 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
-  if (encryptionKey) {
-    if (encryptionKey.length < 32) {
-      warnings.push('ENCRYPTION_KEY is shorter than 32 characters');
+  const dataEncryptionKey = process.env.DATA_ENCRYPTION_KEY?.trim();
+  if (dataEncryptionKey) {
+    if (dataEncryptionKey.length < 32) {
+      warnings.push('DATA_ENCRYPTION_KEY is shorter than 32 characters');
     }
-    if (!/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
-      warnings.push('ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)');
+    if (!/^[0-9a-fA-F]{64}$/.test(dataEncryptionKey)) {
+      warnings.push('DATA_ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)');
+    }
+  }
+
+  const searchHmacKey = process.env.SEARCH_HMAC_KEY?.trim();
+  if (searchHmacKey) {
+    if (searchHmacKey.length < 32) {
+      warnings.push('SEARCH_HMAC_KEY is shorter than 32 characters');
+    }
+    if (!/^[0-9a-fA-F]{64}$/.test(searchHmacKey)) {
+      warnings.push('SEARCH_HMAC_KEY should be 64 hex characters (openssl rand -hex 32)');
+    }
+    if (dataEncryptionKey && searchHmacKey === dataEncryptionKey) {
+      warnings.push('SEARCH_HMAC_KEY must differ from DATA_ENCRYPTION_KEY');
     }
   }
 
@@ -81,9 +107,14 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     warnings.push('SESSION_SECRET is shorter than the recommended 32 characters');
   }
 
-  for (const key of RECOMMENDED_ENV_VARS) {
+  for (const key of PRODUCTION_SCANNING_REQUIRED_ENV_VARS) {
     if (!process.env[key]?.trim()) {
-      warnings.push(`${key} not configured`);
+      const scanMessage = `${key} not configured — RO and Xentry photo scanning disabled`;
+      if (isProduction) {
+        missing.push(key);
+      } else {
+        warnings.push(scanMessage);
+      }
     }
   }
 
@@ -99,13 +130,25 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  if (isTruthyEnv(process.env.NEXT_PUBLIC_GROK_API_KEY) || isTruthyEnv(process.env.NEXT_PUBLIC_XAI_API_KEY)) {
-    warnings.push('Remove NEXT_PUBLIC_* xAI keys — use server-only GROK_API_KEY');
+  const forbiddenPublicKeys = getExposedPublicGrokEnvKeys();
+
+  if (isProduction && isTruthyEnv(process.env.ALLOW_BOOTSTRAP)) {
+    warnings.push(
+      'ALLOW_BOOTSTRAP is set in production but bootstrap seed is permanently disabled — remove this variable'
+    );
   }
 
-  const valid = missing.length === 0;
+  const valid = missing.length === 0 && forbiddenPublicKeys.length === 0;
 
-  if (!valid) {
+  if (forbiddenPublicKeys.length > 0) {
+    const message = `Forbidden public xAI API keys detected: ${forbiddenPublicKeys.join(', ')}. Delete them from Vercel and use server-only GROK_API_KEY.`;
+    logger.error('env.validation_forbidden_public_keys', { forbiddenPublicKeys });
+    if (options.throwOnError) {
+      throw new Error(message);
+    }
+  }
+
+  if (missing.length > 0) {
     const message = `Missing required environment variables: ${missing.join(', ')}`;
     logger.error('env.validation_failed', { missing });
     if (options.throwOnError) {
@@ -117,7 +160,7 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     logger.warn('env.validation_warning', { warning });
   }
 
-  return { missing, warnings, valid };
+  return { missing, warnings, forbiddenPublicKeys, valid };
 }
 
 /** Stricter validation used by `npm run build` — fails on missing required vars. */

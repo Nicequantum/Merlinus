@@ -9,8 +9,10 @@ import {
 
 describe('repairLineSoldMetrics', () => {
   before(() => {
-    process.env.ENCRYPTION_KEY =
-      process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+    process.env.DATA_ENCRYPTION_KEY =
+      process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+    process.env.SEARCH_HMAC_KEY =
+      process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
   });
 
   it('maps sold metrics from database rows', () => {

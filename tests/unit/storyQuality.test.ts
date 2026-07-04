@@ -93,6 +93,30 @@ describe('story quality parsing', () => {
     assert.equal(gradeFromScore(45), 'at-risk');
   });
 
+  it('flags parse failures instead of returning a misleading zero score', () => {
+    const empty = parseStoryQualityResponse('');
+    assert.equal(empty.parseFailed, true);
+    assert.equal(empty.score, 0);
+
+    const invalidJson = parseStoryQualityResponse('not json at all');
+    assert.equal(invalidJson.parseFailed, true);
+
+    const missingScore = parseStoryQualityResponse(JSON.stringify({ grade: 'strong', summary: 'No score field' }));
+    assert.equal(missingScore.parseFailed, true);
+  });
+
+  it('parses alternate score field formats', () => {
+    const fraction = parseStoryQualityResponse(JSON.stringify({ score: '87/100', summary: 'Good' }));
+    assert.equal(fraction.score, 87);
+    assert.equal(fraction.parseFailed, false);
+
+    const nested = parseStoryQualityResponse(
+      JSON.stringify({ quality: { score: 76 }, summary: 'Nested score object' })
+    );
+    assert.equal(nested.score, 76);
+    assert.equal(nested.parseFailed, false);
+  });
+
   it('extracts JSON wrapped in explanation text', () => {
     const wrapped = `Here is the MI quality assessment for your story.
 

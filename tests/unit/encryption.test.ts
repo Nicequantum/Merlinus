@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
 import {
+  decryptComplaintsPayload,
   decryptJsonObject,
   decryptOptionalSensitiveText,
   decryptSensitiveText,
   decryptStringArray,
+  encryptComplaintsPayload,
   encryptJsonObject,
   encryptOptionalSensitiveText,
   encryptPII,
@@ -17,7 +19,10 @@ import {
 
 describe('sensitive field encryption', () => {
   before(() => {
-    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+    process.env.DATA_ENCRYPTION_KEY =
+      process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+    process.env.SEARCH_HMAC_KEY =
+      process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
   });
 
   test('encrypts and decrypts technician notes', () => {
@@ -87,5 +92,36 @@ describe('sensitive field encryption', () => {
     assert.ok(isLikelyEncryptedPayload(encrypted));
     assert.deepEqual(decryptJsonObject(encrypted, {}), JSON.parse(legacy));
     assert.equal(migratePlaintextJsonObjectToEncrypted(encrypted), encrypted);
+  });
+
+  test('decryptJsonObject returns fallback when ciphertext cannot be decrypted', () => {
+    const fallback = { codes: [] as string[] };
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptJsonObject({ codes: ['P0300'] });
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptJsonObject(foreign, fallback), fallback);
+  });
+
+  test('decryptStringArray returns empty array when ciphertext cannot be decrypted', () => {
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptStringArray(['Quick test OCR']);
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptStringArray(foreign), []);
+  });
+
+  test('decryptComplaintsPayload returns empty complaints when ciphertext cannot be decrypted', () => {
+    const valid = encryptComplaintsPayload(['Check engine light']);
+    assert.deepEqual(decryptComplaintsPayload(valid).complaints, ['Check engine light']);
+
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreign = encryptComplaintsPayload(['Foreign key complaint']);
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    assert.deepEqual(decryptComplaintsPayload(foreign).complaints, []);
   });
 });

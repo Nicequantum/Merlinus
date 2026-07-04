@@ -1,10 +1,11 @@
 {
   "name": "merlinus",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "scripts": {
     "dev": "next dev",
     "validate:env": "node scripts/validate-env.mjs",
+    "verify:scan-env": "node scripts/verify-scan-env.mjs",
     "validate:pre-deploy": "node scripts/validate-pre-deploy.mjs",
     "validate:pre-rollout": "tsx --import ./tests/setup/preload.mjs scripts/pre-rollout-validation.ts",
     "ready-to-deploy": "npm run validate:pre-deploy && npm run validate:pre-rollout && node scripts/validate-pre-rollout.mjs && echo Merlinus is ready for Mercedes-Benz dealership deployment && echo \"Run: npm run db:migrate-pii-safe (dry-run first)\"",
@@ -21,7 +22,8 @@
     "db:studio": "prisma studio",
     "test": "tsx --import ./tests/setup/preload.mjs --test tests/unit/**/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.ci.json",
-    "test:integration": "tsx --import ./tests/setup/preload.mjs --test tests/integration/**/*.test.ts",
+    "test:integration": "tsx --import ./tests/setup/preload.mjs --test --test-concurrency=1 tests/integration/**/*.test.ts",
+    "test:e2e": "tsx --import ./tests/setup/preload.mjs --test tests/integration/technician-journey.test.ts",
     "setup:tesseract": "node scripts/copy-tesseract-assets.mjs",
     "generate:icons": "node scripts/generate-app-icons.mjs",
     "postinstall": "prisma generate && npm run setup:tesseract"
@@ -40,6 +42,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "server-only": "^0.0.1",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.5",
     "swr": "^2.4.2",
     "tesseract.js": "^5.1.1",
@@ -57,7 +60,6 @@
     "eslint-config-next": "^15.3.3",
     "postcss": "^8.5.4",
     "prisma": "^6.9.0",
-    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "to-ico": "^1.1.5",
     "tsx": "^4.19.4",

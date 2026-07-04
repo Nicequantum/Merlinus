@@ -3,12 +3,14 @@ import { clientLog } from '@/lib/clientLog';
 
 /** Default per-recognize() ceiling (diagnostics / legacy paths). */
 const OCR_TIMEOUT_MS = 120_000;
-/** Per-pass budget for RO scan — quality-first; technicians can wait during test drives. */
-export const RO_SCAN_PASS_TIMEOUT_MS = 300_000;
-/** High-resolution RO scan frames for accurate VIN / complaint column reads. */
-export const RO_SCAN_MAX_DIM = 2000;
+/** Per-pass budget for RO scan OCR fallback — Grok vision is the primary path. */
+export const RO_SCAN_PASS_TIMEOUT_MS = 90_000;
+/** Diagnostic Xentry fallback — fail fast so the queue workflow never hangs at ~58%. */
+export const DIAGNOSTIC_OCR_PASS_TIMEOUT_MS = 35_000;
+/** OCR fallback resolution — Grok vision handles fine detail. */
+export const RO_SCAN_MAX_DIM = 1600;
 /** Downscale retry target when a pass hits the timeout on very large photos. */
-const RO_SCAN_RETRY_MAX_DIM = 1600;
+const RO_SCAN_RETRY_MAX_DIM = 1280;
 const MAX_DIM_FAST = 1600;
 const MAX_DIM_FULL = 2200;
 const MAX_DIM_SCREENSHOT = 2400;
@@ -518,26 +520,40 @@ export async function runMultiPassOCR(
   };
 }
 
-/** Optimized for XENTRY / UI screenshots — preserves tones, tries multiple page layouts. */
-export async function runDiagnosticOCR(file: File, onProgress?: (p: number) => void): Promise<string> {
+/** Optimized for XENTRY / UI screenshots — two fast passes; Grok vision is primary. */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
+  }
+}
+
+export async function runDiagnosticOCR(
+  file: File,
+  onProgress?: (p: number) => void,
+  options?: { signal?: AbortSignal }
+): Promise<string> {
+  const signal = options?.signal;
+  throwIfAborted(signal);
+
   const screenshot = await preprocessImageForOCR(file, 'screenshot');
+  throwIfAborted(signal);
+
   const pass1 = await runOCR(
     screenshot,
-    onProgress ? (p) => onProgress(Math.round(p * 0.45)) : undefined,
+    onProgress ? (p) => onProgress(Math.round(p * 0.55)) : undefined,
     '6',
-    true
+    true,
+    DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
+  throwIfAborted(signal);
+
   const pass2 = await runOCR(
-    screenshot,
-    onProgress ? (p) => onProgress(45 + Math.round(p * 0.35)) : undefined,
-    '11',
-    true
-  );
-  const pass3 = await runOCR(
     file,
-    onProgress ? (p) => onProgress(80 + Math.round(p * 0.2)) : undefined,
-    '6',
-    true
+    onProgress ? (p) => onProgress(55 + Math.round(p * 0.45)) : undefined,
+    '11',
+    true,
+    DIAGNOSTIC_OCR_PASS_TIMEOUT_MS
   );
-  return mergeOcrTextPasses(pass1, pass2, pass3);
+  throwIfAborted(signal);
+  return mergeOcrTextPasses(pass1, pass2);
 }

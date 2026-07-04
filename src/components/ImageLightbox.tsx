@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect } from 'react';
 import { Trash2, X } from 'lucide-react';
 import type { ImageAttachment } from '@/types';
@@ -55,12 +56,19 @@ export function ImageLightbox({ image, onClose, onDelete }: ImageLightboxProps) 
         </button>
       )}
 
-      <img
-        src={image.url}
-        alt={image.name}
-        className="max-h-[85vh] max-w-full rounded-benz-lg object-contain shadow-benz-lg"
+      <div
+        className="relative h-[85vh] w-[min(90vw,1200px)]"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <Image
+          src={image.url}
+          alt={image.name}
+          fill
+          unoptimized
+          className="rounded-benz-lg object-contain shadow-benz-lg"
+          sizes="90vw"
+        />
+      </div>
 
       <div className="absolute bottom-5 left-1/2 max-w-[90vw] -translate-x-1/2 truncate rounded-full bg-benz-surface/80 border border-benz-surface-3 px-4 py-2 text-xs text-benz-silver">
         {image.name}

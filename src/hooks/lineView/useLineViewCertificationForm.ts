@@ -17,6 +17,7 @@ interface UseLineViewCertificationFormInput {
   storyQuality: StoryQualityResult | null;
   storyQualityStale: boolean;
   storyCertification: StoryCertificationRecord | null;
+  lastGeneratedStoryText: string | null;
 }
 
 export function useLineViewCertificationForm({
@@ -27,13 +28,20 @@ export function useLineViewCertificationForm({
   storyQuality,
   storyQualityStale,
   storyCertification,
+  lastGeneratedStoryText,
 }: UseLineViewCertificationFormInput) {
   const [certificationChecked, setCertificationChecked] = useState(false);
   const [certificationName, setCertificationName] = useState('');
 
   const hasValidAuditForCurrentStory = Boolean(storyQuality) && !storyQualityStale;
-  const showCertificationSection = !isCustomerPayLine && hasValidAuditForCurrentStory;
   const isStoryCertified = Boolean(storyCertification);
+  const hasAiGeneratedStory = Boolean(lastGeneratedStoryText);
+  const hasCurrentAuditScore = Boolean(storyQuality);
+  const certificationPendingReaudit = storyQualityStale && !isStoryCertified;
+  const showCertificationSection =
+    !isCustomerPayLine &&
+    hasAiGeneratedStory &&
+    (hasCurrentAuditScore || certificationPendingReaudit || isStoryCertified);
   const isCertificationComplete =
     certificationChecked && certificationName.trim().length >= 2;
 
@@ -80,6 +88,7 @@ export function useLineViewCertificationForm({
     certificationName,
     setCertificationName,
     showCertificationSection,
+    certificationPendingReaudit,
     isStoryCertified,
     isCertificationComplete,
     certificationActionsLocked,

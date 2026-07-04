@@ -22,5 +22,14 @@ if (existsSync(envLocalPath)) {
   loadDotenv({ path: envLocalPath });
 }
 
+if (!process.env.DATA_ENCRYPTION_KEY?.trim()) {
+  process.env.DATA_ENCRYPTION_KEY =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+}
+if (!process.env.SEARCH_HMAC_KEY?.trim()) {
+  process.env.SEARCH_HMAC_KEY =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+}
+
 const loaderPath = join(dirname(fileURLToPath(import.meta.url)), 'server-only-loader.mjs');
 register(pathToFileURL(loaderPath).href, import.meta.url);

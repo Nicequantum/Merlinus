@@ -8,19 +8,13 @@ import { clientLog } from '@/lib/clientLog';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import type {
   AppView,
-  ExtractedData,
-  ImageAttachment,
   RepairLine,
   RepairOrder,
+  RepairOrderSummary,
   StoryQualityResult,
   StoryReviewResult,
   TechnicianSession,
 } from '@/types';
-import {
-  emptyExtractedData,
-  mergeExtracted,
-  normalizeExtractedData,
-} from '@/utils/diagnosticParser';
 
 
 import { useROComplaints } from '@/hooks/repairOrders/useROComplaints';
@@ -40,9 +34,17 @@ import {
   createNewRepairLine,
   ensureComplaintIds,
 } from '@/utils/repairOrderFactory';
+import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import { deriveCurrentLineStoryState } from '@/hooks/repairOrders/currentLineStoryState';
 import { removeImageAtIndex } from '@/hooks/repairOrders/roImageUtils';
-import { analyzeXentryImage } from '@/hooks/repairOrders/roXentryAnalysis';
+import {
+  readXentryBaseline,
+  readXentryViewState,
+  type XentryTarget,
+} from '@/hooks/repairOrders/xentryDataModel';
+import { countXentryImagesNeedingAnalysis } from '@/lib/xentryAnalysisState';
+import { useROXentryScan } from '@/hooks/repairOrders/useROXentryScan';
+import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPipeline';
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 import { applyCompanionROPatch } from '@/lib/companionMerge';
@@ -50,18 +52,18 @@ import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
   session: TechnicianSession | null;
-  onOcrStart: (message?: string) => void;
-  onOcrFinish: () => void;
-  setOcrProgress: (p: number) => void;
-  setScanStatusMessage: (message: string) => void;
+  roScanPipeline: VisionPipelineControls;
+  xentryPipeline: VisionPipelineControls;
+  getActivePipeline: () => VisionPipelineId | null;
+  onComplianceRequired?: () => void;
 }
 
 export function useRepairOrders({
   session,
-  onOcrStart,
-  onOcrFinish,
-  setOcrProgress,
-  setScanStatusMessage,
+  roScanPipeline,
+  xentryPipeline,
+  getActivePipeline,
+  onComplianceRequired,
 }: UseRepairOrdersOptions) {
   const [view, setView] = useState<AppView>('home');
   const [currentRO, setCurrentRO] = useState<RepairOrder | null>(null);
@@ -93,8 +95,8 @@ export function useRepairOrders({
   const storyReviewInFlightRef = useRef(false);
 
   useEffect(() => {
-    // While a scan is finishing, openScanResultView sets roRef before currentRO commits.
-    if (scanInFlightRef.current) return;
+    // While a scan or diagnostic batch is finishing, roRef is updated optimistically.
+    if (scanInFlightRef.current || xentryInFlightRef.current) return;
     roRef.current = currentRO;
   }, [currentRO]);
 
@@ -115,10 +117,35 @@ export function useRepairOrders({
     previousHasMore,
     loadMorePrevious,
     todayROs,
-  } = useROList(session);
+  } = useROList(session, { onComplianceRequired });
 
   const { flushPendingSave, cancelPendingSave, applyROUpdate, saveROImmediate, persistRO } =
     useROPersistence(allROs, setAllROs, roRef, setCurrentRO);
+
+  const syncROView = useCallback((ro: RepairOrder) => {
+    roRef.current = ro;
+    setCurrentRO(ro);
+    setAllROs((prev) => {
+      const summary = repairOrderToSummary(ro);
+      const idx = prev.findIndex((r) => r.id === ro.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = summary;
+        return copy;
+      }
+      return [summary, ...prev];
+    });
+  }, [setAllROs]);
+
+  const xentryScan = useROXentryScan({
+    roRef,
+    flushPendingSave,
+    saveROImmediate,
+    xentryInFlightRef,
+    xentryPipeline,
+    getActivePipeline,
+    syncROView,
+  });
 
   const prepareForScan = useCallback(async () => {
     await flushPendingSave();
@@ -130,7 +157,10 @@ export function useRepairOrders({
       const normalized = ensureComplaintIds(repairOrder);
       flushSync(() => {
         roRef.current = normalized;
-        setAllROs((prev) => [normalized, ...prev.filter((r) => r.id !== normalized.id)]);
+        setAllROs((prev) => [
+          repairOrderToSummary(normalized),
+          ...prev.filter((r) => r.id !== normalized.id),
+        ]);
         setCurrentLineId(null);
         setCurrentRO(normalized);
         setView('ro');
@@ -140,8 +170,13 @@ export function useRepairOrders({
   );
 
   const navigateView = useCallback(
-    (next: AppView) => {
-      flushPendingSave();
+    async (next: AppView) => {
+      await flushPendingSave();
+      if (next === 'home') {
+        roRef.current = null;
+        setCurrentRO(null);
+        setCurrentLineId(null);
+      }
       setView(next);
     },
     [flushPendingSave]
@@ -162,14 +197,13 @@ export function useRepairOrders({
     processPendingScan,
     clearPendingScan,
     cancelScan,
+    removePendingScanPage,
   } = useROScan({
     prepareForScan,
     openScanResultView,
     scanInFlightRef,
-    onOcrStart,
-    onOcrFinish,
-    setOcrProgress,
-    setScanStatusMessage,
+    roScanPipeline,
+    getActivePipeline,
   });
 
   const { addComplaint, removeComplaint, editComplaint, updateRONumber } = useROComplaints({
@@ -179,7 +213,7 @@ export function useRepairOrders({
 
   /** Prevent blank screen when view points at RO/line but selection was cleared mid-scan. */
   useEffect(() => {
-    if (scanInFlightRef.current) return;
+    if (scanInFlightRef.current || xentryInFlightRef.current) return;
     if (view === 'ro' && !currentRO) {
       setView('home');
       return;
@@ -231,6 +265,7 @@ export function useRepairOrders({
         toast.error(e instanceof Error ? e.message : 'Delete failed');
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
     [currentRO]
   );
 
@@ -239,10 +274,20 @@ export function useRepairOrders({
       if (openingROInFlightRef.current === id) return;
       openingROInFlightRef.current = id;
       setOpeningROId(id);
-      flushPendingSave();
+      await flushPendingSave();
       try {
         const { repairOrder } = await api.getRepairOrder(id);
         const normalized = ensureComplaintIds(repairOrder);
+        if (normalized.piiDecryptWarnings?.length) {
+          const preview = normalized.piiDecryptWarnings.slice(0, 3).join(', ');
+          const extra =
+            normalized.piiDecryptWarnings.length > 3
+              ? ` (+${normalized.piiDecryptWarnings.length - 3} more)`
+              : '';
+          toast.warning(
+            `Some encrypted fields could not be read: ${preview}${extra}. Contact your manager if data looks missing.`
+          );
+        }
         roRef.current = normalized;
         setCurrentRO(normalized);
         setCurrentLineId(null);
@@ -271,15 +316,16 @@ export function useRepairOrders({
           }
         );
         setAllROs((prev) => {
+          const summary = repairOrderToSummary(normalized);
           const idx = prev.findIndex((r) => r.id === normalized.id);
           if (idx >= 0) {
             const copy = [...prev];
-            copy[idx] = normalized;
+            copy[idx] = summary;
             return copy;
           }
-          return [normalized, ...prev];
+          return [summary, ...prev];
         });
-        navigateView('ro');
+        await navigateView('ro');
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Failed to load repair order');
       } finally {
@@ -289,11 +335,12 @@ export function useRepairOrders({
         setOpeningROId((current) => (current === id ? null : current));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
     [flushPendingSave, navigateView]
   );
 
   const openRO = useCallback(
-    (target: RepairOrder | string) => {
+    (target: RepairOrder | RepairOrderSummary | string) => {
       const id = typeof target === 'string' ? target : target.id;
       void openROById(id);
     },
@@ -310,13 +357,14 @@ export function useRepairOrders({
           : repairOrder
       );
       roRef.current = withIds;
-      setAllROs((prev) => [withIds, ...prev]);
+      setAllROs((prev) => [repairOrderToSummary(withIds), ...prev]);
       setCurrentRO(withIds);
       navigateView('ro');
       toast.success('Manual repair order created');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
   }, [navigateView]);
 
   const isStoryCertificationPending = useCallback(
@@ -410,78 +458,13 @@ export function useRepairOrders({
     const saved = ensureComplaintIds(await persistRO(updated));
     roRef.current = saved;
     setCurrentRO(saved);
-    setAllROs((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+    setAllROs((prev) =>
+      prev.map((r) => (r.id === saved.id ? repairOrderToSummary(saved) : r))
+    );
     setCurrentLineId(saved.repairLines[saved.repairLines.length - 1].id);
     navigateView('line');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
   }, [flushPendingSave, navigateView, persistRO]);
-
-  const toastXentryResult = useCallback((fileCount: number, ocrTexts: string[]) => {
-    const failed = ocrTexts.filter((text) => text.includes('[Analysis failed:')).length;
-    if (failed === fileCount) {
-      const detail =
-        ocrTexts
-          .find((text) => text.includes('[Analysis failed:'))
-          ?.match(/\[Analysis failed: (.+)\]/)?.[1] || 'Diagnostic analysis failed.';
-      toast.error(detail);
-      return;
-    }
-    if (failed > 0) {
-      toast.warning(`${fileCount - failed} photo(s) analyzed; ${failed} need a retake or sharper image.`);
-      return;
-    }
-    toast.success(`${fileCount} diagnostic photo(s) saved and analyzed`);
-  }, []);
-
-  const processXentryImages = useCallback(
-    async (
-      files: File[],
-      existingImages: ImageAttachment[],
-      existingOcr: string[],
-      existingExtracted: ExtractedData,
-      onUploadComplete?: (snapshot: {
-        newImgs: ImageAttachment[];
-        allImages: ImageAttachment[];
-        updatedOcrTexts: string[];
-        updatedExtracted: ExtractedData;
-      }) => Promise<void>
-    ) => {
-      setOcrProgress(5);
-      const newImgs = await uploadFilesAsAttachments(files, 'ximg');
-      let updatedExtracted = normalizeExtractedData(existingExtracted);
-      let updatedOcrTexts = [
-        ...existingOcr,
-        ...files.map(() => '[Analyzing diagnostic photo…]'),
-      ];
-      const allImages = [...existingImages, ...newImgs];
-
-      if (onUploadComplete) {
-        await onUploadComplete({ newImgs, allImages, updatedOcrTexts, updatedExtracted });
-      }
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const attachment = newImgs[i]!;
-        const ocrIndex = existingOcr.length + i;
-        try {
-          const result = await analyzeXentryImage(file, attachment, (p) =>
-            setOcrProgress(Math.round(15 + ((i + p / 100) / files.length) * 85))
-          );
-          updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
-          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
-            idx === ocrIndex ? result.text : text
-          );
-        } catch (err) {
-          clientLog.warn('Xentry analysis failed for one image', err);
-          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
-            idx === ocrIndex ? '[Analysis failed for this image]' : text
-          );
-        }
-      }
-
-      return { newImgs, updatedExtracted, updatedOcrTexts, allImages };
-    },
-    [setOcrProgress]
-  );
 
   const deleteLineXentryImage = useCallback(
     async (lineId: string, imageId: string) => {
@@ -524,19 +507,12 @@ export function useRepairOrders({
       const result = removeImageAtIndex(latestRO.xentryImages || [], latestRO.xentryOcrTexts || [], imageId);
       if (!result) return;
 
-      const updatedLines = latestRO.repairLines.map((l, idx) => {
-        if (idx !== 0) return l;
-        const lineImages = l.xentryImages || [];
-        if (!lineImages.some((img) => img.id === imageId)) return l;
-        const lineResult = removeImageAtIndex(lineImages, l.xentryOcrTexts || [], imageId);
-        if (!lineResult) return l;
-        return {
-          ...l,
-          xentryImages: lineResult.nextImages,
-          xentryOcrTexts: lineResult.nextOcr,
-          extractedData: lineResult.rebuilt,
-        };
-      });
+      const line0 = latestRO.repairLines[0];
+      const updatedLines = line0
+        ? latestRO.repairLines.map((line, idx) =>
+            idx === 0 ? { ...line, extractedData: result.rebuilt } : line
+          )
+        : latestRO.repairLines;
 
       try {
         await saveROImmediate({
@@ -554,183 +530,33 @@ export function useRepairOrders({
     [saveROImmediate]
   );
 
-  const addXentryPhotos = useCallback(
-    (lineId: string) => {
-      if (xentryInFlightRef.current) {
-        toast.message('Diagnostic photo upload already in progress…');
-        return;
-      }
+  const buildXentrySection = useCallback(
+    (target: XentryTarget) => {
+      const viewState = readXentryViewState(currentRO, target);
+      const baseline = currentRO ? readXentryBaseline(currentRO, target) : null;
+      const imagesNeedingAnalysisCount = baseline
+        ? countXentryImagesNeedingAnalysis(baseline.images, baseline.ocrTexts)
+        : 0;
 
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.multiple = false;
-      input.onchange = async (e) => {
-        const files = Array.from((e.target as HTMLInputElement).files || []);
-        if (files.length === 0 || !currentRO) return;
-        if (xentryInFlightRef.current) {
-          toast.message('Diagnostic photo upload already in progress…');
-          return;
-        }
-
-        xentryInFlightRef.current = true;
-        flushPendingSave();
-        onOcrStart('Uploading diagnostic photo…');
-        const latestRO = roRef.current;
-        const lineForExtract = latestRO?.repairLines.find((l) => l.id === lineId);
-        if (!latestRO || !lineForExtract) {
-          xentryInFlightRef.current = false;
-          onOcrFinish();
-          return;
-        }
-        try {
-          const result = await processXentryImages(
-            files,
-            lineForExtract.xentryImages || [],
-            lineForExtract.xentryOcrTexts || [],
-            lineForExtract.extractedData || emptyExtractedData(),
-            async (uploaded) => {
-              const snapshot = roRef.current;
-              if (!snapshot) return;
-              const updatedLines = snapshot.repairLines.map((l) =>
-                l.id === lineId
-                  ? {
-                      ...l,
-                      xentryImages: uploaded.allImages,
-                      xentryOcrTexts: uploaded.updatedOcrTexts,
-                      extractedData: uploaded.updatedExtracted,
-                    }
-                  : l
-              );
-              await saveROImmediate({ ...snapshot, repairLines: updatedLines }, { throwOnError: true });
-            }
-          );
-          const finalRO = roRef.current;
-          if (!finalRO) return;
-          const updatedLines = finalRO.repairLines.map((l) =>
-            l.id === lineId
-              ? {
-                  ...l,
-                  xentryImages: result.allImages,
-                  xentryOcrTexts: result.updatedOcrTexts,
-                  extractedData: result.updatedExtracted,
-                }
-              : l
-          );
-          await saveROImmediate({ ...finalRO, repairLines: updatedLines }, { throwOnError: true });
-          toastXentryResult(files.length, result.updatedOcrTexts);
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
-        } finally {
-          xentryInFlightRef.current = false;
-          onOcrFinish();
-        }
+      return {
+        savedImages: viewState.images,
+        pendingImages: xentryScan.getPendingImages(target),
+        imagesNeedingAnalysisCount,
+        extractedData: viewState.extracted,
+        onCapturePhoto: () => xentryScan.capturePhoto(target),
+        onAddFromGallery: () => xentryScan.addFromGallery(target),
+        onProcessImages: () => void xentryScan.processPending(target),
+        onClearPending: () => xentryScan.clearPending(target),
+        onCancelProcessing: () => xentryScan.cancelProcessing(),
+        onDeletePendingImage: (imageId: string) => xentryScan.removePendingImage(target, imageId),
+        onDeleteSavedImage:
+          target.scope === 'line'
+            ? (imageId: string) => void deleteLineXentryImage(target.lineId, imageId)
+            : (imageId: string) => void deleteROXentryImage(imageId),
       };
-      input.click();
     },
-    [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]
+    [currentRO, deleteLineXentryImage, deleteROXentryImage, xentryScan]
   );
-
-  const addROXentryPhotos = useCallback(() => {
-    if (!currentRO) return;
-    if (xentryInFlightRef.current) {
-      toast.message('Xentry photo upload already in progress…');
-      return;
-    }
-
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.multiple = false;
-    input.onchange = async (e) => {
-      const files = Array.from((e.target as HTMLInputElement).files || []);
-      if (files.length === 0 || !currentRO) return;
-      if (xentryInFlightRef.current) {
-        toast.message('Xentry photo upload already in progress…');
-        return;
-      }
-
-      xentryInFlightRef.current = true;
-      flushPendingSave();
-      onOcrStart('Uploading Xentry photo…');
-      const latestRO = roRef.current;
-      if (!latestRO) {
-        xentryInFlightRef.current = false;
-        onOcrFinish();
-        return;
-      }
-      try {
-        const firstLine = latestRO.repairLines[0];
-        const result = await processXentryImages(
-          files,
-          latestRO.xentryImages || [],
-          latestRO.xentryOcrTexts || [],
-          firstLine?.extractedData || emptyExtractedData(),
-          async (uploaded) => {
-            const snapshot = roRef.current;
-            if (!snapshot) return;
-            let updatedLines = snapshot.repairLines;
-            const line0 = snapshot.repairLines[0];
-            if (line0) {
-              updatedLines = snapshot.repairLines.map((l, idx) =>
-                idx === 0
-                  ? {
-                      ...l,
-                      xentryImages: [...(l.xentryImages || []), ...uploaded.newImgs],
-                      xentryOcrTexts: uploaded.updatedOcrTexts,
-                      extractedData: uploaded.updatedExtracted,
-                    }
-                  : l
-              );
-            }
-            await saveROImmediate(
-              {
-                ...snapshot,
-                xentryImages: uploaded.allImages,
-                xentryOcrTexts: uploaded.updatedOcrTexts,
-                repairLines: updatedLines,
-              },
-              { throwOnError: true }
-            );
-          }
-        );
-        const finalRO = roRef.current;
-        if (!finalRO) return;
-        let updatedLines = finalRO.repairLines;
-        const line0 = finalRO.repairLines[0];
-        if (line0) {
-          updatedLines = finalRO.repairLines.map((l, idx) =>
-            idx === 0
-              ? {
-                  ...l,
-                  xentryImages: [...(l.xentryImages || []), ...result.newImgs],
-                  xentryOcrTexts: result.updatedOcrTexts,
-                  extractedData: result.updatedExtracted,
-                }
-              : l
-          );
-        }
-        await saveROImmediate(
-          {
-            ...finalRO,
-            xentryImages: result.allImages,
-            xentryOcrTexts: result.updatedOcrTexts,
-            repairLines: updatedLines,
-          },
-          { throwOnError: true }
-        );
-        toastXentryResult(files.length, result.updatedOcrTexts);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to upload photos');
-      } finally {
-        xentryInFlightRef.current = false;
-        onOcrFinish();
-      }
-    };
-    input.click();
-  }, [currentRO, flushPendingSave, processXentryImages, saveROImmediate, toastXentryResult, onOcrStart, onOcrFinish]);
 
   const invalidateReviewRequests = useCallback(() => {
     reviewStorySeqRef.current += 1;
@@ -876,12 +702,12 @@ export function useRepairOrders({
         );
         toast.success('Story certified and saved');
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : 'Failed to certify and save story');
+        throw error instanceof Error ? error : new Error('Failed to certify and save story');
       } finally {
         setIsCertifyingStory(false);
       }
     },
-    [applyROUpdate, flushPendingSave, roRef]
+    [applyROUpdate, flushPendingSave, roRef, session?.technicianId]
   );
 
   const acknowledgeStoryBaseline = useCallback((lineId: string, text: string) => {
@@ -924,14 +750,11 @@ export function useRepairOrders({
     cdkSanitizedByLine,
   });
 
-  /** @deprecated Use todayROs / searchROs — kept for any legacy callers. */
-  const filteredROs = searchTerm.trim() ? searchROs : todayROs;
-
   const navigateToLine = useCallback(
-    (lineId: string) => {
-      flushPendingSave();
+    async (lineId: string) => {
+      await flushPendingSave();
       setCurrentLineId(lineId);
-      navigateView('line');
+      await navigateView('line');
     },
     [flushPendingSave, navigateView]
   );
@@ -1037,7 +860,6 @@ export function useRepairOrders({
     cdkSanitizedForLine,
     clearCdkSanitizedNotice,
     openingROId,
-    filteredROs,
     todayROs,
     searchROs,
     searchLoading,
@@ -1058,6 +880,7 @@ export function useRepairOrders({
     processPendingScan,
     clearPendingScan,
     cancelScan,
+    removePendingScanPage,
     createManualRO,
     updateLine,
     updateVehicle,
@@ -1068,8 +891,7 @@ export function useRepairOrders({
     updateRONumber,
     decodeVinForRO,
     addRepairLine,
-    addXentryPhotos,
-    addROXentryPhotos,
+    buildXentrySection,
     deleteLineXentryImage,
     deleteROXentryImage,
     applyCustomerPayTemplate,

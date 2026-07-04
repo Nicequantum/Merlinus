@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { decryptPII } from '@/lib/encryption';
+import { decryptJsonObject, decryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { prisma } from '@/lib/db';
 
@@ -43,19 +43,18 @@ const EMPTY_PROFILE: AdvisorProfileData = {
 };
 
 function parseProfileData(raw: string): AdvisorProfileData {
-  try {
-    const parsed = JSON.parse(raw) as Partial<AdvisorProfileData>;
-    return {
-      formatting: { ...EMPTY_PROFILE.formatting, ...parsed.formatting },
-      abbreviations: parsed.abbreviations ?? {},
-      commonPhrases: parsed.commonPhrases ?? [],
-      vehicleAffinities: parsed.vehicleAffinities ?? {},
-      complaintCategories: parsed.complaintCategories ?? {},
-      extractionHints: parsed.extractionHints ?? [],
-    };
-  } catch {
+  const parsed = decryptJsonObject<Partial<AdvisorProfileData> | null>(raw, null);
+  if (!parsed) {
     return EMPTY_PROFILE;
   }
+  return {
+    formatting: { ...EMPTY_PROFILE.formatting, ...parsed.formatting },
+    abbreviations: parsed.abbreviations ?? {},
+    commonPhrases: parsed.commonPhrases ?? [],
+    vehicleAffinities: parsed.vehicleAffinities ?? {},
+    complaintCategories: parsed.complaintCategories ?? {},
+    extractionHints: parsed.extractionHints ?? [],
+  };
 }
 
 /** Format advisor intelligence for injection into warranty story prompts. */
@@ -142,7 +141,7 @@ export async function loadAdvisorPromptContext(
     serviceAdvisorId: advisor.id,
     displayName: readAdvisorDisplayNameFromDb(advisor),
     observationCount: advisor.profile.observationCount,
-    profileData: parseProfileData(advisor.profile.profileData),
+    profileData: parseProfileData(advisor.profile.profileDataEncrypted),
     sampleComplaints,
   };
 }

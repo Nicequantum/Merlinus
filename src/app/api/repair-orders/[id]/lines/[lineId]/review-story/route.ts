@@ -1,4 +1,3 @@
-import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
@@ -10,7 +9,10 @@ import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOr
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
+import { logger } from '@/lib/logger';
+import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_REVIEW_ROUTE_MAX_DURATION_S in @/lib/timeouts */
@@ -59,35 +61,60 @@ export async function POST(
       let review;
       try {
         review = await reviewWarrantyStory(mapped, line, warrantyStory);
+        if (review.parseFailed) {
+          logger.error('story.review.parse_failed', {
+            repairOrderId: id,
+            lineId,
+            technicianId: session.technicianId,
+            summary: review.summary,
+          });
+          return apiError(
+            `Story review could not read the AI score. ${review.summary} Tap Review with AI to try again.`,
+            502
+          );
+        }
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Story review');
         return apiError(mapped.message, mapped.status);
       }
 
       const quality = { ...review, scoredAgainstStory: warrantyStory };
+      const storyHash = hashWarrantyStory(warrantyStory);
 
-      await writeAuditLog({
-        action: 'story.review',
-        dealershipId: session.dealershipId,
-        technicianId: session.technicianId,
-        entityType: 'repairLine',
-        entityId: lineId,
-        promptVersion: PROMPT_VERSION,
-        metadata: {
-          repairOrderId: id,
-          lineNumber: line.lineNumber,
-          promptVersion: PROMPT_VERSION,
-          qualityScore: quality.score,
-          qualityGrade: quality.grade,
-        },
-        ipAddress: getRequestIp(request),
-      });
-
-      const lineUpdated = await prisma.repairLine.updateMany({
-        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-        data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
-      });
-      if (lineUpdated.count === 0) return apiError(NOT_FOUND_ERROR, 404);
+      try {
+        await prisma.$transaction(async (tx) => {
+          await persistRepairLineStoryInTransaction(
+            tx,
+            {
+              action: 'story.review',
+              dealershipId: session.dealershipId,
+              technicianId: session.technicianId,
+              entityType: 'repairLine',
+              entityId: lineId,
+              promptVersion: PROMPT_VERSION,
+              metadata: {
+                repairOrderId: id,
+                lineNumber: line.lineNumber,
+                promptVersion: PROMPT_VERSION,
+                qualityScore: quality.score,
+                qualityGrade: quality.grade,
+                storyHash,
+                reviewMode: 'coaching',
+              },
+              ipAddress: getRequestIp(request),
+            },
+            {
+              where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+              data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
+            }
+          );
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Repair line not found for story persist') {
+          return apiError(NOT_FOUND_ERROR, 404);
+        }
+        throw error;
+      }
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,
@@ -101,6 +128,8 @@ export async function POST(
         metadata: {
           qualityScore: quality.score,
           qualityGrade: quality.grade,
+          storyHash,
+          reviewMode: 'coaching',
           promptVersion: PROMPT_VERSION,
         },
       });

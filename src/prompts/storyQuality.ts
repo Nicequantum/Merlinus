@@ -23,6 +23,7 @@ export interface StoryQualityResult {
   auditRisks: string[];
   technicianDetails: TechnicianDetailPrompt[];
   summary: string;
+  parseFailed?: boolean;
 }
 
 export interface StoryReviewFeedback {
@@ -164,10 +165,64 @@ export function gradeFromScore(score: number): StoryQualityGrade {
   return 'at-risk';
 }
 
-function clampScore(score: unknown): number {
+function clampScore(score: unknown): number | null {
+  if (typeof score === 'string') {
+    const trimmed = score.trim();
+    const fraction = trimmed.match(/(\d{1,3})\s*\/\s*100/);
+    if (fraction) {
+      const parsed = Number(fraction[1]);
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, Math.min(100, Math.round(parsed)));
+      }
+    }
+    const leading = trimmed.match(/^(\d{1,3})\b/);
+    if (leading) {
+      const parsed = Number(leading[1]);
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, Math.min(100, Math.round(parsed)));
+      }
+    }
+  }
+
   const n = typeof score === 'number' ? score : Number(score);
-  if (!Number.isFinite(n)) return 0;
+  if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function extractScore(parsed: Record<string, unknown>): number | null {
+  const nestedQuality =
+    parsed.quality && typeof parsed.quality === 'object'
+      ? (parsed.quality as Record<string, unknown>).score
+      : undefined;
+
+  const candidates = [
+    parsed.score,
+    parsed.qualityScore,
+    parsed.miScore,
+    parsed.overall_score,
+    parsed.overallScore,
+    nestedQuality,
+  ];
+
+  for (const candidate of candidates) {
+    const score = clampScore(candidate);
+    if (score !== null) return score;
+  }
+
+  return null;
+}
+
+function buildParseFailureResult(reason: string): StoryQualityResult {
+  return {
+    score: 0,
+    grade: 'at-risk',
+    strengths: [],
+    improvements: ['Audit could not read the AI score — tap Audit Story again.'],
+    auditRisks: ['Score analysis unavailable'],
+    technicianDetails: [],
+    summary: reason,
+    parseFailed: true,
+  };
 }
 
 function asStringArray(value: unknown, max = 6): string[] {
@@ -286,17 +341,25 @@ function storyQualityParseFailure(): StoryQualityResult {
 }
 
 export function isStoryQualityParseFailure(result: StoryQualityResult): boolean {
-  return result.summary === STORY_QUALITY_PARSE_FAILURE_SUMMARY;
+  return Boolean(result.parseFailed) || result.summary === STORY_QUALITY_PARSE_FAILURE_SUMMARY;
 }
 
 export function parseStoryQualityResponse(raw: string): StoryQualityResult {
-  const payload = extractJsonPayload(raw);
-  const parsed = tryParseJsonRecord(payload);
-  if (!parsed || (parsed.score === undefined && parsed.grade === undefined)) {
-    return storyQualityParseFailure();
+  if (!raw.trim()) {
+    return buildParseFailureResult('AI quality scorer returned an empty response.');
   }
 
-  const score = clampScore(parsed.score);
+  const payload = extractJsonPayload(raw);
+  const parsed = tryParseJsonRecord(payload);
+  if (!parsed) {
+    return buildParseFailureResult('AI quality scorer returned unreadable JSON.');
+  }
+
+  const score = extractScore(parsed);
+  if (score === null) {
+    return buildParseFailureResult('AI quality scorer response did not include a valid score.');
+  }
+
   return {
     score,
     grade: asGrade(parsed.grade, score),
@@ -305,6 +368,7 @@ export function parseStoryQualityResponse(raw: string): StoryQualityResult {
     auditRisks: asStringArray(parsed.auditRisks),
     technicianDetails: parseTechnicianDetails(parsed.technicianDetails),
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : 'Quality assessment complete.',
+    parseFailed: false,
   };
 }
 

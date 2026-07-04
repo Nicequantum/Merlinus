@@ -29,6 +29,8 @@ export async function POST(request: Request) {
       action: 'auth.login',
       dealershipId: session.dealershipId,
       technicianId: session.technicianId,
+      entityType: 'technician',
+      entityId: session.technicianId,
       ipAddress: getRequestIp(request),
     });
 

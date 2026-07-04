@@ -3,16 +3,16 @@ import { DealershipBranding } from '@/components/DealershipBranding';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ScanROSection } from '@/components/ScanROSection';
-import type { PendingImage, RepairOrder } from '../types';
+import type { PendingImage, RepairOrderSummary } from '../types';
 
 interface HomeViewProps {
   technicianName?: string;
   searchTerm: string;
   onSearchChange: (value: string) => void;
   searchLoading: boolean;
-  searchROs: RepairOrder[];
-  todayROs: RepairOrder[];
-  previousROs: RepairOrder[];
+  searchROs: RepairOrderSummary[];
+  todayROs: RepairOrderSummary[];
+  previousROs: RepairOrderSummary[];
   previousExpanded: boolean;
   onTogglePrevious: () => void;
   previousLoading: boolean;
@@ -28,9 +28,10 @@ interface HomeViewProps {
   onProcessScan: () => void;
   onClearPendingScan: () => void;
   onCancelScan: () => void;
+  onDeletePendingPage?: (imageId: string) => void;
   onCreateManualRO: () => void;
   openingROId: string | null;
-  onOpenRO: (ro: RepairOrder) => void;
+  onOpenRO: (ro: RepairOrderSummary) => void;
   onDeleteRO: (id: string) => void;
   onOpenSettings: () => void;
 }
@@ -58,6 +59,7 @@ export function HomeView({
   onProcessScan,
   onClearPendingScan,
   onCancelScan,
+  onDeletePendingPage,
   onCreateManualRO,
   openingROId,
   onOpenRO,
@@ -93,6 +95,7 @@ export function HomeView({
           onProcessScan={onProcessScan}
           onClearPendingScan={onClearPendingScan}
           onCancelScan={onCancelScan}
+          onDeletePendingPage={onDeletePendingPage}
           onCreateManualRO={onCreateManualRO}
           scanButtonLabel="Scan RO"
         />

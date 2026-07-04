@@ -13,7 +13,6 @@ import {
   UNAUTHORIZED_ERROR,
 } from './errors';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
-import { prisma } from './db';
 import { logPerformance } from './perf';
 import { logApiWriteRequest } from './requestLogging';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
@@ -77,12 +76,8 @@ export async function withAuth<T>(
     if (!session.consentAt) {
       return apiError(CONSENT_REQUIRED_ERROR, 403);
     }
-    // H-FINAL-6: policy updates require re-consent when CONSENT_VERSION changes.
-    const consentRecord = await prisma.technician.findUnique({
-      where: { id: session.technicianId },
-      select: { consentVersion: true },
-    });
-    if (consentRecord?.consentVersion !== CONSENT_VERSION) {
+    // M5: getSession already resolved consentVersion from DB — avoid a second lookup.
+    if (session.consentVersion !== CONSENT_VERSION) {
       return apiError(CONSENT_REQUIRED_ERROR, 403);
     }
   }
@@ -91,11 +86,7 @@ export async function withAuth<T>(
     if (!session.legalDisclaimerAt) {
       return apiError(LEGAL_DISCLAIMER_REQUIRED_ERROR, 403);
     }
-    const disclaimerRecord = await prisma.technician.findUnique({
-      where: { id: session.technicianId },
-      select: { legalDisclaimerVersion: true },
-    });
-    if (disclaimerRecord?.legalDisclaimerVersion !== LEGAL_DISCLAIMER_VERSION) {
+    if (session.legalDisclaimerVersion !== LEGAL_DISCLAIMER_VERSION) {
       return apiError(LEGAL_DISCLAIMER_REQUIRED_ERROR, 403);
     }
   }

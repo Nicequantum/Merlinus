@@ -100,9 +100,9 @@ export async function checkDatabase(): Promise<DependencyCheck> {
 }
 
 export async function checkEncryption(): Promise<DependencyCheck> {
-  const key = process.env.ENCRYPTION_KEY;
+  const key = process.env.DATA_ENCRYPTION_KEY?.trim();
   if (!key || key.length < 32) {
-    return { status: 'error', detail: 'ENCRYPTION_KEY missing or too short (min 32 chars)' };
+    return { status: 'error', detail: 'DATA_ENCRYPTION_KEY missing or too short (min 32 chars)' };
   }
   try {
     const { latencyMs } = await timed(async () => {
@@ -137,7 +137,11 @@ export async function checkSessionSecret(): Promise<DependencyCheck> {
 export async function checkBlobStorage(): Promise<DependencyCheck> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
-    return { status: 'warn', detail: 'BLOB_READ_WRITE_TOKEN not configured — image uploads disabled' };
+    const detail =
+      'BLOB_READ_WRITE_TOKEN not configured — RO and Xentry photo scanning disabled';
+    return isProductionEnv()
+      ? { status: 'error', detail }
+      : { status: 'warn', detail };
   }
   try {
     const { latencyMs } = await timed(async () => {
@@ -169,7 +173,10 @@ export async function checkGrokApi(): Promise<DependencyCheck> {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'GROK_API_KEY not configured';
     if (message.includes('not configured')) {
-      return { status: 'warn', detail: 'GROK_API_KEY not configured — AI features disabled' };
+      const detail = 'GROK_API_KEY not configured — RO and Xentry photo scanning disabled';
+      return isProductionEnv()
+        ? { status: 'error', detail }
+        : { status: 'warn', detail };
     }
     return { status: 'error', detail: 'Grok API key configuration invalid' };
   }

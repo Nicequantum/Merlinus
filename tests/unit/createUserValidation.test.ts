@@ -5,7 +5,7 @@ import { createUserSchema, resolveServiceAdvisorLinkMode } from '@/lib/validatio
 const basePayload = {
   d7Number: 'D7TEST01',
   name: 'Test User',
-  password: 'password123',
+  password: 'ValidPass1!',
 };
 
 describe('resolveServiceAdvisorLinkMode', () => {

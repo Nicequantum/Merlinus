@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import {
+  dbToRepairLine,
+  dbToRepairOrder,
+  dbToRepairOrderSummary,
+  repairLineToDbFields,
+  repairOrderToDbFields,
+} from '../../src/lib/roMapper';
 import type { RepairLine, RepairOrder, StoryQualityResult } from '../../src/types';
 
 const sampleRo: RepairOrder = {
@@ -41,7 +47,10 @@ const sampleLine: RepairLine = {
 
 describe('roMapper sensitive field encryption', () => {
   before(() => {
-    process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-encryption-key-with-32-chars-minimum';
+    process.env.DATA_ENCRYPTION_KEY =
+      process.env.DATA_ENCRYPTION_KEY || 'test-data-encryption-key-32-chars-min';
+    process.env.SEARCH_HMAC_KEY =
+      process.env.SEARCH_HMAC_KEY || 'test-search-hmac-key-32-chars-minimum!';
   });
 
   test('repairOrderToDbFields encrypts RO-level OCR text arrays', () => {
@@ -225,5 +234,233 @@ describe('roMapper sensitive field encryption', () => {
     });
     assert.equal(mapped.storyQualityAudit?.score, 91);
     assert.equal(mapped.storyQualityAudit?.scoredAgainstStory, sampleLine.warrantyStory);
+  });
+
+  test('dbToRepairOrder reads legacy plaintext stored in encrypted PII columns', () => {
+    const legacyRoNumber = '482910';
+    const legacyVin = 'W1N4N4HB5NJ123456';
+    const legacyCustomer = 'Jane Dealer';
+    const legacyConcern = 'CHECK ENGINE LIGHT ON AT STARTUP';
+    const legacyDescription = 'Engine diagnosis';
+    const legacyNotes = 'Found P0300 on cylinder 3.';
+
+    const mapped = dbToRepairOrder({
+      id: 'ro-legacy',
+      roNumberEncrypted: legacyRoNumber,
+      roNumberSearchTokens: [],
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      serviceAdvisorId: null,
+      serviceAdvisorNameEncrypted: 'Advisor Smith',
+      advisorMatchConfidence: null,
+      advisorIdentifiedAt: null,
+      vinEncrypted: legacyVin,
+      year: sampleRo.vehicle.year,
+      make: sampleRo.vehicle.make,
+      model: sampleRo.vehicle.model,
+      engine: '',
+      mileageIn: sampleRo.vehicle.mileageIn,
+      mileageOut: sampleRo.vehicle.mileageOut,
+      customerNameEncrypted: legacyCustomer,
+      complaintsEncrypted: JSON.stringify(sampleRo.complaints),
+      xentryImageUrls: '[]',
+      xentryOcrTextsEncrypted: '',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-legacy',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: legacyDescription,
+          customerConcernEncrypted: legacyConcern,
+          technicianNotesEncrypted: legacyNotes,
+          xentryImageUrls: '[]',
+          xentryOcrTextsEncrypted: '',
+          extractedDataEncrypted: JSON.stringify(sampleLine.extractedData),
+          warrantyStoryEncrypted: sampleLine.warrantyStory ?? null,
+          storyQualityAuditEncrypted: '',
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      serviceAdvisor: null,
+    });
+
+    assert.equal(mapped.roNumber, legacyRoNumber);
+    assert.equal(mapped.vehicle.vin, legacyVin);
+    assert.equal(mapped.customer.name, legacyCustomer);
+    assert.equal(mapped.serviceAdvisorName, 'Advisor Smith');
+    assert.equal(mapped.repairLines[0]?.description, legacyDescription);
+    assert.equal(mapped.repairLines[0]?.customerConcern, legacyConcern);
+    assert.equal(mapped.repairLines[0]?.technicianNotes, legacyNotes);
+    assert.equal(mapped.piiDecryptWarnings, undefined);
+  });
+
+  test('dbToRepairOrder tolerates unreadable encrypted PII fields', () => {
+    const roFields = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: sampleRo.vehicle,
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    });
+    const lineFields = repairLineToDbFields(sampleLine);
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreignVin = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: { ...sampleRo.vehicle, vin: 'WDDZF8EB5MA999999' },
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    }).vinEncrypted;
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    const mapped = dbToRepairOrder({
+      id: 'ro-corrupt',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      serviceAdvisorId: null,
+      serviceAdvisorNameEncrypted: foreignVin,
+      advisorMatchConfidence: null,
+      advisorIdentifiedAt: null,
+      vinEncrypted: foreignVin,
+      year: roFields.year,
+      make: roFields.make,
+      model: roFields.model,
+      engine: roFields.engine,
+      mileageIn: roFields.mileageIn,
+      mileageOut: roFields.mileageOut,
+      customerNameEncrypted: foreignVin,
+      complaintsEncrypted: roFields.complaintsEncrypted,
+      xentryImageUrls: roFields.xentryImageUrls,
+      xentryOcrTextsEncrypted: roFields.xentryOcrTextsEncrypted,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-corrupt',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: lineFields.descriptionEncrypted,
+          customerConcernEncrypted: foreignVin,
+          technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
+          xentryImageUrls: lineFields.xentryImageUrls,
+          xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+          extractedDataEncrypted: foreignVin,
+          warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+          storyQualityAuditEncrypted: '',
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      serviceAdvisor: null,
+    });
+
+    assert.equal(mapped.roNumber, sampleRo.roNumber);
+    assert.equal(mapped.vehicle.vin, '');
+    assert.equal(mapped.customer.name, '');
+    assert.equal(mapped.repairLines[0]?.customerConcern, '');
+    assert.deepEqual(mapped.repairLines[0]?.extractedData?.codes, []);
+    assert.ok(mapped.piiDecryptWarnings?.length);
+    assert.ok(mapped.piiDecryptWarnings?.includes('VIN'));
+    assert.ok(mapped.piiDecryptWarnings?.includes('Customer name'));
+    assert.ok(mapped.piiDecryptWarnings?.some((w) => w.includes('customer concern')));
+  });
+
+  test('dbToRepairLine tolerates unreadable technician notes and warranty story', () => {
+    const lineFields = repairLineToDbFields(sampleLine);
+    const wrongKey = process.env.DATA_ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = 'different-data-encryption-key-32-chars!';
+    const foreignNotes = repairLineToDbFields({
+      ...sampleLine,
+      technicianNotes: 'Corrupt ciphertext notes',
+      warrantyStory: 'Corrupt ciphertext story',
+    });
+    process.env.DATA_ENCRYPTION_KEY = wrongKey;
+
+    const mapped = dbToRepairLine({
+      id: sampleLine.id,
+      repairOrderId: 'ro-1',
+      lineNumber: sampleLine.lineNumber,
+      descriptionEncrypted: lineFields.descriptionEncrypted,
+      customerConcernEncrypted: lineFields.customerConcernEncrypted,
+      technicianNotesEncrypted: foreignNotes.technicianNotesEncrypted,
+      xentryImageUrls: lineFields.xentryImageUrls,
+      xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+      extractedDataEncrypted: lineFields.extractedDataEncrypted,
+      warrantyStoryEncrypted: foreignNotes.warrantyStoryEncrypted,
+      storyQualityAuditEncrypted: '',
+      isCustomerPay: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    assert.equal(mapped.technicianNotes, '');
+    assert.equal(mapped.warrantyStory, undefined);
+    assert.equal(mapped.storyCertification, null);
+  });
+
+  test('dbToRepairOrderSummary avoids decrypting line PII and story text', () => {
+    const roFields = repairOrderToDbFields({
+      roNumber: sampleRo.roNumber,
+      vehicle: sampleRo.vehicle,
+      customer: sampleRo.customer,
+      complaints: sampleRo.complaints,
+      repairLines: [],
+    });
+    const lineFields = repairLineToDbFields(sampleLine);
+    const summary = dbToRepairOrderSummary({
+      id: 'ro-1',
+      roNumberEncrypted: roFields.roNumberEncrypted,
+      roNumberSearchTokens: roFields.roNumberSearchTokens,
+      vinEncrypted: roFields.vinEncrypted,
+      year: sampleRo.vehicle.year,
+      make: sampleRo.vehicle.make,
+      model: sampleRo.vehicle.model,
+      engine: sampleRo.vehicle.engine ?? '',
+      mileageIn: sampleRo.vehicle.mileageIn,
+      mileageOut: sampleRo.vehicle.mileageOut,
+      customerNameEncrypted: roFields.customerNameEncrypted,
+      complaintsEncrypted: roFields.complaintsEncrypted,
+      xentryImageUrls: '[]',
+      xentryOcrTextsEncrypted: '',
+      technicianId: 'tech-1',
+      dealershipId: 'dealer-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      repairLines: [
+        {
+          id: sampleLine.id,
+          repairOrderId: 'ro-1',
+          lineNumber: sampleLine.lineNumber,
+          descriptionEncrypted: lineFields.descriptionEncrypted,
+          customerConcernEncrypted: lineFields.customerConcernEncrypted,
+          technicianNotesEncrypted: lineFields.technicianNotesEncrypted,
+          xentryImageUrls: lineFields.xentryImageUrls,
+          xentryOcrTextsEncrypted: lineFields.xentryOcrTextsEncrypted,
+          extractedDataEncrypted: lineFields.extractedDataEncrypted,
+          warrantyStoryEncrypted: lineFields.warrantyStoryEncrypted,
+          isCustomerPay: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+      technician: { name: 'Tech One' },
+    });
+
+    assert.equal(summary.roNumber, sampleRo.roNumber);
+    assert.equal(summary.firstComplaintPreview, sampleRo.complaints[0]);
+    assert.equal(summary.technicianName, 'Tech One');
+    assert.equal(summary.repairLines.length, 1);
+    assert.equal(summary.repairLines[0]?.hasWarrantyStory, true);
+    assert.equal('customerConcern' in (summary.repairLines[0] ?? {}), false);
+    assert.equal('warrantyStory' in (summary.repairLines[0] ?? {}), false);
+    assert.equal('vin' in summary.vehicle, false);
   });
 });
