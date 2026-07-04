@@ -26,6 +26,14 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
+/** Auth bootstrap routes must never fail closed — login/logout cannot be blocked when KV is absent. */
+const NEVER_FAIL_CLOSED_ROUTE_KEYS = new Set([
+  'auth.login',
+  'auth.logout',
+  'auth.me',
+  'setup.seed',
+]);
+
 /** Per-IP request ceilings (requests per `windowMs`). Override per route via `checkRateLimit` options. */
 export const RATE_LIMITS = {
   /** Login, logout, seed — brute-force protection. */
@@ -126,22 +134,28 @@ export function isLocalhostRequest(request: Request): boolean {
   }
 }
 
-function shouldFailClosedWithoutKv(request: Request): boolean {
+function shouldFailClosedWithoutKv(request: Request, routeKey: string): boolean {
+  if (NEVER_FAIL_CLOSED_ROUTE_KEYS.has(routeKey)) {
+    return false;
+  }
   if (isLocalhostRequest(request)) {
     return false;
   }
   return isProductionEnv();
 }
 
-export function getRateLimitRuntimeSnapshot(request: Request) {
+export function getRateLimitRuntimeSnapshot(request: Request, routeKey: string) {
   return {
+    requestUrl: request.url,
+    routeKey,
     nodeEnv: process.env.NODE_ENV ?? null,
     vercel: process.env.VERCEL ?? null,
     vercelEnv: process.env.VERCEL_ENV ?? null,
     kvConfigured: isKvConfigured(),
     isProductionEnv: isProductionEnv(),
     isLocalhost: isLocalhostRequest(request),
-    failClosedWithoutKv: shouldFailClosedWithoutKv(request),
+    authBootstrapRoute: NEVER_FAIL_CLOSED_ROUTE_KEYS.has(routeKey),
+    failClosedWithoutKv: shouldFailClosedWithoutKv(request, routeKey),
   };
 }
 
@@ -151,9 +165,8 @@ function logRateLimitDecision(
   decision: 'kv' | 'memory' | 'kv_fallback_memory' | 'fail_closed_kv_required' | 'fail_closed_kv_unavailable'
 ): void {
   logger.info('rate_limit.check', {
-    routeKey,
     decision,
-    ...getRateLimitRuntimeSnapshot(request),
+    ...getRateLimitRuntimeSnapshot(request, routeKey),
   });
 }
 
@@ -167,9 +180,9 @@ function logKvRateLimitError(routeKey: string, request: Request, ip: string, err
     routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     error: errorMessage,
-    ...getRateLimitRuntimeSnapshot(request),
+    ...getRateLimitRuntimeSnapshot(request, routeKey),
   };
-  if (shouldFailClosedWithoutKv(request)) {
+  if (shouldFailClosedWithoutKv(request, routeKey)) {
     logger.error('rate_limit.kv_unavailable', context);
     return;
   }
@@ -200,7 +213,7 @@ export async function checkRateLimit(
       return result;
     } catch (error) {
       logKvRateLimitError(routeKey, request, ip, error);
-      if (shouldFailClosedWithoutKv(request)) {
+      if (shouldFailClosedWithoutKv(request, routeKey)) {
         logRateLimitDecision(routeKey, request, 'fail_closed_kv_unavailable');
         return rateLimitUnavailableResponse();
       }
@@ -209,7 +222,7 @@ export async function checkRateLimit(
     }
   }
 
-  if (!shouldFailClosedWithoutKv(request)) {
+  if (!shouldFailClosedWithoutKv(request, routeKey)) {
     logRateLimitDecision(routeKey, request, 'memory');
     return checkMemoryRateLimit(key, devMemoryRateLimitConfig(config));
   }
@@ -218,7 +231,7 @@ export async function checkRateLimit(
     routeKey,
     ip: ip === 'unknown' ? undefined : ip,
     detail: 'KV_REST_API_URL/TOKEN not configured in production — request blocked',
-    ...getRateLimitRuntimeSnapshot(request),
+    ...getRateLimitRuntimeSnapshot(request, routeKey),
   });
   logRateLimitDecision(routeKey, request, 'fail_closed_kv_required');
   return rateLimitUnavailableResponse();

@@ -29,6 +29,8 @@ describe('rate limiting', () => {
     assert.ok(src.includes('rate_limit.kv_required'));
     assert.ok(src.includes('rate_limit.check'));
     assert.ok(src.includes('isLocalhostRequest'));
+    assert.ok(src.includes('NEVER_FAIL_CLOSED_ROUTE_KEYS'));
+    assert.ok(src.includes("'auth.login'"));
     assert.equal(src.includes("logger.warn('rate_limit.kv_fallback'"), false);
     assert.ok(src.includes("logger.warn('rate_limit.kv_fallback_dev'"));
     assert.ok(src.includes('Distributed per-IP rate limiting'));
@@ -191,6 +193,55 @@ describe('rate limiting', () => {
     }
   });
 
+  it('allows auth.login on Vercel production without KV on public hostname', async () => {
+    const saved = {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      vercel: process.env.VERCEL,
+      ci: process.env.CI,
+      githubActions: process.env.GITHUB_ACTIONS,
+      kvUrl: process.env.KV_REST_API_URL,
+      kvToken: process.env.KV_REST_API_TOKEN,
+    };
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL = '1';
+    process.env.VERCEL_ENV = 'production';
+    delete process.env.CI;
+    delete process.env.GITHUB_ACTIONS;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+
+    try {
+      const routeKey = 'auth.login';
+      const result = await checkRateLimit(
+        makeRequest('203.0.113.10', 'https://merlinus.vercel.app'),
+        routeKey,
+        RATE_LIMITS.auth
+      );
+      assert.equal(result, null);
+    } finally {
+      process.env.NODE_ENV = saved.nodeEnv;
+      process.env.VERCEL_ENV = saved.vercelEnv;
+      if (saved.vercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = saved.vercel;
+      }
+      if (saved.ci === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = saved.ci;
+      }
+      if (saved.githubActions === undefined) {
+        delete process.env.GITHUB_ACTIONS;
+      } else {
+        process.env.GITHUB_ACTIONS = saved.githubActions;
+      }
+      process.env.KV_REST_API_URL = saved.kvUrl;
+      process.env.KV_REST_API_TOKEN = saved.kvToken;
+    }
+  });
+
   it('fails closed on Vercel production when KV is not configured', async () => {
     const saved = {
       nodeEnv: process.env.NODE_ENV,
@@ -210,11 +261,11 @@ describe('rate limiting', () => {
     delete process.env.KV_REST_API_TOKEN;
 
     try {
-      const routeKey = `test.prod.${Date.now()}`;
+      const routeKey = `story.generate.${Date.now()}`;
       const result = await checkRateLimit(
         makeRequest('203.0.113.10', 'https://merlin.dealership.example'),
         routeKey,
-        RATE_LIMITS.auth
+        RATE_LIMITS.generate
       );
       assert.ok(result);
       assert.equal(result.status, 503);
