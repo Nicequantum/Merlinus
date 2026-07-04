@@ -1,13 +1,13 @@
 /**
  * Distributed per-IP rate limiting for API routes (KV INCR + EXPIRE sliding window).
  *
- * Production (`NODE_ENV` or `VERCEL_ENV` = production):
+ * Vercel production (`VERCEL_ENV` = production):
  * - Requires `KV_REST_API_URL` + `KV_REST_API_TOKEN` (enforced at build via validate-env.mjs).
  * - Missing or unreachable KV fails closed with HTTP 503 — no in-memory fallback.
  *
- * Development:
+ * Local dev / CI / `next start` without `VERCEL_ENV`:
  * - Without KV: per-instance in-memory limits (halved vs production values).
- * - With KV configured but transient errors: dev-only memory fallback with warning log.
+ * - With KV configured but transient errors: memory fallback with warning log.
  *
  * Routes pass a stable `routeKey` plus an optional limit override through `withAuth` / `checkRateLimit`.
  */
@@ -92,13 +92,14 @@ export function isCiOrTestRuntime(): boolean {
 }
 
 /**
- * Production deployment — excludes test/dev/CI even when VERCEL_ENV is set (e.g. ready-to-deploy step).
+ * Vercel production deployment — excludes test/dev/CI and local `next start` (NODE_ENV=production
+ * without VERCEL_ENV) so rate limiting can degrade to in-memory limits when KV is unavailable.
  */
 export function isProductionEnv(): boolean {
   if (isCiOrTestRuntime() || process.env.NODE_ENV === 'development') {
     return false;
   }
-  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  return process.env.VERCEL_ENV === 'production';
 }
 
 function rateLimitUnavailableResponse(): Response {

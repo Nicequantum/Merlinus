@@ -108,6 +108,29 @@ describe('enterprise health checks', () => {
     delete process.env.VERCEL_ENV;
     delete process.env.CI;
     delete process.env.GITHUB_ACTIONS;
+    assert.equal(
+      isProductionEnv(),
+      false,
+      'local next start (NODE_ENV=production without VERCEL_ENV) must not be treated as production'
+    );
+    assert.equal(
+      aggregateAuthenticatedHealthStatus({
+        database: { status: 'ok' },
+        kv: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      'degraded'
+    );
+    assert.equal(
+      resolveAuthenticatedHealthHttpStatus({
+        database: { status: 'ok' },
+        kv: { status: 'error' },
+        grok: { status: 'warn' },
+      }),
+      200
+    );
+
+    process.env.VERCEL_ENV = 'production';
     assert.equal(isProductionEnv(), true);
     assert.equal(
       aggregateAuthenticatedHealthStatus({

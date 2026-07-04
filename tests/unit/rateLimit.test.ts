@@ -61,7 +61,7 @@ describe('rate limiting', () => {
     }
   });
 
-  it('fails closed in production when KV is not configured', async () => {
+  it('allows local production start without KV using in-memory limits', async () => {
     const saved = {
       nodeEnv: process.env.NODE_ENV,
       vercelEnv: process.env.VERCEL_ENV,
@@ -72,6 +72,44 @@ describe('rate limiting', () => {
     };
     process.env.NODE_ENV = 'production';
     delete process.env.VERCEL_ENV;
+    delete process.env.CI;
+    delete process.env.GITHUB_ACTIONS;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+
+    try {
+      const routeKey = `test.local.prod.${Date.now()}`;
+      const result = await checkRateLimit(makeRequest(), routeKey, RATE_LIMITS.auth);
+      assert.equal(result, null);
+    } finally {
+      process.env.NODE_ENV = saved.nodeEnv;
+      process.env.VERCEL_ENV = saved.vercelEnv;
+      if (saved.ci === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = saved.ci;
+      }
+      if (saved.githubActions === undefined) {
+        delete process.env.GITHUB_ACTIONS;
+      } else {
+        process.env.GITHUB_ACTIONS = saved.githubActions;
+      }
+      process.env.KV_REST_API_URL = saved.kvUrl;
+      process.env.KV_REST_API_TOKEN = saved.kvToken;
+    }
+  });
+
+  it('fails closed on Vercel production when KV is not configured', async () => {
+    const saved = {
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      ci: process.env.CI,
+      githubActions: process.env.GITHUB_ACTIONS,
+      kvUrl: process.env.KV_REST_API_URL,
+      kvToken: process.env.KV_REST_API_TOKEN,
+    };
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL_ENV = 'production';
     delete process.env.CI;
     delete process.env.GITHUB_ACTIONS;
     delete process.env.KV_REST_API_URL;
