@@ -14,6 +14,7 @@ export {
   buildStoryReviewUserMessage,
   buildStoryScoreUserMessage,
   gradeFromScore,
+  isStoryQualityParseFailure,
   parseStoryQualityResponse,
   parseStoryReviewResponse,
   type StoryQualityGrade,

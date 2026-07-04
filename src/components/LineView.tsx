@@ -31,6 +31,7 @@ import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { TemplateLibraryModal } from '@/components/TemplateLibraryModal';
 import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
+import { StoryComplianceIndicator } from '@/components/StoryComplianceIndicator';
 import { TechnicianCertificationSection } from '@/components/TechnicianCertificationSection';
 import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
@@ -125,14 +126,15 @@ export function LineView({
     isStoryCertified,
     isCertificationComplete,
     certificationActionsLocked,
+    storyComplianceState,
   } = useLineViewCertificationForm({
     lineId: line.id,
     isCustomerPayLine,
     technicianName,
+    hasWarrantyStory: Boolean(line.warrantyStory?.trim()),
     storyQuality,
     storyQualityStale,
     storyCertification,
-    lastGeneratedStoryText,
   });
 
   useEffect(() => {
@@ -158,6 +160,16 @@ export function LineView({
   };
 
   const handleCopy = async () => {
+    if (certificationActionsLocked) {
+      if (!isCustomerPayLine && storyComplianceState === 'not-audited') {
+        toast.error('Run Audit Story before copying to CDK');
+      } else if (!isCustomerPayLine && storyComplianceState === 'audit-stale') {
+        toast.error('Re-run Audit Story — the story changed since the last audit');
+      } else if (!isCustomerPayLine && !isStoryCertified) {
+        toast.error('Certify the story before copying to CDK');
+      }
+      return;
+    }
     const storyText = getWarrantyStoryTextareaValue(line.id, line.warrantyStory);
     if (!storyText.trim()) return;
     try {
@@ -432,6 +444,9 @@ export function LineView({
                 placeholder="Edit warranty story before DMS submission..."
               />
             </div>
+            {!isCustomerPayLine && Boolean(line.warrantyStory?.trim()) && (
+              <StoryComplianceIndicator state={storyComplianceState} />
+            )}
             {!isCustomerPayLine && (
               <div className="benz-quality-inset">
                 {isGenerating && (
@@ -474,6 +489,15 @@ export function LineView({
                   type="button"
                   onClick={handleCopy}
                   disabled={certificationActionsLocked}
+                  title={
+                    certificationActionsLocked
+                      ? storyComplianceState === 'not-audited'
+                        ? 'Run Audit Story first'
+                        : storyComplianceState === 'audit-stale'
+                          ? 'Re-run Audit Story — story changed'
+                          : 'Certify the story to unlock copy'
+                      : undefined
+                  }
                   className="primary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm touch-target disabled:opacity-50"
                 >
                   <Copy size={18} />

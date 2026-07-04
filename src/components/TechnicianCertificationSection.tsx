@@ -63,7 +63,8 @@ export function TechnicianCertificationSection({
 
       {!isComplete && !isSaved && (
         <p className="text-xs text-benz-amber mt-3 leading-snug">
-          Check the box and enter your full name to enable Copy for CDK and Save.
+          MI audit is complete. Check the box and enter your full name to certify — Copy for CDK stays
+          locked until certification is saved.
         </p>
       )}
 

@@ -9,6 +9,7 @@ import {
   STORY_SCORE_SYSTEM_PROMPT,
   buildStoryReviewUserMessage,
   buildStoryScoreUserMessage,
+  isStoryQualityParseFailure,
   parseStoryQualityResponse,
   parseStoryReviewResponse,
   type StoryQualityResult,
@@ -67,6 +68,8 @@ async function grokChat(
     model?: string;
     /** Only sent for grok-4.x models — grok-3 ignores reasoning. */
     reasoningEffort?: GrokReasoningEffort;
+    /** Request JSON object output from the chat API when supported. */
+    responseFormat?: 'json_object';
   }
 ): Promise<string> {
   const timeoutMs = options.timeoutMs ?? 55_000;
@@ -85,6 +88,9 @@ async function grokChat(
   // Only reasoning-capable grok-4 models accept this param; non-reasoning variants must omit it.
   if (model.includes('grok-4') && !model.includes('non-reasoning')) {
     requestBody.reasoning_effort = reasoningEffort;
+  }
+  if (options.responseFormat === 'json_object') {
+    requestBody.response_format = { type: 'json_object' };
   }
 
   try {
@@ -165,9 +171,14 @@ export async function scoreWarrantyStory(
       max_tokens: WARRANTY_STORY_SCORE_MAX_TOKENS,
       timeoutMs: STORY_SCORE_GROK_MS,
       perfLabel: 'grok.story.score',
+      responseFormat: 'json_object',
     }
   );
-  return parseStoryQualityResponse(raw);
+  const quality = parseStoryQualityResponse(raw);
+  if (isStoryQualityParseFailure(quality)) {
+    throw new Error('AI quality score returned unreadable JSON.');
+  }
+  return quality;
 }
 
 export async function reviewWarrantyStory(

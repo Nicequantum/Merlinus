@@ -4,7 +4,9 @@ import { MI_AUDIT_GUIDELINES } from '@/prompts/miAuditGuidelines';
 import {
   STORY_REVIEW_SYSTEM_PROMPT,
   STORY_SCORE_SYSTEM_PROMPT,
+  extractJsonPayload,
   gradeFromScore,
+  isStoryQualityParseFailure,
   parseStoryQualityResponse,
   parseStoryReviewResponse,
 } from '@/prompts/storyQuality';
@@ -89,5 +91,46 @@ describe('story quality parsing', () => {
     assert.equal(gradeFromScore(80), 'strong');
     assert.equal(gradeFromScore(65), 'needs-work');
     assert.equal(gradeFromScore(45), 'at-risk');
+  });
+
+  it('extracts JSON wrapped in explanation text', () => {
+    const wrapped = `Here is the MI quality assessment for your story.
+
+{
+  "score": 81,
+  "grade": "strong",
+  "summary": "Good workflow coverage.",
+  "strengths": ["Natural flow"],
+  "improvements": [],
+  "auditRisks": [],
+  "technicianDetails": []
+}
+
+Let me know if you need more detail.`;
+    const payload = extractJsonPayload(wrapped);
+    const result = parseStoryQualityResponse(payload);
+    assert.equal(result.score, 81);
+    assert.equal(result.grade, 'strong');
+    assert.equal(isStoryQualityParseFailure(result), false);
+  });
+
+  it('flags unreadable AI score responses', () => {
+    const result = parseStoryQualityResponse('Sorry, I cannot score this story right now.');
+    assert.equal(isStoryQualityParseFailure(result), true);
+    assert.equal(result.score, 0);
+  });
+
+  it('parses JSON with trailing commas', () => {
+    const result = parseStoryQualityResponse(`{
+      "score": 74,
+      "grade": "needs-work",
+      "summary": "Needs verification step.",
+      "strengths": [],
+      "improvements": ["Add final Quick Test"],
+      "auditRisks": [],
+      "technicianDetails": [],
+    }`);
+    assert.equal(result.score, 74);
+    assert.equal(isStoryQualityParseFailure(result), false);
   });
 });

@@ -4,6 +4,7 @@ import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
+import { isStoryQualityParseFailure } from '@/prompts/storyQuality';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
@@ -55,10 +56,23 @@ export async function POST(
 
       let quality;
       try {
-        quality = { ...(await scoreWarrantyStory(mapped, line, warrantyStory)), scoredAgainstStory: warrantyStory };
+        const scored = await scoreWarrantyStory(mapped, line, warrantyStory);
+        if (isStoryQualityParseFailure(scored)) {
+          return apiError(
+            'Story audit could not read the AI score. AI quality score returned unreadable JSON.',
+            502
+          );
+        }
+        quality = { ...scored, scoredAgainstStory: warrantyStory };
       } catch (error) {
         const mappedError = mapGrokRouteError(error, 'Story scoring');
-        return apiError(mappedError.message, mappedError.status);
+        const message =
+          error instanceof Error && error.message.includes('unreadable JSON')
+            ? 'Story audit could not read the AI score. AI quality score returned unreadable JSON.'
+            : mappedError.message;
+        const status =
+          error instanceof Error && error.message.includes('unreadable JSON') ? 502 : mappedError.status;
+        return apiError(message, status);
       }
 
       await writeAuditLog({

@@ -202,31 +202,98 @@ function parseTechnicianDetails(value: unknown): TechnicianDetailPrompt[] {
     .slice(0, 6);
 }
 
+export const STORY_QUALITY_PARSE_FAILURE_SUMMARY = 'Quality analysis could not be completed.';
+
+function extractBalancedJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
+function tryParseJsonRecord(payload: string): Record<string, unknown> | null {
+  const candidates = [
+    payload,
+    payload.replace(/,\s*([}\]])/g, '$1'),
+    payload.replace(/[\u2018\u2019]/g, "'").replace(/'/g, '"'),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+}
+
 export function extractJsonPayload(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) return fenced[1].trim();
+
+  const balanced = extractBalancedJsonObject(trimmed);
+  if (balanced) return balanced;
+
   const start = trimmed.indexOf('{');
   const end = trimmed.lastIndexOf('}');
   if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+
   return trimmed;
+}
+
+function storyQualityParseFailure(): StoryQualityResult {
+  return {
+    score: 0,
+    grade: 'at-risk',
+    strengths: [],
+    improvements: ['Unable to parse quality score — try reviewing again.'],
+    auditRisks: ['Score analysis unavailable'],
+    technicianDetails: [],
+    summary: STORY_QUALITY_PARSE_FAILURE_SUMMARY,
+  };
+}
+
+export function isStoryQualityParseFailure(result: StoryQualityResult): boolean {
+  return result.summary === STORY_QUALITY_PARSE_FAILURE_SUMMARY;
 }
 
 export function parseStoryQualityResponse(raw: string): StoryQualityResult {
   const payload = extractJsonPayload(raw);
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(payload) as Record<string, unknown>;
-  } catch {
-    return {
-      score: 0,
-      grade: 'at-risk',
-      strengths: [],
-      improvements: ['Unable to parse quality score — try reviewing again.'],
-      auditRisks: ['Score analysis unavailable'],
-      technicianDetails: [],
-      summary: 'Quality analysis could not be completed.',
-    };
+  const parsed = tryParseJsonRecord(payload);
+  if (!parsed || (parsed.score === undefined && parsed.grade === undefined)) {
+    return storyQualityParseFailure();
   }
 
   const score = clampScore(parsed.score);

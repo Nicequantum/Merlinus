@@ -2,6 +2,7 @@ import { Camera, ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 }
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { ExtractedDataPreview } from '@/components/ExtractedDataPreview';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
+import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { SoldMetricsSummary } from '@/components/SoldMetricsSummary';
 import { StableInput } from '@/components/StableInput';
@@ -308,10 +309,23 @@ export function ROView({
                     Instant story
                   </span>
                 ) : (
-                  <span className="benz-story-badge benz-story-badge-ai benz-story-badge-compact mt-1.5">
-                    <Sparkles size={12} aria-hidden />
-                    AI story ready
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <span className="benz-story-badge benz-story-badge-ai benz-story-badge-compact">
+                      <Sparkles size={12} aria-hidden />
+                      AI story ready
+                    </span>
+                    {line.storyQualityAudit &&
+                      isStoryQualityCurrent(line.storyQualityAudit, line.warrantyStory) && (
+                        <span className="benz-story-badge benz-story-badge-compact text-benz-blue border-benz-blue/30 bg-benz-blue/10">
+                          MI {line.storyQualityAudit.score}/100
+                        </span>
+                      )}
+                    {line.storyCertification && (
+                      <span className="benz-story-badge benz-story-badge-compact text-benz-green border-benz-green/30 bg-benz-green/10">
+                        Certified
+                      </span>
+                    )}
+                  </div>
                 )
               )}
               {hasSoldMetrics(line.soldMetrics) && line.soldMetrics ? (
