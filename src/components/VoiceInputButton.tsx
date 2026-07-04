@@ -4,7 +4,7 @@
 import { Mic, MicOff } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { useSharedVoiceInput } from '@/components/VoiceInputProvider';
 import { setCompanionVoiceListening } from '@/lib/companionVoiceBridge';
 import type { TranscriptMeta } from '@/lib/voice';
 
@@ -24,6 +24,7 @@ export function VoiceInputButton({
   const lastErrorRef = useRef<string | null>(null);
   const {
     isListening,
+    activeTarget,
     isSupported,
     isEnabled,
     permission,
@@ -31,19 +32,19 @@ export function VoiceInputButton({
     errorMessage,
     toggleListening,
     refreshPermission,
-    stopListening,
-  } = useVoiceInput();
+  } = useSharedVoiceInput();
 
   useEffect(() => {
     void refreshPermission();
-    return () => stopListening();
-  }, [refreshPermission, stopListening]);
+  }, [refreshPermission]);
+
+  const isActiveField =
+    (isListening || listeningState === 'restarting') && activeTarget === targetRef.current;
 
   useEffect(() => {
-    const active = isListening || listeningState === 'restarting';
-    onListeningChange?.(active);
-    setCompanionVoiceListening(active);
-  }, [isListening, listeningState, onListeningChange]);
+    onListeningChange?.(isActiveField);
+    setCompanionVoiceListening(isActiveField);
+  }, [isActiveField, onListeningChange]);
 
   useEffect(() => {
     if (listeningState !== 'error' || !errorMessage) return;
@@ -82,15 +83,15 @@ export function VoiceInputButton({
 
   if (!isEnabled) return null;
 
-  const micTitle = isListening ? 'Stop voice input' : 'Start voice input';
-  const isActive = isListening || listeningState === 'restarting';
+  const micTitle = isActiveField ? 'Stop voice input' : 'Start voice input';
+  const isActive = isActiveField;
 
   return (
     <button
       type="button"
       title={micTitle}
       aria-label={micTitle}
-      aria-pressed={isListening}
+      aria-pressed={isActiveField}
       onClick={handleClick}
       className={`benz-voice-inline-btn touch-target ${isActive ? 'benz-voice-inline-btn-active' : ''} ${listeningState === 'restarting' ? 'benz-voice-inline-btn-restarting' : ''} ${className}`}
     >

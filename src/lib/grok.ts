@@ -184,7 +184,11 @@ export async function generateWarrantyStory(ro: RepairOrder, line: RepairLine): 
       perfLabel: 'grok.story.generate',
     }
   );
-  return story || 'No story generated.';
+  const trimmed = story?.trim();
+  if (!trimmed) {
+    throw new Error('AI did not return a warranty story. Try again or type the story manually.');
+  }
+  return trimmed;
 }
 
 async function requestStoryQualityScore(

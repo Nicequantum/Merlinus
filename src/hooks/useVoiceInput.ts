@@ -35,6 +35,7 @@ export function useVoiceInput() {
   const serviceRef = useRef<VoiceInputService | null>(null);
   const activeTargetRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const onTranscriptRef = useRef<((value: string, meta?: TranscriptMeta) => void) | null>(null);
+  const [activeTarget, setActiveTarget] = useState<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
   const [state, setState] = useState<VoiceInputState>(() => ({
     listeningState: 'idle',
@@ -84,10 +85,17 @@ export function useVoiceInput() {
 
       activeTargetRef.current = target;
       onTranscriptRef.current = onTranscript;
+      setActiveTarget(target);
 
       void service.start(target, {
         onTranscript: (full, meta) => onTranscript(full, meta),
-        onStateChange: setState,
+        onStateChange: (next) => {
+          setState(next);
+          if (!next.isListening) {
+            activeTargetRef.current = null;
+            setActiveTarget(null);
+          }
+        },
       });
       return true;
     },
@@ -96,6 +104,8 @@ export function useVoiceInput() {
 
   const stopListening = useCallback(() => {
     serviceRef.current?.stop();
+    activeTargetRef.current = null;
+    setActiveTarget(null);
     setState((prev) => ({
       ...prev,
       isListening: false,
@@ -106,8 +116,14 @@ export function useVoiceInput() {
 
   const toggleListening = useCallback(
     (target: HTMLTextAreaElement | HTMLInputElement, onTranscript: (value: string, meta?: TranscriptMeta) => void) => {
-      if (state.isListening) stopListening();
-      else startListening(target, onTranscript);
+      if (state.isListening && activeTargetRef.current === target) {
+        stopListening();
+        return;
+      }
+      if (state.isListening) {
+        stopListening();
+      }
+      startListening(target, onTranscript);
     },
     [state.isListening, startListening, stopListening]
   );
@@ -142,6 +158,7 @@ export function useVoiceInput() {
 
   return {
     ...state,
+    activeTarget,
     isEnabled: VOICE_INPUT_SETTINGS.enabled,
     settings: VOICE_INPUT_SETTINGS,
     startListening,

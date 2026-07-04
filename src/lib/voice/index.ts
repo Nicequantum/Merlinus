@@ -1,4 +1,5 @@
 export { VoiceInputService } from './VoiceInputService';
+export { appendDictationChunk } from './dictationText';
 export { NoiseMonitor } from './noiseMonitor';
 export { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from './confidence';
 export { resolveVoiceErrorMessage, shouldAutoRestartAfterError, VOICE_ERROR_MESSAGES } from './errors';

@@ -4,10 +4,10 @@
  * Backward-compatible wrapper around useVoiceInput for legacy imports.
  * Prefer useVoiceInput or VoiceInputService directly for new code.
  */
-import { useVoiceInput } from './useVoiceInput';
+import { useSharedVoiceInput } from '@/components/VoiceInputProvider';
 
 export function useSpeechRecognition() {
-  const voice = useVoiceInput();
+  const voice = useSharedVoiceInput();
 
   return {
     isListening: voice.isListening,

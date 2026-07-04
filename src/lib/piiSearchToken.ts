@@ -41,19 +41,23 @@ export function hashRoNumberSearchFragment(fragment: string, secret?: string): s
     .digest('hex');
 }
 
+function collectRoNumberFragmentTokens(normalized: string, secret: string, tokens: Set<string>): void {
+  for (let len = MIN_RO_SEARCH_FRAGMENT_LEN; len <= normalized.length; len += 1) {
+    for (let start = 0; start <= normalized.length - len; start += 1) {
+      const token = hashRoNumberSearchFragment(normalized.slice(start, start + len), secret);
+      if (token) tokens.add(token);
+    }
+  }
+}
+
 /** Build all substring blind-index tokens for an RO number (supports contains search). */
 export function buildRoNumberSearchTokens(roNumber: string): string[] {
   const normalized = normalizeRoNumberForSearch(roNumber);
   if (!normalized) return [];
 
   const tokens = new Set<string>();
-  const maxLen = normalized.length;
-
-  for (let len = MIN_RO_SEARCH_FRAGMENT_LEN; len <= maxLen; len += 1) {
-    for (let start = 0; start <= maxLen - len; start += 1) {
-      const token = hashRoNumberSearchFragment(normalized.slice(start, start + len));
-      if (token) tokens.add(token);
-    }
+  for (const secret of getSearchHmacSecretsForQuery()) {
+    collectRoNumberFragmentTokens(normalized, secret, tokens);
   }
 
   return Array.from(tokens);
@@ -73,13 +77,7 @@ export function buildRoNumberSearchQueryTokens(term: string): string[] {
       if (single) tokens.add(single);
       continue;
     }
-
-    for (let len = MIN_RO_SEARCH_FRAGMENT_LEN; len <= normalized.length; len += 1) {
-      for (let start = 0; start <= normalized.length - len; start += 1) {
-        const token = hashRoNumberSearchFragment(normalized.slice(start, start + len), secret);
-        if (token) tokens.add(token);
-      }
-    }
+    collectRoNumberFragmentTokens(normalized, secret, tokens);
   }
 
   return Array.from(tokens);

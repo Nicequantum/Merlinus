@@ -1,4 +1,5 @@
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from './confidence';
+import { appendDictationChunk } from './dictationText';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from './errors';
 import { getSpeechRecognitionCtor } from './speechRecognition';
 import type {
@@ -182,24 +183,6 @@ export class VoiceInputService {
     return this.start(this.targetElement, this.callbacks);
   }
 
-  private async probeMicrophonePermission(): Promise<boolean> {
-    if (!navigator.mediaDevices?.getUserMedia) return false;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          autoGainControl: this.settings.autoGainControl,
-          noiseSuppression: this.settings.noiseSuppression,
-          echoCancellation: this.settings.echoCancellation,
-        },
-        video: false,
-      });
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private startRecognition(Ctor: NonNullable<ReturnType<typeof getSpeechRecognitionCtor>>): boolean {
     // C7: detach handlers before abort so superseded instances cannot schedule restarts.
     this.disposeRecognition();
@@ -295,7 +278,7 @@ export class VoiceInputService {
 
       const text = alternative.transcript ?? '';
       if (result.isFinal) {
-        this.target.committed += text;
+        this.target.committed = appendDictationChunk(this.target.committed, text);
         hasFinal = true;
       } else {
         interim += text;

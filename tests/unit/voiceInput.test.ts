@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from '../../src/lib/voice/confidence';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from '../../src/lib/voice/errors';
+import { appendDictationChunk } from '../../src/lib/voice/dictationText';
 import { DEFAULT_VOICE_INPUT_SETTINGS } from '../../src/lib/voice/voiceSettings';
 
 describe('voice confidence adaptation', () => {
@@ -31,7 +32,29 @@ describe('voice confidence adaptation', () => {
   });
 });
 
+describe('voice dictation text', () => {
+  test('inserts word boundaries between finalized chunks', () => {
+    assert.equal(appendDictationChunk('Customer reports', 'brake noise'), 'Customer reports brake noise');
+    assert.equal(appendDictationChunk('Line one.', 'Line two'), 'Line one. Line two');
+    assert.equal(appendDictationChunk('Already spaced ', 'next'), 'Already spaced next');
+  });
+});
+
 describe('voice dictation stability', () => {
+  test('VoiceInputProvider shares one pipeline across StableTextarea fields', () => {
+    const app = readFileSync(join(process.cwd(), 'src/components/BenzTechAuthenticatedApp.tsx'), 'utf8');
+    const provider = readFileSync(join(process.cwd(), 'src/components/VoiceInputProvider.tsx'), 'utf8');
+    const button = readFileSync(join(process.cwd(), 'src/components/VoiceInputButton.tsx'), 'utf8');
+    assert.match(app, /<VoiceInputProvider>/);
+    assert.match(provider, /VoiceInputContext/);
+    assert.match(button, /useSharedVoiceInput/);
+    assert.match(button, /activeTarget === targetRef\.current/);
+  });
+
+  test('VoiceInputService joins finalized chunks with spacing helper', () => {
+    const src = readFileSync(join(process.cwd(), 'src/lib/voice/VoiceInputService.ts'), 'utf8');
+    assert.match(src, /appendDictationChunk/);
+  });
   test('StableTextarea defers parent sync until finalized speech', () => {
     const src = readFileSync(join(process.cwd(), 'src/components/StableTextarea.tsx'), 'utf8');
     assert.match(src, /meta\?\.hasFinal/);

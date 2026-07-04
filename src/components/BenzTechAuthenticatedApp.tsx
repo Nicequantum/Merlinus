@@ -15,6 +15,7 @@ import { ROView } from '@/components/ROView';
 import { SettingsView } from '@/components/SettingsView';
 import { ViewErrorBoundary } from '@/components/ViewErrorBoundary';
 import { CompanionSyncBridge } from '@/components/CompanionSyncBridge';
+import { VoiceInputProvider } from '@/components/VoiceInputProvider';
 import { useDesktopCompanion } from '@/hooks/useDesktopCompanion';
 import { deriveCompanionSyncRole } from '@/lib/companionSyncRole';
 import { useOcrProgress } from '@/hooks/useOcrProgress';
@@ -205,6 +206,7 @@ export function BenzTechAuthenticatedApp({
   const companionMode = showDesktopCompanion;
 
   return (
+    <VoiceInputProvider>
     <CompanionSyncBridge session={session} enabled role={companionSyncRole} ro={ro} ocr={ocr}>
       {(companion) => (
     <div
@@ -505,5 +507,6 @@ export function BenzTechAuthenticatedApp({
     </div>
       )}
     </CompanionSyncBridge>
+    </VoiceInputProvider>
   );
 }
