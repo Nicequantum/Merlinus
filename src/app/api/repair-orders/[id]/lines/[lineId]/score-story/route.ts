@@ -5,6 +5,7 @@ import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { isStoryQualityParseFailure } from '@/prompts/storyQuality';
+import type { StoryQualityResult } from '@/types';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
@@ -57,7 +58,7 @@ export async function POST(
         return apiError('Customer Pay stories do not require AI quality scoring.', 400);
       }
 
-      let quality;
+      let quality: StoryQualityResult;
       try {
         const scored = await scoreWarrantyStory(mapped, line, warrantyStory);
         quality = { ...scored, scoredAgainstStory: warrantyStory };

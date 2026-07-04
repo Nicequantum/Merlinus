@@ -90,13 +90,14 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
 
   useEffect(() => {
     if (!enabled) return;
-    if (ocr.isProcessingOCR) {
-      const onLine = ro.view === 'line';
+    const onLine = ro.view === 'line';
+    const activePipeline = onLine ? ocr.xentry : ocr.roScan;
+    if (activePipeline.isProcessing) {
       companion.publishStatus(onLine ? 'processing_xentry' : 'scanning', {
         message: onLine
           ? 'Processing Xentry photos…'
-          : ocr.scanStatusMessage || 'Scanning repair order…',
-        progress: ocr.ocrProgress,
+          : activePipeline.statusMessage || 'Scanning repair order…',
+        progress: activePipeline.progress,
         repairOrderId: ro.currentRO?.id ?? null,
         lineId: onLine ? ro.currentLineId : null,
       });
@@ -138,9 +139,12 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
   }, [
     companion,
     enabled,
-    ocr.isProcessingOCR,
-    ocr.ocrProgress,
-    ocr.scanStatusMessage,
+    ocr.roScan.isProcessing,
+    ocr.roScan.progress,
+    ocr.roScan.statusMessage,
+    ocr.xentry.isProcessing,
+    ocr.xentry.progress,
+    ocr.xentry.statusMessage,
     ro.currentLineId,
     ro.currentRO?.id,
     ro.isCertifyingStory,

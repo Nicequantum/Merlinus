@@ -767,7 +767,9 @@ export function useRepairOrders({
       if (!merged) return;
       roRef.current = merged;
       setCurrentRO(merged);
-      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+      setAllROs((prev) =>
+        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+      );
     },
     [setAllROs]
   );
@@ -785,7 +787,9 @@ export function useRepairOrders({
       };
       roRef.current = merged;
       setCurrentRO(merged);
-      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+      setAllROs((prev) =>
+        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+      );
     },
     [setAllROs]
   );
@@ -824,7 +828,9 @@ export function useRepairOrders({
       };
       roRef.current = merged;
       setCurrentRO(merged);
-      setAllROs((prev) => prev.map((r) => (r.id === merged.id ? merged : r)));
+      setAllROs((prev) =>
+        prev.map((r) => (r.id === merged.id ? repairOrderToSummary(merged) : r))
+      );
     },
     [session?.technicianId, setAllROs]
   );

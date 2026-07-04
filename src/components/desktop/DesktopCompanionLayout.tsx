@@ -33,6 +33,7 @@ interface DesktopCompanionLayoutProps {
   storyReview: StoryReviewResult | null;
   storyQualityStale: boolean;
   storyCertification: StoryCertificationRecord | null;
+  lastGeneratedStoryText?: string | null;
   connectionState: CompanionConnectionState;
   workflowStatus: CompanionWorkflowStatus;
   statusMessage?: string | null;
@@ -49,6 +50,7 @@ export function DesktopCompanionLayout({
   storyReview,
   storyQualityStale,
   storyCertification,
+  lastGeneratedStoryText = null,
   connectionState,
   workflowStatus,
   statusMessage,
@@ -67,6 +69,7 @@ export function DesktopCompanionLayout({
     storyQuality,
     storyQualityStale,
     storyCertification,
+    lastGeneratedStoryText,
   });
 
   const handleCopy = async () => {

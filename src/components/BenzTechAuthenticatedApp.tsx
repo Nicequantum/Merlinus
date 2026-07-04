@@ -296,6 +296,7 @@ export function BenzTechAuthenticatedApp({
               storyReview={ro.storyReviewForLine}
               storyQualityStale={ro.storyQualityStaleForLine}
               storyCertification={ro.storyCertificationForLine}
+              lastGeneratedStoryText={ro.lastGeneratedStoryForLine}
               connectionState={companion.connectionState}
               workflowStatus={companion.workflowStatus}
               statusMessage={companion.statusMessage}
