@@ -1,5 +1,5 @@
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
-import { isStoryQualityCurrent } from '@/lib/storyQualityState';
+import { isStoryQualityCurrent, storiesMatchForAudit } from '@/lib/storyQualityState';
 import type { StoryCertificationRecord } from '@/hooks/repairOrders/useROStoryWorkflow';
 
 interface CurrentLineStoryStateInput {
@@ -46,12 +46,13 @@ export function deriveCurrentLineStoryState({
 
   const storyQualityForLine = (() => {
     if (!currentLineId || isGeneratingForLine || isScoringForLine || isReviewingForLine) return null;
-    const quality = storyQualityByLine[currentLineId];
-    if (!quality) return null;
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
-    if (!storyText) return null;
-    if (!isStoryQualityCurrent(quality, storyText)) return null;
-    return quality;
+    const quality = storyQualityByLine[currentLineId] ?? currentLine?.storyQualityAudit ?? null;
+    if (!quality) return null;
+    if (storyText && isStoryQualityCurrent(quality, storyText)) return quality;
+    const baseline = quality.scoredAgainstStory?.trim() ?? '';
+    if (baseline && isStoryQualityCurrent(quality, baseline)) return quality;
+    return null;
   })();
 
   const storyReviewForLine = (() => {
@@ -70,10 +71,24 @@ export function deriveCurrentLineStoryState({
 
   const storyCertificationForLine = (() => {
     if (!currentLineId) return null;
-    const certification = storyCertificationByLine[currentLineId];
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
-    if (!certification || !storyText || certification.storyText !== storyText) return null;
-    return certification;
+    if (!storyText) return null;
+
+    const certification = storyCertificationByLine[currentLineId];
+    if (certification && storiesMatchForAudit(certification.storyText, storyText)) {
+      return certification;
+    }
+
+    const fromLine = currentLine?.storyCertification;
+    if (fromLine?.certifiedByName && fromLine.certifiedAt) {
+      return {
+        certifiedByName: fromLine.certifiedByName,
+        certifiedAt: fromLine.certifiedAt,
+        storyText,
+      };
+    }
+
+    return null;
   })();
 
   return {

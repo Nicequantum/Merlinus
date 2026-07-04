@@ -196,6 +196,7 @@ export async function POST(
         certifiedByName,
         certifiedAt: certifiedAt.toISOString(),
         warrantyStory,
+        storyHash: storyHash!,
       });
       void broadcastCompanionEvent(session.technicianId, {
         type: 'activity',

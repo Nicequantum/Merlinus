@@ -291,6 +291,7 @@ export function BenzTechAuthenticatedApp({
               view={ro.view}
               ro={ro.currentRO}
               line={ro.view === 'line' ? (ro.currentLine ?? null) : null}
+              activeLineId={ro.currentLineId}
               technicianName={session.name}
               storyQuality={ro.storyQualityForLine}
               storyReview={ro.storyReviewForLine}

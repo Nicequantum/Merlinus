@@ -18,6 +18,7 @@ import type {
   CompanionConnectionState,
   CompanionWorkflowStatus,
 } from '@/lib/companionSyncTypes';
+import { deriveCompanionLineStoryState } from '@/lib/companionLineStoryState';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { hasSoldMetrics } from '@/lib/repairLineSoldMetrics';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
@@ -28,6 +29,7 @@ interface DesktopCompanionLayoutProps {
   view: AppView;
   ro: RepairOrder;
   line: RepairLine | null;
+  activeLineId: string | null;
   technicianName?: string;
   storyQuality: StoryQualityResult | null;
   storyReview: StoryReviewResult | null;
@@ -45,6 +47,7 @@ export function DesktopCompanionLayout({
   view,
   ro,
   line,
+  activeLineId,
   technicianName,
   storyQuality,
   storyReview,
@@ -57,7 +60,20 @@ export function DesktopCompanionLayout({
   statusProgress,
   activities,
 }: DesktopCompanionLayoutProps) {
-  const activeLine = line ?? ro.repairLines[0] ?? null;
+  const syncedLineStory = deriveCompanionLineStoryState({
+    ro,
+    activeLineId: activeLineId ?? line?.id ?? null,
+    storyQuality,
+    storyReview,
+    storyQualityStale,
+    storyCertification,
+  });
+  const activeLine = syncedLineStory.activeLine;
+  const resolvedStoryQuality = syncedLineStory.storyQuality;
+  const resolvedStoryReview = syncedLineStory.storyReview;
+  const resolvedStoryQualityStale = syncedLineStory.storyQualityStale;
+  const resolvedStoryCertification = syncedLineStory.storyCertification;
+
   const isCustomerPayLine = activeLine ? isCustomerPayRepairLine(activeLine) : false;
   const storyText = activeLine?.warrantyStory?.trim() ?? '';
 
@@ -66,9 +82,9 @@ export function DesktopCompanionLayout({
     isCustomerPayLine,
     technicianName,
     hasWarrantyStory: Boolean(storyText),
-    storyQuality,
-    storyQualityStale,
-    storyCertification,
+    storyQuality: resolvedStoryQuality,
+    storyQualityStale: resolvedStoryQualityStale,
+    storyCertification: resolvedStoryCertification,
     lastGeneratedStoryText,
   });
 
@@ -195,14 +211,16 @@ export function DesktopCompanionLayout({
                 <StoryComplianceIndicator state={storyComplianceState} />
               )}
 
-              {!isCustomerPayLine && storyQuality && !storyQualityStale && (
+              {!isCustomerPayLine && resolvedStoryQuality && !resolvedStoryQualityStale && (
                 <StoryQualityPanel
-                  quality={storyQuality}
-                  review={storyReview}
-                  panelKey={`desktop:${activeLine.id}:${storyQuality.score}`}
+                  quality={resolvedStoryQuality}
+                  review={resolvedStoryReview}
+                  panelKey={`desktop:${activeLine.id}:${resolvedStoryQuality.score}`}
                 />
               )}
-              {!isCustomerPayLine && !storyQuality && storyQualityStale && <StoryQualityStaleBanner />}
+              {!isCustomerPayLine && !resolvedStoryQuality && resolvedStoryQualityStale && (
+                <StoryQualityStaleBanner />
+              )}
 
               {hasSoldMetrics(activeLine.soldMetrics) && activeLine.soldMetrics && (
                 <div className="mt-4">
@@ -210,10 +228,10 @@ export function DesktopCompanionLayout({
                 </div>
               )}
 
-              {storyCertification && (
+              {resolvedStoryCertification && (
                 <div className="benz-card p-4 mt-4 border border-benz-green/25 bg-benz-green/5">
                   <p className="text-sm text-benz-green">
-                    Certified by {storyCertification.certifiedByName}
+                    Certified by {resolvedStoryCertification.certifiedByName}
                   </p>
                 </div>
               )}

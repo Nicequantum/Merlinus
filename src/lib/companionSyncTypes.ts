@@ -88,6 +88,7 @@ export interface CompanionStoryCertificationEvent extends CompanionBaseEvent {
   certifiedByName: string;
   certifiedAt: string;
   warrantyStory: string;
+  storyHash?: string;
 }
 
 export type CompanionEvent =

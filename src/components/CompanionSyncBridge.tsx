@@ -53,11 +53,12 @@ export function CompanionSyncBridge({ session, enabled, ro, ocr, children }: Com
     onStoryQuality: ({ lineId, quality }) => {
       roRef.current.applyCompanionStoryQuality(lineId, quality);
     },
-    onStoryCertification: ({ lineId, certifiedByName, certifiedAt, warrantyStory }) => {
+    onStoryCertification: ({ lineId, certifiedByName, certifiedAt, warrantyStory, storyHash }) => {
       roRef.current.applyCompanionCertification(lineId, {
         certifiedByName,
         certifiedAt,
         warrantyStory,
+        storyHash,
       });
     },
   });

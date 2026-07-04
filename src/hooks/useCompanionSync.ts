@@ -44,6 +44,7 @@ interface CompanionHandlers {
     certifiedByName: string;
     certifiedAt: string;
     warrantyStory: string;
+    storyHash?: string;
   }) => void;
 }
 
@@ -93,9 +94,18 @@ export function useCompanionSync({
     setActivities((prev) => [entry, ...prev].slice(0, MAX_ACTIVITY));
   }, []);
 
+  const shouldIgnoreEvent = useCallback(
+    (event: CompanionEvent) => {
+      if (seenIdsRef.current.has(event.id)) return true;
+      if (event.sourceDeviceId === 'server') return false;
+      return event.sourceDeviceId === deviceId;
+    },
+    [deviceId]
+  );
+
   const handleEvent = useCallback(
     async (event: CompanionEvent) => {
-      if (event.sourceDeviceId === deviceId || seenIdsRef.current.has(event.id)) return;
+      if (shouldIgnoreEvent(event)) return;
       seenIdsRef.current.add(event.id);
 
       const handlers = handlersRef.current;
@@ -128,6 +138,15 @@ export function useCompanionSync({
           setWorkflowStatus(event.status);
           setStatusMessage(event.message ?? null);
           setStatusProgress(typeof event.progress === 'number' ? event.progress : null);
+          if (event.status !== 'idle' && event.message?.trim()) {
+            pushActivity({
+              id: `${event.id}:workflow`,
+              label: event.message.trim(),
+              timestamp: event.timestamp,
+              repairOrderId: event.repairOrderId,
+              lineId: event.lineId,
+            });
+          }
           break;
         case 'activity':
           pushActivity({
@@ -146,6 +165,13 @@ export function useCompanionSync({
             lineId: event.lineId,
             quality: event.quality,
           });
+          pushActivity({
+            id: `${event.id}:audit`,
+            label: `MI audit score: ${event.quality.score}/100`,
+            timestamp: event.timestamp,
+            repairOrderId: event.repairOrderId,
+            lineId: event.lineId,
+          });
           break;
         case 'story.certification':
           void mutate(companionRoKey(event.repairOrderId));
@@ -155,13 +181,22 @@ export function useCompanionSync({
             certifiedByName: event.certifiedByName,
             certifiedAt: event.certifiedAt,
             warrantyStory: event.warrantyStory,
+            storyHash: event.storyHash,
+          });
+          pushActivity({
+            id: `${event.id}:cert`,
+            label: 'Story certified and saved',
+            detail: event.certifiedByName,
+            timestamp: event.timestamp,
+            repairOrderId: event.repairOrderId,
+            lineId: event.lineId,
           });
           break;
         default:
           break;
       }
     },
-    [deviceId, pushActivity]
+    [deviceId, pushActivity, shouldIgnoreEvent]
   );
 
   const handleEventRef = useRef(handleEvent);

@@ -38,6 +38,22 @@ describe('desktop companion sync', () => {
     assert.equal(bridge.includes('[companion, enabled'), false);
   });
 
+  it('mirrors audit and certification SSE events into live activity', () => {
+    const hook = readSrc('src/hooks/useCompanionSync.ts');
+    assert.ok(hook.includes('MI audit score:'));
+    assert.ok(hook.includes('Story certified and saved'));
+    assert.ok(hook.includes("event.sourceDeviceId === 'server'"));
+  });
+
+  it('merges companion story state from active line and persisted audit fields', () => {
+    const layout = readSrc('src/components/desktop/DesktopCompanionLayout.tsx');
+    const state = readSrc('src/lib/companionLineStoryState.ts');
+    assert.ok(layout.includes('deriveCompanionLineStoryState'));
+    assert.ok(layout.includes('activeLineId'));
+    assert.ok(state.includes('resolveQualityForLine'));
+    assert.ok(state.includes('resolveCertificationForLine'));
+  });
+
   it('scores warranty stories with full-structure retry instead of throwing on parse failure', () => {
     const grok = readSrc('src/lib/grok.ts');
     const prompts = readSrc('src/prompts/storyQuality.ts');

@@ -48,6 +48,7 @@ import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPip
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 import { applyCompanionROPatch } from '@/lib/companionMerge';
+import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import { uploadFilesAsAttachments } from '@/utils/uploadHelpers';
 
 interface UseRepairOrdersOptions {
@@ -68,6 +69,7 @@ export function useRepairOrders({
   const [view, setView] = useState<AppView>('home');
   const [currentRO, setCurrentRO] = useState<RepairOrder | null>(null);
   const [currentLineId, setCurrentLineId] = useState<string | null>(null);
+  const currentLineIdRef = useRef<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingLineId, setGeneratingLineId] = useState<string | null>(null);
   const [lastGeneratedStoryByLine, setLastGeneratedStoryByLine] = useState<Record<string, string>>({});
@@ -99,6 +101,10 @@ export function useRepairOrders({
     if (scanInFlightRef.current || xentryInFlightRef.current) return;
     roRef.current = currentRO;
   }, [currentRO]);
+
+  useEffect(() => {
+    currentLineIdRef.current = currentLineId;
+  }, [currentLineId]);
 
   const {
     allROs,
@@ -290,7 +296,12 @@ export function useRepairOrders({
         }
         roRef.current = normalized;
         setCurrentRO(normalized);
-        setCurrentLineId(null);
+        const preservedLineId = currentLineIdRef.current;
+        setCurrentLineId(
+          preservedLineId && normalized.repairLines.some((line) => line.id === preservedLineId)
+            ? preservedLineId
+            : null
+        );
         const { qualityByLine, reviewByLine } = hydrateStoryQualityFromRO(normalized);
         const { certificationByLine, lastGeneratedByLine } = hydrateStoryWorkflowFromRO(normalized);
         setLastGeneratedStoryByLine(lastGeneratedByLine);
@@ -776,14 +787,23 @@ export function useRepairOrders({
 
   const applyCompanionStoryQuality = useCallback(
     (lineId: string, quality: StoryQualityResult) => {
+      const scoredStory = quality.scoredAgainstStory?.trim() ?? '';
       setStoryQualityByLine((prev) => ({ ...prev, [lineId]: quality }));
       const latest = roRef.current;
       if (!latest) return;
       const merged = {
         ...latest,
-        repairLines: latest.repairLines.map((line) =>
-          line.id === lineId ? { ...line, storyQualityAudit: quality } : line
-        ),
+        repairLines: latest.repairLines.map((line) => {
+          if (line.id !== lineId) return line;
+          const next = { ...line, storyQualityAudit: quality };
+          if (scoredStory) {
+            const currentStory = line.warrantyStory?.trim() ?? '';
+            if (!currentStory || !isStoryQualityCurrent(quality, currentStory)) {
+              next.warrantyStory = scoredStory;
+            }
+          }
+          return next;
+        }),
       };
       roRef.current = merged;
       setCurrentRO(merged);
@@ -799,12 +819,13 @@ export function useRepairOrders({
       lineId: string,
       payload: { certifiedByName: string; certifiedAt: string; warrantyStory: string; storyHash?: string }
     ) => {
+      const certifiedStory = payload.warrantyStory.trim();
       setStoryCertificationByLine((prev) => ({
         ...prev,
         [lineId]: {
           certifiedByName: payload.certifiedByName,
           certifiedAt: payload.certifiedAt,
-          storyText: payload.warrantyStory.trim(),
+          storyText: certifiedStory,
         },
       }));
       const latest = roRef.current;
@@ -815,7 +836,7 @@ export function useRepairOrders({
           line.id === lineId
             ? {
                 ...line,
-                warrantyStory: payload.warrantyStory,
+                warrantyStory: certifiedStory,
                 storyCertification: {
                   certifiedByName: payload.certifiedByName,
                   certifiedAt: payload.certifiedAt,
