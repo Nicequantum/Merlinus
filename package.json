@@ -1,7 +1,7 @@
 {
   "name": "merlinus",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.0.1",
   "scripts": {
     "dev": "next dev",
     "validate:env": "node scripts/validate-env.mjs",
