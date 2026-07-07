@@ -91,7 +91,8 @@ describe('Medium audit fixes (M1–M30)', () => {
   it('M15/M16/M17: voice service guards', () => {
     const voice = readSrc('src/lib/voice/VoiceInputService.ts');
     assert.ok(voice.includes('attachManualEditGuard'));
-    assert.ok(voice.includes('appendDictationChunk'));
+    assert.ok(voice.includes('processDictationChunk'));
+    assert.ok(voice.includes('dictationMode'));
     assert.ok(voice.includes('Do not call getUserMedia before SpeechRecognition'));
     assert.ok(readSrc('src/hooks/useVoiceInput.ts').includes('pagehide'));
     assert.ok(readSrc('src/components/VoiceInputProvider.tsx').includes('VoiceInputProvider'));

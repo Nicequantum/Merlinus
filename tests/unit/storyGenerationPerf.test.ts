@@ -56,7 +56,7 @@ describe('story generation performance settings', () => {
   });
 
   test('allows richer generation output and voice variation temperature', () => {
-    assert.equal(WARRANTY_STORY_MAX_TOKENS, 750);
+    assert.ok(WARRANTY_STORY_MAX_TOKENS >= 4096);
     assert.ok(WARRANTY_STORY_TEMPERATURE >= 0.35);
   });
 

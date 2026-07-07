@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type TextareaHTMLAttributes } from 'react';
-import type { TranscriptMeta } from '@/lib/voice';
+import type { TranscriptMeta, VoiceDictationMode } from '@/lib/voice';
 import { VoiceInputButton } from './VoiceInputButton';
 
 interface StableTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> {
@@ -9,6 +9,8 @@ interface StableTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaEl
   onChange: (value: string) => void;
   fieldKey: string;
   showVoice?: boolean;
+  /** Use `story` for warranty/notes fields — enables spoken punctuation commands. */
+  voiceDictationMode?: VoiceDictationMode;
 }
 
 function useStableDraft(value: string, fieldKey: string, suppressExternalSync: boolean) {
@@ -60,6 +62,7 @@ export function StableTextarea({
   onChange,
   fieldKey,
   showVoice = true,
+  voiceDictationMode = 'default',
   className = '',
   ...props
 }: StableTextareaProps) {
@@ -126,6 +129,7 @@ export function StableTextarea({
           targetRef={textareaRef}
           onTranscript={handleVoiceTranscript}
           onListeningChange={setVoiceListening}
+          dictationMode={voiceDictationMode}
           className="bottom-2 right-2"
         />
       )}

@@ -6,12 +6,14 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useSharedVoiceInput } from '@/components/VoiceInputProvider';
 import { setCompanionVoiceListening } from '@/lib/companionVoiceBridge';
-import type { TranscriptMeta } from '@/lib/voice';
+import type { TranscriptMeta, VoiceDictationMode } from '@/lib/voice';
 
 interface VoiceInputButtonProps {
   targetRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
   onTranscript: (value: string, meta?: TranscriptMeta) => void;
   onListeningChange?: (listening: boolean) => void;
+  /** Story fields enable spoken punctuation commands (period, comma, new paragraph, etc.). */
+  dictationMode?: VoiceDictationMode;
   className?: string;
 }
 
@@ -19,6 +21,7 @@ export function VoiceInputButton({
   targetRef,
   onTranscript,
   onListeningChange,
+  dictationMode = 'default',
   className = '',
 }: VoiceInputButtonProps) {
   const lastErrorRef = useRef<string | null>(null);
@@ -78,7 +81,7 @@ export function VoiceInputButton({
     }
 
     lastErrorRef.current = null;
-    toggleListening(el, handleTranscript);
+    toggleListening(el, handleTranscript, { dictationMode });
   };
 
   if (!isEnabled) return null;

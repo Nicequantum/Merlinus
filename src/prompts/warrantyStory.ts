@@ -5,8 +5,8 @@ import { PROMPT_VERSION } from './version';
 /** Higher temperature for natural voice variation between lines and technicians. */
 export const WARRANTY_STORY_TEMPERATURE = 0.42;
 
-/** Room for full 3C narrative with complete diagnostic workflow. */
-export const WARRANTY_STORY_MAX_TOKENS = 750;
+/** Room for long 3C narratives with complete diagnostic workflow and measurements. */
+export const WARRANTY_STORY_MAX_TOKENS = 4096;
 
 /** Field caps — enough diagnostic context without bloating the user message. */
 export const PROMPT_FIELD_LIMITS = {

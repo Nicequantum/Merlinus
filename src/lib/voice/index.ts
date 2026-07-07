@@ -1,5 +1,6 @@
 export { VoiceInputService } from './VoiceInputService';
-export { appendDictationChunk } from './dictationText';
+export { appendDictationChunk, processDictationChunk } from './dictationText';
+export { applySpokenPunctuation, normalizeDictationSpacing } from './dictationPunctuation';
 export { NoiseMonitor } from './noiseMonitor';
 export { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from './confidence';
 export { resolveVoiceErrorMessage, shouldAutoRestartAfterError, VOICE_ERROR_MESSAGES } from './errors';
@@ -12,4 +13,6 @@ export type {
   VoicePermissionState,
   TranscriptMeta,
   SpeechRecognitionErrorCode,
+  VoiceDictationMode,
+  VoiceInputStartOptions,
 } from './types';

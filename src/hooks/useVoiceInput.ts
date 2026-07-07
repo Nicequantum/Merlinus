@@ -6,9 +6,13 @@ import {
   VoiceInputService,
   isSpeechRecognitionSupported,
   type TranscriptMeta,
+  type VoiceDictationMode,
   type VoiceInputMode,
+  type VoiceInputStartOptions,
   type VoiceInputState,
 } from '@/lib/voice';
+
+export type VoiceListenOptions = VoiceInputStartOptions;
 
 const MODE_STORAGE_KEY = VOICE_INPUT_SETTINGS.modeStorageKey;
 
@@ -35,6 +39,7 @@ export function useVoiceInput() {
   const serviceRef = useRef<VoiceInputService | null>(null);
   const activeTargetRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const onTranscriptRef = useRef<((value: string, meta?: TranscriptMeta) => void) | null>(null);
+  const listenOptionsRef = useRef<VoiceInputStartOptions>({});
   const [activeTarget, setActiveTarget] = useState<HTMLTextAreaElement | HTMLInputElement | null>(null);
 
   const [state, setState] = useState<VoiceInputState>(() => ({
@@ -77,26 +82,33 @@ export function useVoiceInput() {
   const startListening = useCallback(
     (
       target: HTMLTextAreaElement | HTMLInputElement,
-      onTranscript: (value: string, meta?: TranscriptMeta) => void
+      onTranscript: (value: string, meta?: TranscriptMeta) => void,
+      options?: VoiceInputStartOptions
     ): boolean => {
       if (!VOICE_INPUT_SETTINGS.enabled) return false;
       const service = serviceRef.current;
       if (!service) return false;
 
+      const listenOptions = options ?? {};
       activeTargetRef.current = target;
       onTranscriptRef.current = onTranscript;
+      listenOptionsRef.current = listenOptions;
       setActiveTarget(target);
 
-      void service.start(target, {
-        onTranscript: (full, meta) => onTranscript(full, meta),
-        onStateChange: (next) => {
-          setState(next);
-          if (!next.isListening) {
-            activeTargetRef.current = null;
-            setActiveTarget(null);
-          }
+      void service.start(
+        target,
+        {
+          onTranscript: (full, meta) => onTranscript(full, meta),
+          onStateChange: (next) => {
+            setState(next);
+            if (!next.isListening) {
+              activeTargetRef.current = null;
+              setActiveTarget(null);
+            }
+          },
         },
-      });
+        listenOptions
+      );
       return true;
     },
     []
@@ -115,7 +127,11 @@ export function useVoiceInput() {
   }, []);
 
   const toggleListening = useCallback(
-    (target: HTMLTextAreaElement | HTMLInputElement, onTranscript: (value: string, meta?: TranscriptMeta) => void) => {
+    (
+      target: HTMLTextAreaElement | HTMLInputElement,
+      onTranscript: (value: string, meta?: TranscriptMeta) => void,
+      options?: VoiceInputStartOptions
+    ) => {
       if (state.isListening && activeTargetRef.current === target) {
         stopListening();
         return;
@@ -123,14 +139,18 @@ export function useVoiceInput() {
       if (state.isListening) {
         stopListening();
       }
-      startListening(target, onTranscript);
+      startListening(target, onTranscript, options);
     },
     [state.isListening, startListening, stopListening]
   );
 
   const beginPushToTalk = useCallback(
-    (target: HTMLTextAreaElement | HTMLInputElement, onTranscript: (value: string, meta?: TranscriptMeta) => void) => {
-      if (!state.isListening) startListening(target, onTranscript);
+    (
+      target: HTMLTextAreaElement | HTMLInputElement,
+      onTranscript: (value: string, meta?: TranscriptMeta) => void,
+      options?: VoiceInputStartOptions
+    ) => {
+      if (!state.isListening) startListening(target, onTranscript, options);
     },
     [state.isListening, startListening]
   );
@@ -149,7 +169,7 @@ export function useVoiceInput() {
   const retry = useCallback(async () => {
     const service = serviceRef.current;
     if (!service || !activeTargetRef.current || !onTranscriptRef.current) return false;
-    return service.retry();
+    return service.retry(listenOptionsRef.current);
   }, []);
 
   const refreshPermission = useCallback(async () => {

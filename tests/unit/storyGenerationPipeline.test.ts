@@ -59,7 +59,7 @@ describe('story generation pipeline audit', () => {
     assert.ok(audit.systemPromptChars > 1_400);
     assert.ok(audit.userMessageChars > 400);
     assert.ok(audit.totalPromptChars < 6_000);
-    assert.equal(audit.maxOutputTokens, 750);
+    assert.ok(audit.maxOutputTokens >= 4096);
     assert.ok(audit.excludedFromPrompt.includes('knowledgeBase'));
     assert.ok(audit.excludedFromPrompt.includes('historyContext'));
     assert.equal(audit.timeouts.grokMs, 25_000);

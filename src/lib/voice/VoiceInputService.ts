@@ -1,13 +1,16 @@
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from './confidence';
-import { appendDictationChunk } from './dictationText';
+import { applySpokenPunctuation, normalizeDictationSpacing } from './dictationPunctuation';
+import { processDictationChunk } from './dictationText';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from './errors';
 import { getSpeechRecognitionCtor } from './speechRecognition';
 import type {
   SpeechRecognitionEventLike,
   SpeechRecognitionInstance,
   TranscriptMeta,
+  VoiceDictationMode,
   VoiceInputCallbacks,
   VoiceInputMode,
+  VoiceInputStartOptions,
   VoiceInputState,
   VoiceInputTargetContext,
   VoicePermissionState,
@@ -52,6 +55,7 @@ export class VoiceInputService {
   private readonly sessionHandle: VoiceSessionHandle = {
     stop: () => this.stop(),
   };
+  private dictationMode: VoiceDictationMode = 'default';
 
   constructor(private readonly settings: VoiceInputSettings) {
     this.state.isSupported = getSpeechRecognitionCtor() != null;
@@ -92,8 +96,10 @@ export class VoiceInputService {
    */
   async start(
     element: HTMLTextAreaElement | HTMLInputElement,
-    callbacks: VoiceInputCallbacks
+    callbacks: VoiceInputCallbacks,
+    options?: VoiceInputStartOptions
   ): Promise<boolean> {
+    this.dictationMode = options?.dictationMode ?? 'default';
     if (this.destroyed) return false;
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
@@ -176,11 +182,11 @@ export class VoiceInputService {
   }
 
   /** Retry after listening timeout or error UX. */
-  async retry(): Promise<boolean> {
+  async retry(options?: VoiceInputStartOptions): Promise<boolean> {
     if (!this.targetElement || !this.callbacks) return false;
     this.userStopped = false;
     this.patchState({ restartCount: 0, errorMessage: null, errorCode: null });
-    return this.start(this.targetElement, this.callbacks);
+    return this.start(this.targetElement, this.callbacks, options);
   }
 
   private startRecognition(Ctor: NonNullable<ReturnType<typeof getSpeechRecognitionCtor>>): boolean {
@@ -276,27 +282,32 @@ export class VoiceInputService {
 
       if (!passesConfidenceGate(confidence, threshold, this.state.noiseLevel)) continue;
 
-      const text = alternative.transcript ?? '';
+      const rawText = alternative.transcript ?? '';
+      const text =
+        this.dictationMode === 'story' ? applySpokenPunctuation(rawText, 'story') : rawText;
       if (result.isFinal) {
-        this.target.committed = appendDictationChunk(this.target.committed, text);
+        this.target.committed = processDictationChunk(this.target.committed, text, this.dictationMode);
         hasFinal = true;
       } else {
         interim += text;
       }
     }
 
-    const full = this.target.prefix + this.target.committed + interim + this.target.suffix;
+    const committed = this.target.committed;
+    const interimText =
+      this.dictationMode === 'story' ? normalizeDictationSpacing(interim) : interim;
+    const full = this.target.prefix + committed + interimText + this.target.suffix;
     const meta: TranscriptMeta = {
-      committed: this.target.committed,
-      interim,
+      committed,
+      interim: interimText,
       full,
       hasFinal,
       confidence: batchConfidence,
     };
 
     this.patchState({
-      interimText: interim,
-      committedText: this.target.committed,
+      interimText,
+      committedText: committed,
       confidence: batchConfidence,
       confidenceThreshold: threshold,
       listeningState: 'listening',
@@ -306,7 +317,7 @@ export class VoiceInputService {
     this.callbacks.onTranscript(full, meta);
 
     if (this.targetElement) {
-      const cursor = this.target.prefix.length + this.target.committed.length + interim.length;
+      const cursor = this.target.prefix.length + committed.length + interimText.length;
       requestAnimationFrame(() => {
         try {
           this.targetElement?.setSelectionRange(cursor, cursor);

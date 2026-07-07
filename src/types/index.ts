@@ -455,8 +455,11 @@ export const CONSENT_VERSION = '2026-06-07-v1';
 
 /** One-time technician legal disclaimer (client localStorage gate). */
 export const LEGAL_DISCLAIMER_VERSION = '2026-06-26-v1';
-export const WARRANTY_STORY_MAX_CHARS = 2500;
-export const WARRANTY_STORY_WARN_CHARS = 2200;
+/** Legacy DMS guidance — informational only; stories are not blocked at this length. */
+export const WARRANTY_STORY_DMS_GUIDANCE_CHARS = 2500;
+/** Effectively unlimited — matches backend validation ceiling for warranty narratives. */
+export const WARRANTY_STORY_MAX_CHARS = 100_000;
+export const WARRANTY_STORY_WARN_CHARS = 100_000;
 
 export const AUDIT_ACTIONS = [
   'auth.login',

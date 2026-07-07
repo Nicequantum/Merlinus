@@ -11,6 +11,9 @@ import {
   sanitizeVin,
 } from './sanitize';
 
+/** Warranty and template story text — long MI 2.0 narratives must not hit API validation ceilings. */
+export const STORY_TEXT_MAX_CHARS = 100_000;
+
 const safeText = (max: number) => z.string().max(max).transform(sanitizeText);
 const safeTextOptional = (max: number) => z.string().max(max).transform(sanitizeText).optional();
 const safeId = (max: number) => z.string().max(max).transform(sanitizeIdentifier);
@@ -84,7 +87,7 @@ const repairLineSchema = z.object({
   xentryImages: z.array(imageAttachmentSchema).max(20).optional(),
   xentryOcrTexts: z.array(safeText(50000)).max(20).optional(),
   extractedData: extractedDataSchema.optional(),
-  warrantyStory: safeTextOptional(5000),
+  warrantyStory: safeTextOptional(STORY_TEXT_MAX_CHARS),
   /** Sticky Customer Pay flag — preserved on RO save when omitted from client payload. */
   isCustomerPay: z.boolean().optional(),
   /** M1: Explicit intent to clear Customer Pay mode (isCustomerPay: false alone is ignored). */
@@ -201,7 +204,7 @@ export const updateAdvisorSchema = z.object({
 });
 
 export const storyEditSchema = z.object({
-  warrantyStory: safeText(5000),
+  warrantyStory: safeText(STORY_TEXT_MAX_CHARS),
 });
 
 export const changePasswordSchema = z.object({
@@ -214,11 +217,11 @@ export const resetPasswordSchema = z.object({
 });
 
 export const reviewStorySchema = z.object({
-  warrantyStory: safeText(5000),
+  warrantyStory: safeText(STORY_TEXT_MAX_CHARS),
 });
 
 export const certifyStorySchema = z.object({
-  warrantyStory: safeText(5000),
+  warrantyStory: safeText(STORY_TEXT_MAX_CHARS),
   certifiedByName: safeText(100).refine((value) => value.trim().length >= 2, {
     message: 'Technician full name is required',
   }),
@@ -227,8 +230,8 @@ export const certifyStorySchema = z.object({
 export const saveTemplateFromStorySchema = z.object({
   title: safeText(120),
   category: z.enum(['customer', 'warranty']),
-  finalText: safeText(5000),
-  generatedText: safeText(5000),
+  finalText: safeText(STORY_TEXT_MAX_CHARS),
+  generatedText: safeText(STORY_TEXT_MAX_CHARS),
   lineDescription: safeTextOptional(500),
   vehicleMake: safeTextOptional(64),
   vehicleModel: safeTextOptional(64),

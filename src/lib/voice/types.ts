@@ -98,6 +98,12 @@ export interface VoiceInputTargetContext {
   selectionEnd: number;
 }
 
+export type VoiceDictationMode = 'default' | 'story';
+
+export interface VoiceInputStartOptions {
+  dictationMode?: VoiceDictationMode;
+}
+
 export interface VoiceInputCallbacks {
   onTranscript: (fullText: string, meta: TranscriptMeta) => void;
   onStateChange?: (state: VoiceInputState) => void;

@@ -101,6 +101,6 @@ describe('warranty story prompts', () => {
   });
 
   test('WARRANTY_STORY_MAX_TOKENS allows full workflow narratives', () => {
-    assert.equal(WARRANTY_STORY_MAX_TOKENS, 750);
+    assert.ok(WARRANTY_STORY_MAX_TOKENS >= 4096);
   });
 });

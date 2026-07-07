@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { computeAdaptiveConfidenceThreshold, passesConfidenceGate } from '../../src/lib/voice/confidence';
 import { resolveVoiceErrorMessage, shouldAutoRestartAfterError } from '../../src/lib/voice/errors';
-import { appendDictationChunk } from '../../src/lib/voice/dictationText';
+import { appendDictationChunk, processDictationChunk } from '../../src/lib/voice/dictationText';
+import {
+  applySpokenPunctuation,
+  normalizeDictationSpacing,
+} from '../../src/lib/voice/dictationPunctuation';
 import { DEFAULT_VOICE_INPUT_SETTINGS } from '../../src/lib/voice/voiceSettings';
 
 describe('voice confidence adaptation', () => {
@@ -37,6 +41,26 @@ describe('voice dictation text', () => {
     assert.equal(appendDictationChunk('Customer reports', 'brake noise'), 'Customer reports brake noise');
     assert.equal(appendDictationChunk('Line one.', 'Line two'), 'Line one. Line two');
     assert.equal(appendDictationChunk('Already spaced ', 'next'), 'Already spaced next');
+    assert.equal(appendDictationChunk('Voltage', ','), 'Voltage,');
+  });
+
+  test('story mode converts spoken punctuation commands', () => {
+    assert.equal(applySpokenPunctuation('brake noise period', 'story'), 'brake noise.');
+    assert.equal(applySpokenPunctuation('voltage comma twelve volts', 'story'), 'voltage, twelve volts');
+    assert.equal(applySpokenPunctuation('found DTC P0300 new paragraph replaced plugs', 'story'), 'found DTC P0300\n\nreplaced plugs');
+    assert.equal(applySpokenPunctuation('noise persists question mark', 'story'), 'noise persists?');
+    assert.equal(applySpokenPunctuation('plain words', 'default'), 'plain words');
+  });
+
+  test('processDictationChunk merges story chunks with punctuation and spacing', () => {
+    const first = processDictationChunk('', 'Customer reports brake noise period', 'story');
+    const second = processDictationChunk(first, 'voltage at battery comma twelve point six volts', 'story');
+    assert.match(second, /brake noise\./);
+    assert.match(second, /battery, twelve point six volts/);
+  });
+
+  test('normalizeDictationSpacing tightens punctuation gaps', () => {
+    assert.equal(normalizeDictationSpacing('word . Next'), 'word. Next');
   });
 });
 
@@ -53,7 +77,8 @@ describe('voice dictation stability', () => {
 
   test('VoiceInputService joins finalized chunks with spacing helper', () => {
     const src = readFileSync(join(process.cwd(), 'src/lib/voice/VoiceInputService.ts'), 'utf8');
-    assert.match(src, /appendDictationChunk/);
+    assert.match(src, /processDictationChunk/);
+    assert.match(src, /dictationMode/);
   });
   test('StableTextarea defers parent sync until finalized speech', () => {
     const src = readFileSync(join(process.cwd(), 'src/components/StableTextarea.tsx'), 'utf8');

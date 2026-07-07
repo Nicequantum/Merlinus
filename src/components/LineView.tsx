@@ -42,12 +42,12 @@ import type {
   StoryReviewResult,
   TemplateCategory,
 } from '@/types';
-import { WARRANTY_STORY_MAX_CHARS } from '@/types';
+
 import { useLineViewCertificationForm } from '@/hooks/lineView/useLineViewCertificationForm';
 import { useLineViewPdfExport } from '@/hooks/lineView/useLineViewPdfExport';
 import { useStoryGenerationPhase } from '@/hooks/useStoryGenerationPhase';
 import {
-  charCountColor,
+
   complaintLabel,
   getWarrantyStoryTextareaValue,
   readWarrantyStoryText,
@@ -276,6 +276,7 @@ export function LineView({
               fieldKey={`${line.id}-concern`}
               value={line.customerConcern}
               onChange={(v) => onUpdateLine({ customerConcern: v })}
+              voiceDictationMode="story"
               className="benz-textarea min-h-[80px]"
               placeholder="Customer stated..."
             />
@@ -289,6 +290,7 @@ export function LineView({
               fieldKey={`${line.id}-notes`}
               value={line.technicianNotes}
               onChange={(v) => onUpdateLine({ technicianNotes: v })}
+              voiceDictationMode="story"
               className="benz-textarea min-h-[100px]"
               placeholder="Document actual test results, findings, and repair steps performed..."
             />
@@ -443,15 +445,12 @@ export function LineView({
                   </span>
                 )}
               </div>
-              <div className={`text-xs font-mono font-medium ${charCountColor(storyLen)}`}>
-                {storyLen} / {WARRANTY_STORY_MAX_CHARS}
-              </div>
+              {storyLen > 0 && (
+                <div className="text-xs font-mono font-medium text-benz-muted">
+                  {storyLen.toLocaleString()} characters
+                </div>
+              )}
             </div>
-            {storyLen > WARRANTY_STORY_MAX_CHARS && (
-              <div className="text-xs text-benz-red mb-3 bg-benz-red/10 border border-benz-red/20 rounded-lg px-3 py-2">
-                Exceeds recommended DMS character limit — edit before submission.
-              </div>
-            )}
             {cdkSanitizedNotice && (
               <div className="text-xs text-benz-amber mb-3 bg-benz-amber/10 border border-benz-amber/25 rounded-lg px-3 py-2">
                 Story cleaned for CDK compatibility
@@ -462,6 +461,7 @@ export function LineView({
                 id={`warranty-story-${line.id}`}
                 fieldKey={`${line.id}-story`}
                 value={line.warrantyStory}
+                voiceDictationMode="story"
                 onChange={(v) => {
                   onClearCdkSanitizedNotice?.();
                   onUpdateLine({ warrantyStory: v });
