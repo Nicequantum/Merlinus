@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  appendXentryImage,
   applyXentrySnapshot,
   readXentryBaseline,
   readXentryViewState,
@@ -64,6 +65,34 @@ describe('Xentry data model (M1/M3)', () => {
     assert.equal(targetKey({ scope: 'ro', roId: 'ro-1' }), 'ro:ro-1');
   });
 
+  it('appendXentryImage stacks multiple photos without dropping prior images', () => {
+    const ro = sampleRO();
+    const target = { scope: 'line' as const, lineId: 'line-1' };
+    const first = {
+      id: 'line-img-2',
+      pathname: 'benz-tech/dealer/line2.jpg',
+      url: '/api/images?p=line2',
+      name: 'line2.jpg',
+    };
+    const second = {
+      id: 'line-img-3',
+      pathname: 'benz-tech/dealer/line3.jpg',
+      url: '/api/images?p=line3',
+      name: 'line3.jpg',
+    };
+
+    const afterFirst = appendXentryImage(ro, target, first);
+    assert.equal(readXentryBaseline(afterFirst, target).images.length, 2);
+    const afterSecond = appendXentryImage(afterFirst, target, second);
+    const images = readXentryBaseline(afterSecond, target).images;
+    assert.equal(images.length, 3);
+    assert.deepEqual(
+      images.map((img) => img.id),
+      ['line-img-1', 'line-img-2', 'line-img-3']
+    );
+    assert.equal(appendXentryImage(afterSecond, target, second).repairLines[0]?.xentryImages?.length, 3);
+  });
+
   it('line scope reads and writes only the target repair line', () => {
     const ro = sampleRO();
     const target = { scope: 'line' as const, lineId: 'line-1' };
@@ -118,8 +147,11 @@ describe('Xentry data model (M1/M3)', () => {
   it('useROXentryScan imports shared data model helpers (M3)', () => {
     const src = readSrc('src/hooks/repairOrders/useROXentryScan.ts');
     assert.match(src, /from '@\/hooks\/repairOrders\/xentryDataModel'/);
+    assert.match(src, /appendXentryImage/);
     assert.match(src, /applyXentrySnapshot/);
     assert.match(src, /readXentryBaseline/);
+    assert.match(src, /persistChainByKeyRef/);
+    assert.match(src, /openImageFilePicker/);
     assert.match(src, /await flushPendingSave\(\{\s*maxWaitMs:\s*2_500\s*\}\)/);
     assert.match(src, /await saveROImmediate\(persisted/);
     assert.equal(src.includes('xentryImages: images,\n            xentryOcrTexts: ocrTexts'), false);

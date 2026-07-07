@@ -1,3 +1,4 @@
+import { XENTRY_PENDING_ANALYSIS_OCR } from '@/lib/xentryAnalysisState';
 import type { ExtractedData, ImageAttachment, RepairOrder } from '@/types';
 import { emptyExtractedData, normalizeExtractedData } from '@/utils/diagnosticParser';
 
@@ -56,6 +57,25 @@ export function readXentryViewState(
     images: baseline.images,
     extracted: baseline.extracted,
   };
+}
+
+/** Append one uploaded diagnostic photo — idempotent when the attachment id already exists. */
+export function appendXentryImage(
+  ro: RepairOrder,
+  target: XentryTarget,
+  attachment: ImageAttachment
+): RepairOrder {
+  const baseline = readXentryBaseline(ro, target);
+  if (baseline.images.some((img) => img.id === attachment.id)) {
+    return ro;
+  }
+  return applyXentrySnapshot(
+    ro,
+    target,
+    [...baseline.images, attachment],
+    [...baseline.ocrTexts, XENTRY_PENDING_ANALYSIS_OCR],
+    baseline.extracted
+  );
 }
 
 export function applyXentrySnapshot(

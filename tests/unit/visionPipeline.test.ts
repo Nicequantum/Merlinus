@@ -51,7 +51,8 @@ describe('Vision pipeline mutex (C1/C4)', () => {
 
   it('Xentry auto-saves photos on capture and persists analysis at end (H2)', () => {
     const xentry = readSrc('src/hooks/repairOrders/useROXentryScan.ts');
-    assert.match(xentry, /persistAutoSavedImage/);
+    assert.match(xentry, /enqueuePersistAutoSavedImage/);
+    assert.match(xentry, /persistChainByKeyRef/);
     assert.match(xentry, /await saveROImmediate\(persisted/);
     assert.match(xentry, /syncROView/);
   });

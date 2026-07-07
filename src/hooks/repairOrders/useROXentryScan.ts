@@ -14,9 +14,10 @@ import {
 } from '@/hooks/visionPipeline';
 import { clientLog } from '@/lib/clientLog';
 import { isRequestAborted } from '@/lib/requestAbort';
-import { XENTRY_PENDING_ANALYSIS_OCR, xentryImageNeedsAnalysis } from '@/lib/xentryAnalysisState';
+import { xentryImageNeedsAnalysis } from '@/lib/xentryAnalysisState';
 import { warmupOcrWorker } from '@/services/ocr';
 import {
+  appendXentryImage,
   applyXentrySnapshot,
   readXentryBaseline,
   targetKey,
@@ -24,6 +25,7 @@ import {
 } from '@/hooks/repairOrders/xentryDataModel';
 import type { ImageAttachment, PendingImage, RepairOrder } from '@/types';
 import { mergeExtracted } from '@/utils/diagnosticParser';
+import { openImageFilePicker } from '@/utils/imageFilePicker';
 import { normalizeScanFiles } from '@/utils/scanFileHelpers';
 import { fetchImageAttachmentAsFile, uploadFileAsAttachment } from '@/utils/uploadHelpers';
 
@@ -61,6 +63,8 @@ export function useROXentryScan({
   const fileCacheRef = useRef<Map<string, File>>(new Map());
   /** Pending IDs the user deleted while upload was still running — skip RO persist if upload completes late. */
   const discardedPendingIdsRef = useRef<Set<string>>(new Set());
+  /** Serialize auto-save merges per line/RO so parallel uploads cannot overwrite prior photos. */
+  const persistChainByKeyRef = useRef<Map<string, Promise<void>>>(new Map());
 
   const clearPendingPreviews = useCallback((images: PendingImage[]) => {
     images.forEach((img) => {
@@ -75,39 +79,8 @@ export function useROXentryScan({
     [pendingByKey]
   );
 
-  const persistAutoSavedImage = useCallback(
-    async (
-      target: XentryTarget,
-      attachment: ImageAttachment,
-      file: File,
-      pendingId: string
-    ): Promise<void> => {
-      if (discardedPendingIdsRef.current.has(pendingId)) {
-        discardedPendingIdsRef.current.delete(pendingId);
-        return;
-      }
-
-      const ro = roRef.current;
-      if (!ro) {
-        throw new Error('Repair order not loaded — go back and reopen the line.');
-      }
-
-      const baseline = readXentryBaseline(ro, target);
-      const allImages = [...baseline.images, attachment];
-      const updatedOcrTexts = [...baseline.ocrTexts, XENTRY_PENDING_ANALYSIS_OCR];
-      const persisted = applyXentrySnapshot(
-        ro,
-        target,
-        allImages,
-        updatedOcrTexts,
-        baseline.extracted
-      );
-
-      await saveROImmediate(persisted, { throwOnError: true });
-      fileCacheRef.current.set(attachment.id, file);
-      syncROView(persisted);
-
-      const key = targetKey(target);
+  const removePendingAfterSave = useCallback(
+    (key: string, pendingId: string) => {
       setPendingByKey((prev) => {
         const list = prev[key] ?? [];
         const img = list.find((p) => p.id === pendingId);
@@ -121,7 +94,48 @@ export function useROXentryScan({
         return { ...prev, [key]: nextList };
       });
     },
-    [clearPendingPreviews, roRef, saveROImmediate, syncROView]
+    [clearPendingPreviews]
+  );
+
+  const enqueuePersistAutoSavedImage = useCallback(
+    (
+      target: XentryTarget,
+      attachment: ImageAttachment,
+      file: File,
+      pendingId: string
+    ): Promise<void> => {
+      const key = targetKey(target);
+
+      const runPersist = async (): Promise<void> => {
+        if (discardedPendingIdsRef.current.has(pendingId)) {
+          discardedPendingIdsRef.current.delete(pendingId);
+          return;
+        }
+
+        const ro = roRef.current;
+        if (!ro) {
+          throw new Error('Repair order not loaded — go back and reopen the line.');
+        }
+
+        const persisted = appendXentryImage(ro, target, attachment);
+        syncROView(persisted);
+        await saveROImmediate(persisted, { throwOnError: true });
+        fileCacheRef.current.set(attachment.id, file);
+        removePendingAfterSave(key, pendingId);
+      };
+
+      const previous = persistChainByKeyRef.current.get(key) ?? Promise.resolve();
+      const next = previous.then(runPersist, runPersist);
+
+      persistChainByKeyRef.current.set(key, next);
+      void next.finally(() => {
+        if (persistChainByKeyRef.current.get(key) === next) {
+          persistChainByKeyRef.current.delete(key);
+        }
+      });
+      return next;
+    },
+    [removePendingAfterSave, roRef, saveROImmediate, syncROView]
   );
 
   const uploadAndSavePending = useCallback(
@@ -129,7 +143,7 @@ export function useROXentryScan({
       const key = targetKey(target);
       try {
         const attachment = await uploadFileAsAttachment(file, 'ximg');
-        await persistAutoSavedImage(target, attachment, file, pendingId);
+        await enqueuePersistAutoSavedImage(target, attachment, file, pendingId);
       } catch (error) {
         if (discardedPendingIdsRef.current.has(pendingId)) {
           discardedPendingIdsRef.current.delete(pendingId);
@@ -147,7 +161,7 @@ export function useROXentryScan({
         );
       }
     },
-    [persistAutoSavedImage]
+    [enqueuePersistAutoSavedImage]
   );
 
   const appendPendingImages = useCallback(
@@ -174,19 +188,21 @@ export function useROXentryScan({
         }
 
         const key = targetKey(target);
-        const baseIndex = pendingByKey[key]?.length ?? 0;
-        const newImages: PendingImage[] = normalizedFiles.map((file, i) => ({
-          id: `ximg-pending-${Date.now()}-${i}`,
-          previewUrl: URL.createObjectURL(file),
-          name: file.name || `diagnostic-${baseIndex + i + 1}.jpg`,
-          file,
-          uploadStatus: 'uploading' as const,
-        }));
-
-        setPendingByKey((prev) => ({
-          ...prev,
-          [key]: [...(prev[key] ?? []), ...newImages],
-        }));
+        let newImages: PendingImage[] = [];
+        setPendingByKey((prev) => {
+          const baseIndex = prev[key]?.length ?? 0;
+          newImages = normalizedFiles.map((file, i) => ({
+            id: `ximg-pending-${Date.now()}-${baseIndex + i}`,
+            previewUrl: URL.createObjectURL(file),
+            name: file.name || `diagnostic-${baseIndex + i + 1}.jpg`,
+            file,
+            uploadStatus: 'uploading' as const,
+          }));
+          return {
+            ...prev,
+            [key]: [...(prev[key] ?? []), ...newImages],
+          };
+        });
 
         toast.success(
           `Saving ${newImages.length} diagnostic photo${newImages.length === 1 ? '' : 's'}…`
@@ -202,7 +218,7 @@ export function useROXentryScan({
         toast.error(error instanceof Error ? error.message : 'Could not prepare diagnostic photos.');
       }
     },
-    [getActivePipeline, pendingByKey, roRef, uploadAndSavePending, xentryInFlightRef]
+    [getActivePipeline, roRef, uploadAndSavePending, xentryInFlightRef]
   );
 
   const capturePhoto = useCallback(
@@ -215,16 +231,13 @@ export function useROXentryScan({
         return;
       }
 
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.capture = 'environment';
-      input.multiple = false;
-      input.onchange = async (e) => {
-        const files = Array.from((e.target as HTMLInputElement).files || []);
-        await appendPendingImages(target, files);
-      };
-      input.click();
+      openImageFilePicker({
+        capture: true,
+        multiple: false,
+        onFiles: (files) => {
+          void appendPendingImages(target, files);
+        },
+      });
     },
     [appendPendingImages, getActivePipeline, xentryInFlightRef]
   );
@@ -239,15 +252,12 @@ export function useROXentryScan({
         return;
       }
 
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.multiple = true;
-      input.onchange = async (e) => {
-        const files = Array.from((e.target as HTMLInputElement).files || []);
-        await appendPendingImages(target, files);
-      };
-      input.click();
+      openImageFilePicker({
+        multiple: true,
+        onFiles: (files) => {
+          void appendPendingImages(target, files);
+        },
+      });
     },
     [appendPendingImages, getActivePipeline, xentryInFlightRef]
   );

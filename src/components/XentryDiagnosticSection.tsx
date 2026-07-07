@@ -52,26 +52,26 @@ export function XentryDiagnosticSection({
       <div className="benz-section-title mb-1">{title}</div>
       <p className="benz-hint mb-4 leading-relaxed">{hint}</p>
 
-      {!isProcessing && (
-        <div className="space-y-2 mb-3">
-          <button
-            type="button"
-            onClick={onCapturePhoto}
-            className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium touch-target"
-          >
-            <Camera size={18} />
-            Take diagnostic photo
-          </button>
-          <button
-            type="button"
-            onClick={onAddFromGallery}
-            className="secondary-btn w-full h-11 flex items-center justify-center gap-2 text-sm font-medium"
-          >
-            <FolderOpen size={18} />
-            Add from gallery
-          </button>
-        </div>
-      )}
+      <div className={`space-y-2 mb-3${isProcessing ? ' opacity-60 pointer-events-none' : ''}`}>
+        <button
+          type="button"
+          onClick={onCapturePhoto}
+          disabled={isProcessing}
+          className="secondary-btn w-full h-13 flex items-center justify-center gap-2.5 text-sm font-medium touch-target disabled:opacity-50"
+        >
+          <Camera size={18} />
+          {hasSaved ? 'Add another diagnostic photo' : 'Take diagnostic photo'}
+        </button>
+        <button
+          type="button"
+          onClick={onAddFromGallery}
+          disabled={isProcessing}
+          className="secondary-btn w-full h-11 flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
+        >
+          <FolderOpen size={18} />
+          Add from gallery
+        </button>
+      </div>
 
       {canProcess && !isProcessing && (
         <div className="flex gap-2 mb-3">
