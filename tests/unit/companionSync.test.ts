@@ -93,6 +93,8 @@ describe('desktop companion sync', () => {
     assert.ok(layout.includes('deriveCompanionLineStoryState'));
     assert.ok(layout.includes('activeLineId'));
     assert.ok(layout.includes('showRepairLineList'));
+    assert.ok(layout.includes('onOpenLine'));
+    assert.ok(layout.includes('benz-companion-line-row-btn'));
     assert.ok(state.includes('resolveQualityForLine'));
     assert.ok(state.includes('resolveCertificationForLine'));
   });
@@ -107,6 +109,8 @@ describe('desktop companion sync', () => {
     assert.ok(roHook.includes("setView(restoredLineId ? 'line' : 'ro')"));
     assert.ok(bridge.includes('navigateToRO'));
     assert.ok(app.includes('navigateToRO'));
+    assert.ok(app.includes('onOpenLine={ro.navigateToLine}'));
+    assert.ok(app.includes('onBackToRepairLines'));
     assert.equal(bridge.includes("setView('ro')"), false);
   });
 

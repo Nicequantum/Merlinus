@@ -149,6 +149,21 @@
     border: 1px solid var(--benz-border);
   }
 
+  .benz-companion-line-row-btn {
+    @apply cursor-pointer transition-colors;
+    background: var(--benz-card);
+  }
+
+  .benz-companion-line-row-btn:hover {
+    border-color: color-mix(in srgb, var(--benz-blue) 45%, var(--benz-border));
+    background: color-mix(in srgb, var(--benz-blue) 6%, var(--benz-card));
+  }
+
+  .benz-companion-line-row-btn:focus-visible {
+    outline: 2px solid var(--benz-blue);
+    outline-offset: 2px;
+  }
+
   .benz-companion-status {
     @apply benz-card px-4 py-3 mb-4;
   }

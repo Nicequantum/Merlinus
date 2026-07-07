@@ -310,6 +310,8 @@ export function BenzTechAuthenticatedApp({
               statusMessage={companion.statusMessage}
               statusProgress={companion.statusProgress}
               activities={companion.activities}
+              onOpenLine={ro.navigateToLine}
+              onBackToRepairLines={() => ro.navigateToRO()}
             />
           </ViewErrorBoundary>
         </div>

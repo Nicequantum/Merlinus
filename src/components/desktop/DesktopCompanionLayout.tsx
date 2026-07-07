@@ -41,6 +41,8 @@ interface DesktopCompanionLayoutProps {
   statusMessage?: string | null;
   statusProgress?: number | null;
   activities: CompanionActivityEntry[];
+  onOpenLine: (lineId: string) => void;
+  onBackToRepairLines: () => void;
 }
 
 export function DesktopCompanionLayout({
@@ -59,6 +61,8 @@ export function DesktopCompanionLayout({
   statusMessage,
   statusProgress,
   activities,
+  onOpenLine,
+  onBackToRepairLines,
 }: DesktopCompanionLayoutProps) {
   const syncedLineStory = deriveCompanionLineStoryState({
     ro,
@@ -122,7 +126,7 @@ export function DesktopCompanionLayout({
           </div>
           <h1 className="text-xl font-bold tracking-tight text-benz-primary truncate">
             {ro.roNumber}
-            {view === 'line' && activeLine ? ` · Line ${activeLine.lineNumber}` : ''}
+            {activeLine ? ` · Line ${activeLine.lineNumber}` : ''}
           </h1>
           <p className="text-sm text-benz-secondary mt-1 truncate">
             {vehicleSummary}
@@ -154,25 +158,34 @@ export function DesktopCompanionLayout({
             <div className="benz-card p-5 mb-4">
               <div className="benz-section-title mb-2">Repair Lines</div>
               <p className="text-sm text-benz-secondary mb-4">
-                Select a line on your tablet — this view follows automatically.
+                Click a repair line below to open its story, or select one on your tablet.
               </p>
-              <ul className="space-y-2">
+              <ul className="space-y-2" role="list">
                 {ro.repairLines.map((repairLine) => {
                   const audit = repairLine.storyQualityAudit;
                   const story = repairLine.warrantyStory?.trim();
                   const score =
                     audit && story && isStoryQualityCurrent(audit, story) ? audit.score : null;
                   return (
-                    <li key={repairLine.id} className="benz-companion-line-row">
-                      <span className="font-medium text-benz-primary">
-                        Line {repairLine.lineNumber}: {repairLine.description}
-                      </span>
-                      {score != null && (
-                        <span className="text-xs text-benz-blue font-semibold">MI {score}/100</span>
-                      )}
-                      {repairLine.storyCertification && (
-                        <span className="text-xs text-benz-green font-semibold">Certified</span>
-                      )}
+                    <li key={repairLine.id} role="listitem">
+                      <button
+                        type="button"
+                        onClick={() => onOpenLine(repairLine.id)}
+                        className="benz-companion-line-row benz-companion-line-row-btn w-full text-left"
+                        aria-label={`Open line ${repairLine.lineNumber}: ${repairLine.description}`}
+                      >
+                        <span className="font-medium text-benz-primary">
+                          Line {repairLine.lineNumber}: {repairLine.description}
+                        </span>
+                        <span className="flex flex-wrap items-center gap-2 shrink-0">
+                          {score != null && (
+                            <span className="text-xs text-benz-blue font-semibold">MI {score}/100</span>
+                          )}
+                          {repairLine.storyCertification && (
+                            <span className="text-xs text-benz-green font-semibold">Certified</span>
+                          )}
+                        </span>
+                      </button>
                     </li>
                   );
                 })}
@@ -182,6 +195,15 @@ export function DesktopCompanionLayout({
 
           {activeLine && (
             <>
+              {!showRepairLineList && (
+                <button
+                  type="button"
+                  onClick={onBackToRepairLines}
+                  className="text-sm text-benz-blue font-medium mb-4 hover:underline"
+                >
+                  ← All repair lines
+                </button>
+              )}
               <div className="benz-card p-5 mb-4">
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <div className="benz-section-title">
