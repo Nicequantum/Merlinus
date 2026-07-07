@@ -1,5 +1,7 @@
 import type { VoiceDictationMode } from './types';
 
+export type { VoiceDictationMode };
+
 /** Spoken phrases → punctuation (longer phrases first). */
 const SPOKEN_PUNCTUATION: ReadonlyArray<{ pattern: RegExp; replace: string }> = [
   { pattern: /\bnew\s+paragraph\b/gi, replace: '\n\n' },
