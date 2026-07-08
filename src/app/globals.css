@@ -164,6 +164,21 @@
     outline-offset: 2px;
   }
 
+  .benz-companion-nav {
+    @apply flex flex-wrap items-center gap-2 mb-4;
+  }
+
+  .benz-companion-nav-btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+    color: var(--benz-blue);
+    border: 1px solid color-mix(in srgb, var(--benz-blue) 25%, var(--benz-border));
+    background: color-mix(in srgb, var(--benz-blue) 4%, var(--benz-card));
+  }
+
+  .benz-companion-nav-btn:hover {
+    background: color-mix(in srgb, var(--benz-blue) 10%, var(--benz-card));
+  }
+
   .benz-companion-status {
     @apply benz-card px-4 py-3 mb-4;
   }

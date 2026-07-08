@@ -312,6 +312,7 @@ export function BenzTechAuthenticatedApp({
               activities={companion.activities}
               onOpenLine={ro.navigateToLine}
               onBackToRepairLines={() => ro.navigateToRO()}
+              onBackToHome={() => ro.setView('home')}
             />
           </ViewErrorBoundary>
         </div>

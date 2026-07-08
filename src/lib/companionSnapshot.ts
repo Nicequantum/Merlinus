@@ -5,6 +5,11 @@ export interface CompanionSnapshotDelta {
   newlyCertified: Array<{ lineId: string; certifiedByName: string }>;
   storyUpdated: string[];
   notesUpdated: string[];
+  photosUpdated: Array<{ scope: 'ro' | 'line'; lineId?: string }>;
+}
+
+function imageUrls(images: { url: string }[] | undefined): string {
+  return (images ?? []).map((image) => image.url).join('|');
 }
 
 export function diffCompanionRepairOrder(
@@ -16,9 +21,14 @@ export function diffCompanionRepairOrder(
     newlyCertified: [],
     storyUpdated: [],
     notesUpdated: [],
+    photosUpdated: [],
   };
 
   if (!previous || previous.id !== next.id) return delta;
+
+  if (imageUrls(previous.xentryImages) !== imageUrls(next.xentryImages)) {
+    delta.photosUpdated.push({ scope: 'ro' });
+  }
 
   for (const line of next.repairLines) {
     const prior = previous.repairLines.find((entry) => entry.id === line.id);
@@ -47,6 +57,10 @@ export function diffCompanionRepairOrder(
     if (notesChanged) {
       delta.notesUpdated.push(line.id);
     }
+
+    if (imageUrls(prior.xentryImages) !== imageUrls(line.xentryImages)) {
+      delta.photosUpdated.push({ scope: 'line', lineId: line.id });
+    }
   }
 
   return delta;
@@ -57,6 +71,7 @@ export function companionSnapshotHasChanges(delta: CompanionSnapshotDelta): bool
     delta.auditCompleted.length > 0 ||
     delta.newlyCertified.length > 0 ||
     delta.storyUpdated.length > 0 ||
-    delta.notesUpdated.length > 0
+    delta.notesUpdated.length > 0 ||
+    delta.photosUpdated.length > 0
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { Copy, MonitorSmartphone } from 'lucide-react';
+import { ChevronLeft, Copy, Home, MonitorSmartphone } from 'lucide-react';
+import { XentryImageGallery } from '@/components/XentryImageGallery';
 import { toast } from 'sonner';
 import { CompanionActivitySidebar } from '@/components/desktop/CompanionActivitySidebar';
 import { CompanionConnectionBadge } from '@/components/desktop/CompanionConnectionBadge';
@@ -43,6 +44,7 @@ interface DesktopCompanionLayoutProps {
   activities: CompanionActivityEntry[];
   onOpenLine: (lineId: string) => void;
   onBackToRepairLines: () => void;
+  onBackToHome: () => void;
 }
 
 export function DesktopCompanionLayout({
@@ -63,6 +65,7 @@ export function DesktopCompanionLayout({
   activities,
   onOpenLine,
   onBackToRepairLines,
+  onBackToHome,
 }: DesktopCompanionLayoutProps) {
   const syncedLineStory = deriveCompanionLineStoryState({
     ro,
@@ -112,6 +115,8 @@ export function DesktopCompanionLayout({
 
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ');
   const showRepairLineList = view === 'ro' && !activeLineId;
+  const roDiagnosticPhotos = ro.xentryImages ?? [];
+  const lineDiagnosticPhotos = activeLine?.xentryImages ?? [];
 
   return (
     <div className="benz-companion-layout">
@@ -152,8 +157,31 @@ export function DesktopCompanionLayout({
 
       <CompanionStatusBar status={workflowStatus} message={statusMessage} progress={statusProgress} />
 
+      <nav className="benz-companion-nav" aria-label="Desktop companion navigation">
+        <button type="button" onClick={onBackToHome} className="benz-companion-nav-btn">
+          <Home size={16} />
+          Home
+        </button>
+        {!showRepairLineList && (
+          <button type="button" onClick={onBackToRepairLines} className="benz-companion-nav-btn">
+            <ChevronLeft size={16} />
+            Repair lines
+          </button>
+        )}
+      </nav>
+
       <div className="benz-companion-body">
         <main className="benz-companion-main">
+          {showRepairLineList && roDiagnosticPhotos.length > 0 && (
+            <div className="benz-card p-5 mb-4">
+              <div className="benz-section-title mb-2">RO Diagnostic Photos</div>
+              <p className="text-sm text-benz-secondary mb-3">
+                Photos captured on your tablet for this repair order.
+              </p>
+              <XentryImageGallery images={roDiagnosticPhotos} />
+            </div>
+          )}
+
           {showRepairLineList && (
             <div className="benz-card p-5 mb-4">
               <div className="benz-section-title mb-2">Repair Lines</div>
@@ -195,15 +223,16 @@ export function DesktopCompanionLayout({
 
           {activeLine && (
             <>
-              {!showRepairLineList && (
-                <button
-                  type="button"
-                  onClick={onBackToRepairLines}
-                  className="text-sm text-benz-blue font-medium mb-4 hover:underline"
-                >
-                  ← All repair lines
-                </button>
+              {lineDiagnosticPhotos.length > 0 && (
+                <div className="benz-card p-5 mb-4">
+                  <div className="benz-section-title mb-2">Diagnostic Photos</div>
+                  <p className="text-sm text-benz-secondary mb-3">
+                    Xentry and diagnostic photos for this repair line.
+                  </p>
+                  <XentryImageGallery images={lineDiagnosticPhotos} />
+                </div>
               )}
+
               <div className="benz-card p-5 mb-4">
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <div className="benz-section-title">

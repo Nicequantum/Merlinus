@@ -143,6 +143,18 @@ export function useROXentryScan({
       const key = targetKey(target);
       try {
         const attachment = await uploadFileAsAttachment(file, 'ximg');
+        if (discardedPendingIdsRef.current.has(pendingId)) {
+          discardedPendingIdsRef.current.delete(pendingId);
+          return;
+        }
+        setPendingByKey((prev) => ({
+          ...prev,
+          [key]: (prev[key] ?? []).map((img) =>
+            img.id === pendingId
+              ? { ...img, attachment, uploadStatus: 'saved' as const, file: undefined }
+              : img
+          ),
+        }));
         await enqueuePersistAutoSavedImage(target, attachment, file, pendingId);
       } catch (error) {
         if (discardedPendingIdsRef.current.has(pendingId)) {

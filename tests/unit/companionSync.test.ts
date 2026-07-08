@@ -111,7 +111,22 @@ describe('desktop companion sync', () => {
     assert.ok(app.includes('navigateToRO'));
     assert.ok(app.includes('onOpenLine={ro.navigateToLine}'));
     assert.ok(app.includes('onBackToRepairLines'));
+    assert.ok(app.includes('onBackToHome'));
     assert.equal(bridge.includes("setView('ro')"), false);
+  });
+
+  it('shows diagnostic photos and navigation on desktop companion', () => {
+    const layout = readSrc('src/components/desktop/DesktopCompanionLayout.tsx');
+    const snapshot = readSrc('src/lib/companionSnapshot.ts');
+    const lightbox = readSrc('src/components/ImageLightbox.tsx');
+    const roScan = readSrc('src/hooks/repairOrders/useROScan.ts');
+    assert.ok(layout.includes('benz-companion-nav'));
+    assert.ok(layout.includes('onBackToHome'));
+    assert.ok(layout.includes('XentryImageGallery'));
+    assert.ok(snapshot.includes('photosUpdated'));
+    assert.ok(lightbox.includes('goPrev'));
+    assert.ok(lightbox.includes('ZoomIn'));
+    assert.ok(roScan.includes('openImageFilePicker'));
   });
 
   it('does not overwrite companion line story when applying remote audit quality', () => {

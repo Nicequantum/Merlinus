@@ -104,12 +104,13 @@ export function DiagnosticPhotoGrid({
 
       {active && (
         <ImageLightbox
-          image={toLightboxAttachment(active)}
+          images={images.map(toLightboxAttachment)}
+          startIndex={Math.max(0, images.findIndex((img) => img.id === active.id))}
           onClose={() => setActiveId(null)}
           onDelete={
             onDeleteImage && !isProcessing && active.uploadStatus !== 'uploading'
-              ? () => {
-                  onDeleteImage(active.id);
+              ? (attachment) => {
+                  onDeleteImage(attachment.id);
                   setActiveId(null);
                 }
               : undefined

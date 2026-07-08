@@ -70,4 +70,20 @@ describe('companion snapshot diff', () => {
     const delta = diffCompanionRepairOrder(ro, ro);
     assert.equal(companionSnapshotHasChanges(delta), false);
   });
+
+  it('detects RO and line diagnostic photo changes', () => {
+    const previous = makeRO([makeLine()]);
+    const next = makeRO([
+      makeLine({
+        xentryImages: [{ id: 'x1', pathname: '/x1', url: 'https://example.com/x1.jpg', name: 'x1.jpg' }],
+      }),
+    ]);
+    next.xentryImages = [{ id: 'r1', pathname: '/r1', url: 'https://example.com/r1.jpg', name: 'r1.jpg' }];
+
+    const delta = diffCompanionRepairOrder(previous, next);
+    assert.equal(delta.photosUpdated.length, 2);
+    assert.ok(delta.photosUpdated.some((entry) => entry.scope === 'ro'));
+    assert.ok(delta.photosUpdated.some((entry) => entry.scope === 'line' && entry.lineId === 'line-1'));
+    assert.ok(companionSnapshotHasChanges(delta));
+  });
 });

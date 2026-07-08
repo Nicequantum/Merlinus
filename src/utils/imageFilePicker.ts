@@ -4,11 +4,12 @@
 export function openImageFilePicker(options: {
   capture?: boolean;
   multiple?: boolean;
+  accept?: string;
   onFiles: (files: File[]) => void;
 }): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'image/*';
+  input.accept = options.accept ?? 'image/*';
   if (options.capture) {
     input.capture = 'environment';
   }

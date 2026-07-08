@@ -38,6 +38,7 @@ import {
   uploadRoScanAttachments,
 } from '@/utils/uploadHelpers';
 import { compressImageForRoScan } from '@/utils/imageCompression';
+import { openImageFilePicker } from '@/utils/imageFilePicker';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 import {
   type VisionPipelineControls,
@@ -473,17 +474,20 @@ export function useROScan({
           return;
         }
 
-        const baseIndex = pendingROImages.length;
-        const newImages: PendingImage[] = normalizedFiles.map((file, i) => ({
-          id: 'roimg-' + Date.now() + '-' + i,
-          previewUrl: URL.createObjectURL(file),
-          name: file.name || `page-${baseIndex + i + 1}.jpg`,
-          file,
-          uploadStatus: 'uploading' as const,
-        }));
-
-        setPendingROImages((prev) => [...prev, ...newImages]);
-        const total = baseIndex + newImages.length;
+        let newImages: PendingImage[] = [];
+        let total = 0;
+        setPendingROImages((prev) => {
+          const baseIndex = prev.length;
+          newImages = normalizedFiles.map((file, i) => ({
+            id: 'roimg-' + Date.now() + '-' + i,
+            previewUrl: URL.createObjectURL(file),
+            name: file.name || `page-${baseIndex + i + 1}.jpg`,
+            file,
+            uploadStatus: 'uploading' as const,
+          }));
+          total = baseIndex + newImages.length;
+          return [...prev, ...newImages];
+        });
         toast.success(
           `Saving ${newImages.length} page${newImages.length === 1 ? '' : 's'} (${total} total)…`
         );
@@ -498,7 +502,7 @@ export function useROScan({
         toast.error(error instanceof Error ? error.message : 'Could not prepare files for scan.');
       }
     },
-    [pendingROImages.length, uploadAndSavePendingPage]
+    [uploadAndSavePendingPage]
   );
 
   const removePendingScanPage = useCallback(
@@ -520,28 +524,23 @@ export function useROScan({
   );
 
   const scanRO = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.multiple = false;
-    input.onchange = async (e) => {
-      const rawFiles = Array.from((e.target as HTMLInputElement).files || []);
-      await appendScanPages(rawFiles);
-    };
-    input.click();
+    openImageFilePicker({
+      capture: true,
+      multiple: false,
+      onFiles: (files) => {
+        void appendScanPages(files);
+      },
+    });
   }, [appendScanPages]);
 
   const addScanPagesFromGallery = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,application/pdf';
-    input.multiple = true;
-    input.onchange = async (e) => {
-      const rawFiles = Array.from((e.target as HTMLInputElement).files || []);
-      await appendScanPages(rawFiles);
-    };
-    input.click();
+    openImageFilePicker({
+      multiple: true,
+      accept: 'image/*,application/pdf',
+      onFiles: (files) => {
+        void appendScanPages(files);
+      },
+    });
   }, [appendScanPages]);
 
   const processPendingScan = useCallback(async () => {

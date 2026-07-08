@@ -34,12 +34,13 @@ export function XentryImageGallery({ images, onDeleteImage }: XentryImageGallery
 
       {activeImage && (
         <ImageLightbox
-          image={activeImage}
+          images={images}
+          startIndex={Math.max(0, images.findIndex((img) => img.id === activeImage.id))}
           onClose={() => setActiveImageId(null)}
           onDelete={
             onDeleteImage
-              ? () => {
-                  onDeleteImage(activeImage.id);
+              ? (attachment) => {
+                  onDeleteImage(attachment.id);
                   setActiveImageId(null);
                 }
               : undefined

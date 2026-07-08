@@ -217,6 +217,12 @@ export function CompanionSyncBridge({ enabled, role, ro, ocr, children }: Compan
       for (const lineId of delta.notesUpdated) {
         recordActivity('Line notes updated', { repairOrderId, lineId });
       }
+      for (const photo of delta.photosUpdated) {
+        recordActivity('Diagnostic photos updated', {
+          repairOrderId,
+          lineId: photo.lineId ?? null,
+        });
+      }
     };
 
     void syncSnapshot();
