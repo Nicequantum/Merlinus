@@ -8,12 +8,12 @@ import { ConsentModal } from '@/components/ConsentModal';
 import { LegalDisclaimerModal } from '@/components/LegalDisclaimerModal';
 import { LoginView } from '@/components/LoginView';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { useMerlinLogout } from '@/hooks/useMerlinLogout';
 import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
   fetchCurrentSession,
   loginWithCredentials,
-  logoutSession,
 } from '@/lib/loginSession';
 import { api } from '@/lib/api';
 import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
@@ -41,6 +41,7 @@ type SessionPhase = 'checking' | 'anonymous' | 'authenticated';
 export function BenzTechApp() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const merlinLogout = useMerlinLogout();
   const [session, setSession] = useState<TechnicianSession | null>(null);
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking');
   const [consentLoading, setConsentLoading] = useState(false);
@@ -129,10 +130,10 @@ export function BenzTechApp() {
   }, [refreshSession]);
 
   const logout = useCallback(async () => {
-    await logoutSession();
+    await merlinLogout();
     setSession(null);
     setSessionPhase('anonymous');
-  }, []);
+  }, [merlinLogout]);
 
   if (sessionPhase === 'checking') {
     return (

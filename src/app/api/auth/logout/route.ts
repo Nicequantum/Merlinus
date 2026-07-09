@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveAppSession } from '@/lib/authBridge';
+import { resolveAppSessionContext } from '@/lib/authBridge';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import {
   buildSessionClearCookieHeader,
@@ -7,12 +7,13 @@ import {
   destroySession,
   SESSION_COOKIE,
 } from '@/lib/auth';
+import { revokeActiveClerkSession } from '@/lib/clerkSession';
 import { handleRouteError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 async function performLogout(request: Request) {
-  const session = await resolveAppSession(request);
+  const { session, source } = await resolveAppSessionContext(request);
 
   if (session) {
     await destroySession(session.technicianId);
@@ -22,11 +23,17 @@ async function performLogout(request: Request) {
       dealerId: auditDealerIdFromSession(session),
       technicianId: session.technicianId,
       ipAddress: getRequestIp(request),
+      metadata: { authSource: source ?? 'unknown' },
     });
-    logger.info('auth.logout', { technicianId: session.technicianId });
+    logger.info('auth.logout', {
+      technicianId: session.technicianId,
+      authSource: source ?? 'unknown',
+    });
   } else {
     await clearSessionCookie();
   }
+
+  await revokeActiveClerkSession();
 
   const response = NextResponse.json(
     { ok: true, session: null },

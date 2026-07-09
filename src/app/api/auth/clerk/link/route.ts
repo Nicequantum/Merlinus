@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { getSessionContext } from '@/lib/auth';
+import { resolveLegacySessionContext } from '@/lib/authBridge';
 import { clerkEnvConfigured, isClerkAuthPathEnabled } from '@/lib/authMode';
 import {
   emailsMatchForClerkLink,
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
   try {
     const clerkEnabled = isClerkAuthPathEnabled();
-    const legacy = await getSessionContext(request);
+    const legacy = await resolveLegacySessionContext(request);
     const legacySession = legacy.session;
 
     let clerkSignedIn = false;
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
         metadata: { clerkUserId: userId },
       });
 
-      const refreshed = await getSessionContext(request);
+      const refreshed = await resolveLegacySessionContext(request);
       const payload = refreshed.session ?? session;
 
       return jsonWithSessionCookie(

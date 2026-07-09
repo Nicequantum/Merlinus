@@ -3,6 +3,7 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { hashPassword, revokeTechnicianSessions } from '@/lib/auth';
+import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -35,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data: { passwordHash, ...dealerFields },
       });
 
-      await revokeTechnicianSessions(user.id);
+      await revokeTechnicianAuthSessions(user.id, () => revokeTechnicianSessions(user.id));
 
       await writeAuditLog({
         action: 'user.password_reset',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveAppSession } from './authBridge';
+import { resolveAppSession, type AuthSource } from './authBridge';
 import { isMaintenanceModeEnabled } from './env';
 import {
   apiError,
@@ -19,6 +19,8 @@ import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit'
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
 
 type Session = NonNullable<Awaited<ReturnType<typeof resolveAppSession>>>;
+
+export type { AuthSource };
 
 interface RouteOptions {
   rateLimitKey?: string;

@@ -37,6 +37,7 @@ describe('security headers and CORS', () => {
     assert.ok(nextConfig.includes("from './security-policy.mjs'"));
     assert.ok(middleware.includes('denyCrossOriginApi'));
     assert.ok(middleware.includes('isCrossOriginRequest'));
+    assert.ok(middleware.includes('isMerlinPublicPath'));
   });
 
   it('adds cross-origin isolation and CORP headers', () => {

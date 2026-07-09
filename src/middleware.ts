@@ -1,4 +1,4 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { BASE_SECURITY_HEADERS, CONTENT_SECURITY_POLICY } from '../security-policy.mjs';
@@ -9,27 +9,12 @@ import {
 } from './lib/bootstrapGuard';
 import { isClerkAuthPathEnabled } from './lib/authMode';
 import { isProductionRuntime } from './lib/productionRuntime';
+import { isMerlinPublicPath, MERLIN_PUBLIC_ROUTE_PATTERNS } from './lib/publicRoutes';
 import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeaders';
 
 /** M12 CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'. */
 
-/** Routes that must stay public (no session) — login page, auth bootstrap, PWA manifest. */
-const PUBLIC_PATHS = new Set([
-  '/',
-  '/sign-in',
-  '/manifest.json',
-  '/manifest.webmanifest',
-  '/api/auth/login',
-  '/api/auth/me',
-  '/api/auth/logout',
-  '/api/auth/clerk/link',
-  '/api/webhooks/clerk',
-]);
-
-function isPublicPath(pathname: string): boolean {
-  if (PUBLIC_PATHS.has(pathname)) return true;
-  return pathname.startsWith('/sign-in/');
-}
+const isPublicRoute = createRouteMatcher([...MERLIN_PUBLIC_ROUTE_PATTERNS]);
 
 function denyCrossOriginApi(request: NextRequest): NextResponse | null {
   if (!request.nextUrl.pathname.startsWith('/api/')) return null;
@@ -59,27 +44,36 @@ function denyBootstrapSeedInProduction(request: NextRequest): NextResponse | nul
   return denied;
 }
 
-function merlinMiddleware(request: NextRequest): NextResponse {
+function applyMerlinSecurityHeaders(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+  const response = NextResponse.next();
+  applySecurityHeaders(response.headers, BASE_SECURITY_HEADERS);
+  response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  if (isMerlinPublicPath(pathname) || isPublicRoute(request)) {
+    response.headers.set('x-merlin-public-route', '1');
+  }
+  return response;
+}
 
+function merlinMiddleware(request: NextRequest): NextResponse {
   const bootstrapDenied = denyBootstrapSeedInProduction(request);
   if (bootstrapDenied) return bootstrapDenied;
 
   const crossOriginDenied = denyCrossOriginApi(request);
   if (crossOriginDenied) return crossOriginDenied;
 
-  const response = NextResponse.next();
-  applySecurityHeaders(response.headers, BASE_SECURITY_HEADERS);
-  response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
-  if (isPublicPath(pathname)) {
-    response.headers.set('x-merlin-public-route', '1');
-  }
-
-  return response;
+  return applyMerlinSecurityHeaders(request);
 }
 
 const middleware = isClerkAuthPathEnabled()
-  ? clerkMiddleware((_auth, request) => merlinMiddleware(request))
+  ? clerkMiddleware(
+      async (_auth, request) => {
+        return merlinMiddleware(request);
+      },
+      {
+        signInUrl: '/sign-in',
+      }
+    )
   : merlinMiddleware;
 
 export default middleware;

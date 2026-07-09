@@ -223,13 +223,15 @@ export async function getSessionContext(request?: Request): Promise<{
   return { session, jwtPayload };
 }
 
+/** Legacy JWT session only. Prefer resolveAppSession() from authBridge for API routes. */
 export async function getSession(request?: Request): Promise<SessionPayload | null> {
   const { session } = await getSessionContext(request);
   return session;
 }
 
-export async function requireSession(): Promise<SessionPayload> {
-  const session = await getSession();
+/** Legacy JWT session only. Prefer requireAppSession() from authBridge for API routes. */
+export async function requireSession(request?: Request): Promise<SessionPayload> {
+  const session = await getSession(request);
   if (!session) throw new Error('Unauthorized');
   return session;
 }

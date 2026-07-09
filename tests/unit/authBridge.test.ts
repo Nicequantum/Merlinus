@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, test, it } from 'node:test';
 import { buildSessionPayloadFromTechnician } from '../../src/lib/auth';
+
+const root = resolve(process.cwd());
+
+function readSrc(relativePath: string): string {
+  return readFileSync(resolve(root, relativePath), 'utf8');
+}
 
 describe('auth bridge session payload (Phase 4 PR-1)', () => {
   test('buildSessionPayloadFromTechnician maps technician row to SessionPayload', () => {
@@ -49,5 +57,31 @@ describe('auth bridge session payload (Phase 4 PR-1)', () => {
     });
 
     assert.equal(payload.dealerId, 'dealer-franchise');
+  });
+});
+
+describe('auth bridge integration (Phase 4 PR-4)', () => {
+  it('authBridge resolves Clerk sessions before legacy JWT', () => {
+    const bridge = readSrc('src/lib/authBridge.ts');
+    assert.ok(bridge.includes('loadLinkedTechnicianSession'));
+    assert.ok(bridge.includes('attemptClerkEmailLinkOnSignIn'));
+    assert.ok(bridge.includes('resolveLegacySessionContext'));
+    assert.ok(bridge.includes('requireAppSession'));
+  });
+
+  it('api routes use auth bridge via withAuth', () => {
+    const apiRoute = readSrc('src/lib/apiRoute.ts');
+    assert.ok(apiRoute.includes("from './authBridge'"));
+    assert.ok(apiRoute.includes('resolveAppSession'));
+  });
+
+  it('logout and password routes integrate Clerk session revocation', () => {
+    const logout = readSrc('src/app/api/auth/logout/route.ts');
+    const changePassword = readSrc('src/app/api/auth/change-password/route.ts');
+    const clerkSession = readSrc('src/lib/clerkSession.ts');
+
+    assert.ok(logout.includes('revokeActiveClerkSession'));
+    assert.ok(changePassword.includes('revokeTechnicianAuthSessions'));
+    assert.ok(clerkSession.includes('revokeAllClerkSessionsForUser'));
   });
 });

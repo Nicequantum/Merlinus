@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
+import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { apiError, handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
@@ -12,6 +13,10 @@ export async function POST(request: Request) {
   if (rateLimited) return rateLimited;
 
   try {
+    if (!isLegacyAuthPathEnabled()) {
+      return apiError('Legacy D7 login is disabled. Use Clerk sign-in.', 403);
+    }
+
     const parsed = await parseRequestBody(request, loginSchema, AUTH_JSON_BODY_LIMIT_BYTES);
     if ('error' in parsed) {
       return parsed.error;

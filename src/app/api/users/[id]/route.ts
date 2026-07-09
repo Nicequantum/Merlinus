@@ -3,6 +3,7 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { revokeTechnicianSessions } from '@/lib/auth';
+import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
 import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -47,7 +48,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
 
       if (!parsed.data.isActive) {
-        await revokeTechnicianSessions(updated.id);
+        await revokeTechnicianAuthSessions(updated.id, () => revokeTechnicianSessions(updated.id));
       }
 
       await writeAuditLog({
@@ -110,7 +111,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         where: { id },
         data: { deletedAt: removedAt, isActive: false, ...dealerFields },
       });
-      await revokeTechnicianSessions(id);
+      await revokeTechnicianAuthSessions(id, () => revokeTechnicianSessions(id));
 
       await writeAuditLog({
         action: 'user.delete',

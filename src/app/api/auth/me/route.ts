@@ -9,13 +9,13 @@ export async function GET(request: Request) {
   if (rateLimited) return rateLimited;
 
   try {
-    const { session, jwtPayload } = await resolveAppSessionContext(request);
+    const { session, jwtPayload, source } = await resolveAppSessionContext(request);
     if (!session) {
-      return NextResponse.json({ session: null }, { status: 401 });
+      return NextResponse.json({ session: null, authSource: null }, { status: 401 });
     }
 
     return jsonWithSessionCookie(
-      { session: toTechnicianSession(session) },
+      { session: toTechnicianSession(session), authSource: source },
       session,
       jwtPayload
     );

@@ -64,3 +64,14 @@ export async function resolveAppSession(request?: Request): Promise<SessionPaylo
   const { session } = await resolveAppSessionContext(request);
   return session;
 }
+
+/** Legacy JWT session only — used for Clerk manual-link flows alongside Clerk auth(). */
+export async function resolveLegacySessionContext(request?: Request) {
+  return getSessionContext(request);
+}
+
+export async function requireAppSession(request?: Request): Promise<SessionPayload> {
+  const session = await resolveAppSession(request);
+  if (!session) throw new Error('Unauthorized');
+  return session;
+}

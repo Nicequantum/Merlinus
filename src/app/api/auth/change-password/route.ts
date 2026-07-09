@@ -3,6 +3,7 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { clearSessionCookie, hashPassword, revokeTechnicianSessions, verifyPassword } from '@/lib/auth';
+import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
 import { prisma } from '@/lib/db';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -35,7 +36,9 @@ export async function POST(request: Request) {
         data: { passwordHash, ...dealerFields },
       });
 
-      await revokeTechnicianSessions(session.technicianId);
+      await revokeTechnicianAuthSessions(session.technicianId, () =>
+        revokeTechnicianSessions(session.technicianId)
+      );
 
       await writeAuditLog({
         action: 'auth.password_change',
