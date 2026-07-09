@@ -89,6 +89,10 @@ model Technician {
   d7Number       String        @unique
   name           String
   passwordHash   String
+  /** Phase 4 Clerk — linked Clerk user id; null for legacy D7-only accounts. */
+  clerkUserId    String?       @unique @map("clerk_user_id")
+  /** Phase 4 — identity provider: legacy (JWT) or clerk. */
+  authProvider   String        @default("legacy") @map("auth_provider")
   role           TechnicianRole @default(technician)
   isAdmin        Boolean       @default(false)
   isActive       Boolean       @default(true)

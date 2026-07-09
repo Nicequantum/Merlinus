@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
+import { resolveAppSession } from '@/lib/authBridge';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import {
   buildSessionClearCookieHeader,
   clearSessionCookie,
   destroySession,
-  getSession,
   SESSION_COOKIE,
 } from '@/lib/auth';
 import { handleRouteError } from '@/lib/errors';
@@ -12,7 +12,7 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 async function performLogout(request: Request) {
-  const session = await getSession(request);
+  const session = await resolveAppSession(request);
 
   if (session) {
     await destroySession(session.technicianId);

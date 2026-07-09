@@ -51,11 +51,48 @@ export interface SessionPayload {
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
-function resolveDealerIdFromTechnician(tech: {
+export function resolveDealerIdFromTechnician(tech: {
   dealerId?: string | null;
   dealership: { dealerId?: string | null };
 }): string | null {
   return tech.dealerId?.trim() || tech.dealership.dealerId?.trim() || null;
+}
+
+export type TechnicianForSession = {
+  id: string;
+  d7Number: string;
+  name: string;
+  role: string;
+  isAdmin: boolean;
+  dealershipId: string;
+  dealerId?: string | null;
+  serviceAdvisorId: string | null;
+  sessionVersion: number;
+  consentAt: Date | null;
+  consentVersion: string | null;
+  legalDisclaimerAt: Date | null;
+  legalDisclaimerVersion: string | null;
+  dealership: { name: string; dealerId?: string | null };
+};
+
+/** Build API session payload from an active technician row (legacy JWT or Clerk bridge). */
+export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): SessionPayload {
+  return {
+    technicianId: tech.id,
+    d7Number: tech.d7Number,
+    name: tech.name,
+    role: tech.role,
+    isAdmin: tech.isAdmin,
+    dealershipId: tech.dealershipId,
+    dealershipName: tech.dealership.name,
+    dealerId: resolveDealerIdFromTechnician(tech),
+    serviceAdvisorId: tech.serviceAdvisorId ?? null,
+    consentAt: tech.consentAt?.toISOString() ?? null,
+    consentVersion: tech.consentVersion ?? null,
+    legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
+    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
+    sessionVersion: tech.sessionVersion,
+  };
 }
 
 function getSecret(): Uint8Array {
@@ -144,22 +181,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
   if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
   if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
 
-  return {
-    technicianId: tech.id,
-    d7Number: tech.d7Number,
-    name: tech.name,
-    role: tech.role,
-    isAdmin: tech.isAdmin,
-    dealershipId: tech.dealershipId,
-    dealershipName: tech.dealership.name,
-    dealerId: resolveDealerIdFromTechnician(tech),
-    serviceAdvisorId: tech.serviceAdvisorId ?? null,
-    consentAt: tech.consentAt?.toISOString() ?? null,
-    consentVersion: tech.consentVersion ?? null,
-    legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
-    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
-    sessionVersion: tech.sessionVersion,
-  };
+  return buildSessionPayloadFromTechnician(tech);
 }
 
 function readSessionTokenFromRequest(request?: Request): string | undefined {
@@ -236,20 +258,5 @@ export async function loginTechnician(d7Number: string, password: string): Promi
   if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
   const valid = await verifyPassword(password, tech.passwordHash);
   if (!valid) return null;
-  return {
-    technicianId: tech.id,
-    d7Number: tech.d7Number,
-    name: tech.name,
-    role: tech.role,
-    isAdmin: tech.isAdmin,
-    dealershipId: tech.dealershipId,
-    dealershipName: tech.dealership.name,
-    dealerId: resolveDealerIdFromTechnician(tech),
-    serviceAdvisorId: tech.serviceAdvisorId ?? null,
-    consentAt: tech.consentAt?.toISOString() ?? null,
-    consentVersion: tech.consentVersion ?? null,
-    legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
-    legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
-    sessionVersion: tech.sessionVersion,
-  };
+  return buildSessionPayloadFromTechnician(tech);
 }

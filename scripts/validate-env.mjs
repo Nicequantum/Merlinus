@@ -74,6 +74,30 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+const AUTH_MODES = ['legacy', 'dual', 'clerk'];
+const authModeRaw = process.env.AUTH_MODE?.trim().toLowerCase();
+const authMode = authModeRaw || 'legacy';
+if (authModeRaw && !AUTH_MODES.includes(authMode)) {
+  console.error(
+    `[merlin:build] Invalid AUTH_MODE="${process.env.AUTH_MODE}" — expected legacy, dual, or clerk`
+  );
+  process.exit(1);
+}
+const clerkKeysConfigured = Boolean(
+  process.env.CLERK_SECRET_KEY?.trim() && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()
+);
+if (authMode === 'clerk' && !clerkKeysConfigured) {
+  console.error(
+    '[merlin:build] AUTH_MODE=clerk requires CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY'
+  );
+  process.exit(1);
+}
+if ((authMode === 'dual' || authMode === 'clerk') && !clerkKeysConfigured) {
+  console.warn(
+    '[merlin:build] AUTH_MODE includes Clerk but Clerk keys are missing — Clerk sign-in disabled; legacy JWT remains available.'
+  );
+}
+
 if (isProduction) {
   const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingScanning.length > 0) {

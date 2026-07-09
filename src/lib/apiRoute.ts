@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from './auth';
+import { resolveAppSession } from './authBridge';
 import { isMaintenanceModeEnabled } from './env';
 import {
   apiError,
@@ -18,7 +18,7 @@ import { logApiWriteRequest } from './requestLogging';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
 
-type Session = NonNullable<Awaited<ReturnType<typeof getSession>>>;
+type Session = NonNullable<Awaited<ReturnType<typeof resolveAppSession>>>;
 
 interface RouteOptions {
   rateLimitKey?: string;
@@ -59,7 +59,7 @@ export async function withAuth<T>(
     if (rateLimited) return rateLimited;
   }
 
-  const session = await getSession(request);
+  const session = await resolveAppSession(request);
   if (!session) {
     return apiError(UNAUTHORIZED_ERROR, 401);
   }
