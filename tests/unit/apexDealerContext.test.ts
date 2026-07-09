@@ -45,6 +45,18 @@ describe('apex dealer context (Phase 1)', () => {
     assert.equal(id, 'write-dealer');
   });
 
+  test('resolveDealerIdForWrite returns null when session dealerId is absent', () => {
+    const saved = process.env.APEX_DEFAULT_DEALER_ID;
+    process.env.APEX_DEFAULT_DEALER_ID = 'env-default-dealer';
+
+    assert.equal(
+      resolveDealerIdForWrite({ session: { dealershipId: 'd1' } }),
+      null
+    );
+
+    process.env.APEX_DEFAULT_DEALER_ID = saved;
+  });
+
   test('withOptionalDealerId is a no-op when dealerId is absent', () => {
     const where = { dealershipId: 'd1', technicianId: 't1' };
     assert.deepEqual(withOptionalDealerId(where, null), where);

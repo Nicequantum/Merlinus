@@ -56,11 +56,14 @@ export function resolveDealerContext(input: {
   };
 }
 
-/** Pick dealerId for writes — session/JWT only. */
+/**
+ * Pick dealerId for writes — explicit session/JWT value only.
+ * MERLINUS SINGLE-DEALER: returns null when absent so writes omit dealerId (dealershipId remains authoritative).
+ * Do not fall back to env/legacy defaults here — those IDs may not exist in the DB and would break FK constraints.
+ */
 export function resolveDealerIdForWrite(input: {
   session?: DealerAwareSession | null;
 }): string | null {
   const explicit = input.session?.dealerId?.trim();
-  if (explicit) return explicit;
-  return resolveDealerContext(input).dealerId;
+  return explicit || null;
 }
