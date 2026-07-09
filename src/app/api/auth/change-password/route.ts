@@ -1,4 +1,6 @@
-import { writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { clearSessionCookie, hashPassword, revokeTechnicianSessions, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -26,9 +28,11 @@ export async function POST(request: Request) {
       }
 
       const passwordHash = await hashPassword(parsed.data.newPassword);
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       await prisma.technician.updateMany({
         where: { id: session.technicianId, dealershipId: session.dealershipId },
-        data: { passwordHash },
+        data: { passwordHash, ...dealerFields },
       });
 
       await revokeTechnicianSessions(session.technicianId);
@@ -36,6 +40,7 @@ export async function POST(request: Request) {
       await writeAuditLog({
         action: 'auth.password_change',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: session.technicianId,

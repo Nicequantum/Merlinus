@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { encryptPII } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { complaintLineLabel, inferVehicleFamily } from './nameUtils';
@@ -11,6 +12,8 @@ export type AdvisorExtractionSource = 'grok' | 'ocr_fallback' | 'manual';
 
 export interface CaptureAdvisorIntelligenceInput {
   dealershipId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on writes. */
+  dealerId?: string | null;
   repairOrderId: string;
   serviceAdvisorName?: string;
   complaints: string[];
@@ -46,6 +49,7 @@ export async function captureAdvisorIntelligence(
   const alreadyLinked = Boolean(existingRo?.serviceAdvisorId);
   const resolved = await resolveServiceAdvisor(input.dealershipId, advisorName, client, {
     incrementRoCount: !alreadyLinked,
+    dealerId: input.dealerId,
   });
   if (!resolved) {
     return { serviceAdvisor: null };
@@ -60,6 +64,8 @@ export async function captureAdvisorIntelligence(
       serviceAdvisorNameEncrypted: encryptPII(advisorName),
       advisorMatchConfidence: resolved.matchConfidence,
       advisorIdentifiedAt: new Date(),
+      // APEX NATIONAL PLATFORM — stamp dealerId when provided by caller session.
+      ...dealerIdWriteFields(input.dealerId),
     },
   });
 
@@ -71,6 +77,7 @@ export async function captureAdvisorIntelligence(
     await client.advisorComplaintObservation.createMany({
       data: complaints.map((complaint, index) => ({
         dealershipId: input.dealershipId,
+        ...dealerIdWriteFields(input.dealerId),
         serviceAdvisorId: resolved.id,
         repairOrderId: input.repairOrderId,
         lineLabel: input.complaintLabels?.[index] || complaintLineLabel(index),

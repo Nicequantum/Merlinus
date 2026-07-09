@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { prisma } from '@/lib/db';
 import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import {
@@ -39,8 +40,10 @@ type DbClient = Prisma.TransactionClient | typeof prisma;
 export async function createManualServiceAdvisor(
   dealershipId: string,
   input: ManualAdvisorInput,
-  client: DbClient = prisma
+  client: DbClient = prisma,
+  dealerId?: string | null
 ) {
+  const dealerFields = dealerIdWriteFields(dealerId);
   const displayName = normalizeAdvisorDisplayName(input.displayName);
   const nameFingerprint = fingerprintAdvisorName(displayName);
   if (!nameFingerprint || !isPlausibleAdvisorName(displayName)) {
@@ -66,6 +69,7 @@ export async function createManualServiceAdvisor(
           displayNameEncrypted: encryptPII(displayName),
           advisorCode: input.advisorCode?.trim() || existing.advisorCode,
           lastSeenAt: new Date(),
+          ...dealerFields,
         },
       });
       return { advisor: restored, reactivated: true as const };
@@ -82,6 +86,7 @@ export async function createManualServiceAdvisor(
         displayNameEncrypted: encryptPII(displayName),
         advisorCode: input.advisorCode?.trim() || existing.advisorCode,
         lastSeenAt: new Date(),
+        ...dealerFields,
       },
     });
     return { advisor: reactivated, reactivated: true as const };
@@ -90,6 +95,7 @@ export async function createManualServiceAdvisor(
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
+      ...dealerFields,
       displayNameEncrypted: encryptPII(displayName),
       nameFingerprint,
       advisorCode: input.advisorCode?.trim() || null,

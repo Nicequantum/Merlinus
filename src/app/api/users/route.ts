@@ -1,4 +1,6 @@
-import { writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { hashPassword } from '@/lib/auth';
 import { internalEmailForD7 } from '@/lib/d7Number';
@@ -71,6 +73,8 @@ export async function POST(request: Request) {
       }
 
       const passwordHash = await hashPassword(password);
+      // APEX NATIONAL PLATFORM — stamp dealerId on user writes from manager session when present.
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
       const resolvedRole = role ?? 'technician';
       const linkMode = resolveServiceAdvisorLinkMode({
         role: resolvedRole,
@@ -112,6 +116,7 @@ export async function POST(request: Request) {
               role: resolvedRole,
               isActive: true,
               dealershipId: session.dealershipId,
+              ...dealerFields,
               serviceAdvisorId,
             },
             select: {
@@ -127,6 +132,7 @@ export async function POST(request: Request) {
           await writeAuditLog({
             action: 'user.create',
             dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
             technicianId: session.technicianId,
             entityType: 'technician',
             entityId: user.id,
@@ -152,7 +158,8 @@ export async function POST(request: Request) {
                 displayName: newAdvisorDisplayName!,
                 advisorCode: newAdvisorCode,
               },
-              tx
+              tx,
+              dealerFields.dealerId
             );
 
             const existingLink = await tx.technician.findFirst({
@@ -178,6 +185,7 @@ export async function POST(request: Request) {
                 role: resolvedRole,
                 isActive: true,
                 dealershipId: session.dealershipId,
+                ...dealerFields,
                 serviceAdvisorId: advisor.id,
               },
               select: {
@@ -196,6 +204,7 @@ export async function POST(request: Request) {
           await writeAuditLog({
             action: result.reactivated ? 'advisor.reactivate' : 'advisor.create',
             dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
             technicianId: session.technicianId,
             entityType: 'service_advisor',
             entityId: result.advisor.id,
@@ -212,6 +221,7 @@ export async function POST(request: Request) {
           await writeAuditLog({
             action: 'user.create',
             dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
             technicianId: session.technicianId,
             entityType: 'technician',
             entityId: result.user.id,
@@ -238,6 +248,7 @@ export async function POST(request: Request) {
             role: resolvedRole,
             isActive: true,
             dealershipId: session.dealershipId,
+            ...dealerFields,
             serviceAdvisorId: null,
           },
           select: {
@@ -253,6 +264,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: 'user.create',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'technician',
           entityId: user.id,

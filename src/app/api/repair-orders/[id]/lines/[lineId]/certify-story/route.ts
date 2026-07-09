@@ -1,10 +1,12 @@
-import { appendAuditLogInTransaction } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -109,6 +111,7 @@ export async function POST(
           const newAuditLogId = await appendAuditLogInTransaction(tx, {
             action: 'story.certify',
             dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
             technicianId: session.technicianId,
             entityType: 'repairLine',
             entityId: lineId,
@@ -126,7 +129,7 @@ export async function POST(
           });
 
           const lineUpdated = await tx.repairLine.updateMany({
-            where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+            where: scopedRepairLineWhereForSession(lineId, id, session),
             data: {
               warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
               ...buildStoryCertificationDbFields({
@@ -135,6 +138,8 @@ export async function POST(
                 certifiedByName,
                 storyHash,
               }),
+              // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+              ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
             },
           });
           if (lineUpdated.count === 0) {
@@ -178,6 +183,7 @@ export async function POST(
 
       await recordTechnicianCertifiedStory({
         dealershipId: session.dealershipId,
+        dealerId: dealerIdWriteFields(resolveDealerIdForWrite({ session })).dealerId,
         technicianId: session.technicianId,
         repairOrderId: id,
         repairLineId: lineId,

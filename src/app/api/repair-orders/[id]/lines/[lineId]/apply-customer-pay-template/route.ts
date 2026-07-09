@@ -1,3 +1,5 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { applyCustomerPayTemplate } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
@@ -37,12 +39,16 @@ export async function POST(
       }
 
       try {
+        const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
         const result = await applyCustomerPayTemplate({
           repairOrderId,
           repairLineId,
           templateId: parsed.data.templateId,
           dealershipId: session.dealershipId,
           technicianId: session.technicianId,
+          // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+          dealerId: dealerFields.dealerId,
           ipAddress: getRequestIp(request),
         });
 

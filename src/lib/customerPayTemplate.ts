@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { appendAuditLogInTransaction, writeAuditLog } from '@/lib/audit';
 import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
@@ -12,6 +13,8 @@ export interface ApplyCustomerPayTemplateInput {
   templateId: string;
   dealershipId: string;
   technicianId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on repair-line writes. */
+  dealerId?: string | null;
   ipAddress?: string;
 }
 
@@ -30,6 +33,8 @@ export interface ClearCustomerPayModeInput {
   repairLineId: string;
   dealershipId: string;
   technicianId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on repair-line writes. */
+  dealerId?: string | null;
   ipAddress?: string;
 }
 
@@ -50,12 +55,17 @@ export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Pr
       id: input.repairLineId,
       repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
     },
-    data: { isCustomerPay: false },
+    data: {
+      isCustomerPay: false,
+      // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+      ...dealerIdWriteFields(input.dealerId),
+    },
   });
 
   await writeAuditLog({
     action: 'customerPay.clear',
     dealershipId: input.dealershipId,
+    dealerId: input.dealerId,
     technicianId: input.technicianId,
     entityType: 'repairLine',
     entityId: input.repairLineId,
@@ -160,6 +170,8 @@ export async function applyCustomerPayTemplate(
       data: {
         warrantyStoryEncrypted: encryptedStory,
         isCustomerPay: true,
+        // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+        ...dealerIdWriteFields(input.dealerId),
       },
     });
 
@@ -174,6 +186,7 @@ export async function applyCustomerPayTemplate(
     await appendAuditLogInTransaction(tx, {
       action: 'customerPayTemplateApplied',
       dealershipId: input.dealershipId,
+      dealerId: input.dealerId,
       technicianId: input.technicianId,
       entityType: 'repairLine',
       entityId: input.repairLineId,

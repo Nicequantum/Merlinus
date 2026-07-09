@@ -1,4 +1,6 @@
-import { writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
@@ -6,7 +8,7 @@ import { getRequestIp } from '@/lib/rate-limit';
 import {
   canAccessRepairOrder,
   isServiceAdvisorUser,
-  scopedRepairLineWhere,
+  scopedRepairLineWhereForSession,
 } from '@/lib/repairOrderAccess';
 import { mapSoldMetricsFromDb, soldMetricsToDbUpdateFields } from '@/lib/repairLineSoldMetrics';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, soldMetricsSchema } from '@/lib/validation';
@@ -40,15 +42,19 @@ export async function PATCH(
       }
 
       const lineUpdated = await prisma.repairLine.updateMany({
-        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-        data: soldMetricsToDbUpdateFields(parsed.data),
+        where: scopedRepairLineWhereForSession(lineId, id, session),
+        data: {
+          ...soldMetricsToDbUpdateFields(parsed.data),
+          // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+          ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+        },
       });
       if (lineUpdated.count === 0) {
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
       const updated = await prisma.repairLine.findFirst({
-        where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+        where: scopedRepairLineWhereForSession(lineId, id, session),
         select: {
           id: true,
           lineNumber: true,
@@ -67,6 +73,7 @@ export async function PATCH(
       await writeAuditLog({
         action: 'advisor.sold_metrics',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'repair_line',
         entityId: updated.id,

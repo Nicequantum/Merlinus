@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
+import { resolveDealerIdForWrite, type DealerAwareSession } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { sanitizeAuditMetadata } from './auditMetadataSanitize';
 import { prisma } from './db';
@@ -89,6 +91,11 @@ export const STORY_PROMPT_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'story.certify',
   'story.pdf_export',
 ]);
+
+/** APEX NATIONAL PLATFORM — optional dealerId for audit entries from authenticated session. */
+export function auditDealerIdFromSession(session: DealerAwareSession): string | undefined {
+  return dealerIdWriteFields(resolveDealerIdForWrite({ session })).dealerId;
+}
 
 export interface AuditLogInput {
   action: AuditAction;

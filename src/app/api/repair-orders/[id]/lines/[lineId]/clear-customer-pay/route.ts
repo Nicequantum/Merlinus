@@ -1,3 +1,5 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { clearCustomerPayMode } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
@@ -29,11 +31,15 @@ export async function POST(
       const line = ro.repairLines.find((l) => l.id === lineId);
       if (!line) return apiError(NOT_FOUND_ERROR, 404);
 
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       await clearCustomerPayMode({
         repairOrderId: id,
         repairLineId: lineId,
         dealershipId: session.dealershipId,
         technicianId: session.technicianId,
+        // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+        dealerId: dealerFields.dealerId,
         ipAddress: getRequestIp(request),
       });
 

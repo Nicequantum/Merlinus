@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { prisma } from '@/lib/db';
 import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
@@ -59,6 +60,8 @@ async function recordAlias(
 export interface ResolveServiceAdvisorOptions {
   /** When false, links an RO without incrementing roCount (e.g. re-save of same RO). */
   incrementRoCount?: boolean;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on service advisor writes. */
+  dealerId?: string | null;
 }
 
 export async function resolveServiceAdvisor(
@@ -68,6 +71,7 @@ export async function resolveServiceAdvisor(
   options: ResolveServiceAdvisorOptions = {}
 ): Promise<ResolvedServiceAdvisor | null> {
   const incrementRoCount = options.incrementRoCount !== false;
+  const dealerFields = dealerIdWriteFields(options.dealerId);
   const displayName = normalizeAdvisorDisplayName(rawName);
   const nameFingerprint = fingerprintAdvisorName(displayName || rawName);
   if (!nameFingerprint || !isPlausibleAdvisorName(displayName || rawName)) {
@@ -94,6 +98,7 @@ export async function resolveServiceAdvisor(
       data: {
         lastSeenAt: new Date(),
         ...(incrementRoCount ? { roCount: { increment: 1 } } : {}),
+        ...dealerFields,
       },
     });
 
@@ -122,6 +127,7 @@ export async function resolveServiceAdvisor(
       data: {
         lastSeenAt: new Date(),
         ...(incrementRoCount ? { roCount: { increment: 1 } } : {}),
+        ...dealerFields,
       },
     });
 
@@ -140,6 +146,7 @@ export async function resolveServiceAdvisor(
   const created = await client.serviceAdvisor.create({
     data: {
       dealershipId,
+      ...dealerFields,
       displayNameEncrypted: encryptPII(advisorLabel),
       nameFingerprint,
       roCount: incrementRoCount ? 1 : 0,

@@ -1,10 +1,12 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -15,6 +17,7 @@ import { auditStoryGenerationPipeline } from '@/lib/storyGenerationPipeline';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
+import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 
@@ -80,6 +83,7 @@ export async function POST(
             {
               action: 'story.generate',
               dealershipId: session.dealershipId,
+              dealerId: auditDealerIdFromSession(session),
               technicianId: session.technicianId,
               entityType: 'repairLine',
               entityId: lineId,
@@ -97,11 +101,13 @@ export async function POST(
               ipAddress: getRequestIp(request),
             },
             {
-              where: scopedRepairLineWhere(lineId, id, session.dealershipId),
+              where: scopedRepairLineWhereForSession(lineId, id, session),
               data: {
                 warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
                 storyQualityAuditEncrypted: '',
                 ...CLEAR_STORY_CERTIFICATION_DB,
+                // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+                ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
               },
             }
           );

@@ -1,6 +1,10 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
+import {
+  withOptionalDealerId,
+  withOptionalDealerIdOnRepairOrderScope,
+} from '@/lib/apex/dealerScope';
 import { prisma } from '@/lib/db';
 import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
 
@@ -9,6 +13,8 @@ export interface RepairOrderAccessSession {
   role: string;
   dealershipId: string;
   serviceAdvisorId?: string | null;
+  /** APEX NATIONAL PLATFORM — optional defense-in-depth; sourced from authenticated session only. */
+  dealerId?: string | null;
 }
 
 export function isServiceAdvisorUser(session: { role: string }): boolean {
@@ -21,39 +27,52 @@ export async function canAccessRepairOrder(
   roId: string,
   include: Prisma.RepairOrderInclude = { repairLines: true }
 ) {
+  // MERLINUS SINGLE-DEALER: dealershipId remains primary; dealerId is additive when present in session.
   if (session.role === 'manager') {
     return prisma.repairOrder.findFirst({
-      where: { id: roId, dealershipId: session.dealershipId },
+      where: withOptionalDealerId(
+        { id: roId, dealershipId: session.dealershipId },
+        session.dealerId
+      ),
       include,
     });
   }
 
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
     const advisor = await prisma.serviceAdvisor.findFirst({
-      where: {
-        id: session.serviceAdvisorId,
-        dealershipId: session.dealershipId,
-        deletedAt: null,
-      },
+      where: withOptionalDealerId(
+        {
+          id: session.serviceAdvisorId,
+          dealershipId: session.dealershipId,
+          deletedAt: null,
+        },
+        session.dealerId
+      ),
     });
     if (!advisor || !isServiceAdvisorActive(advisor)) return null;
 
     return prisma.repairOrder.findFirst({
-      where: {
-        id: roId,
-        dealershipId: session.dealershipId,
-        serviceAdvisorId: session.serviceAdvisorId,
-      },
+      where: withOptionalDealerId(
+        {
+          id: roId,
+          dealershipId: session.dealershipId,
+          serviceAdvisorId: session.serviceAdvisorId,
+        },
+        session.dealerId
+      ),
       include,
     });
   }
 
   return prisma.repairOrder.findFirst({
-    where: {
-      id: roId,
-      dealershipId: session.dealershipId,
-      technicianId: session.technicianId,
-    },
+    where: withOptionalDealerId(
+      {
+        id: roId,
+        dealershipId: session.dealershipId,
+        technicianId: session.technicianId,
+      },
+      session.dealerId
+    ),
     include,
   });
 }
@@ -70,18 +89,46 @@ export async function loadStoryRouteRepairOrder(
 export function scopedRepairLineWhere(
   lineId: string,
   repairOrderId: string,
-  dealershipId: string
+  dealershipId: string,
+  dealerId?: string | null
 ): Prisma.RepairLineWhereInput {
   return {
     id: lineId,
-    repairOrder: { id: repairOrderId, dealershipId },
+    repairOrder: withOptionalDealerIdOnRepairOrderScope(
+      { id: repairOrderId, dealershipId },
+      dealerId
+    ),
   };
 }
 
 /** Defense-in-depth filter for repair-order lookups and mutations. */
 export function scopedRepairOrderWhere(
   repairOrderId: string,
-  dealershipId: string
+  dealershipId: string,
+  dealerId?: string | null
 ): Prisma.RepairOrderWhereInput {
-  return { id: repairOrderId, dealershipId };
+  return withOptionalDealerId({ id: repairOrderId, dealershipId }, dealerId);
+}
+
+/**
+ * APEX NATIONAL PLATFORM — scoped RO filter using full session (dealershipId + optional dealerId).
+ * MERLINUS SINGLE-DEALER: identical to scopedRepairOrderWhere(id, session.dealershipId) when dealerId absent.
+ */
+export function scopedRepairOrderWhereForSession(
+  repairOrderId: string,
+  session: Pick<RepairOrderAccessSession, 'dealershipId' | 'dealerId'>
+): Prisma.RepairOrderWhereInput {
+  return scopedRepairOrderWhere(repairOrderId, session.dealershipId, session.dealerId);
+}
+
+/**
+ * APEX NATIONAL PLATFORM — scoped repair-line filter using full session.
+ * MERLINUS SINGLE-DEALER: identical to scopedRepairLineWhere(..., session.dealershipId) when dealerId absent.
+ */
+export function scopedRepairLineWhereForSession(
+  lineId: string,
+  repairOrderId: string,
+  session: Pick<RepairOrderAccessSession, 'dealershipId' | 'dealerId'>
+): Prisma.RepairLineWhereInput {
+  return scopedRepairLineWhere(lineId, repairOrderId, session.dealershipId, session.dealerId);
 }

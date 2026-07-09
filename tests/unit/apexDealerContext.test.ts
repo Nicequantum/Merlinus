@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
-  APEX_DEALER_HEADER,
   MERLINUS_DEFAULT_DEALER_ID,
-  getDealerIdFromRequest,
   getLegacyDefaultDealerId,
   resolveDealerContext,
   resolveDealerIdForWrite,
@@ -11,33 +9,13 @@ import {
 import { withOptionalDealerId } from '../../src/lib/apex/dealerScope';
 
 describe('apex dealer context (Phase 1)', () => {
-  test('getDealerIdFromRequest reads x-apex-dealer-id header', () => {
-    const request = new Request('http://localhost/api/repair-orders', {
-      headers: { [APEX_DEALER_HEADER]: 'dealer-abc' },
-    });
-    assert.equal(getDealerIdFromRequest(request), 'dealer-abc');
-    assert.equal(getDealerIdFromRequest(), null);
-  });
-
-  test('resolveDealerContext prefers header over session', () => {
-    const request = new Request('http://localhost', {
-      headers: { [APEX_DEALER_HEADER]: 'header-dealer' },
-    });
-    const ctx = resolveDealerContext({
-      session: { dealershipId: 'd1', dealerId: 'session-dealer' },
-      request,
-    });
-    assert.equal(ctx.dealerId, 'header-dealer');
-    assert.equal(ctx.source, 'header');
-    assert.equal(ctx.dealershipId, 'd1');
-  });
-
-  test('resolveDealerContext uses session dealerId when header absent', () => {
+  test('resolveDealerContext uses session dealerId from authenticated JWT', () => {
     const ctx = resolveDealerContext({
       session: { dealershipId: 'd1', dealerId: 'session-dealer' },
     });
     assert.equal(ctx.dealerId, 'session-dealer');
     assert.equal(ctx.source, 'session');
+    assert.equal(ctx.dealershipId, 'd1');
   });
 
   test('resolveDealerContext falls back to legacy default for Merlinus', () => {

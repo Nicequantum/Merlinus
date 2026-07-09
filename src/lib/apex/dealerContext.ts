@@ -3,13 +3,15 @@
  *
  * MERLINUS SINGLE-DEALER: when dealerId is absent, all existing dealershipId-scoped
  * queries continue to behave exactly as before.
+ *
+ * Dealer context is derived only from the authenticated session/JWT — never from
+ * client-controlled HTTP headers.
  */
 
 export const MERLINUS_DEFAULT_DEALER_ID = 'merlinus-default-dealer';
 export const MERLINUS_DEFAULT_DEALER_CODE = 'merlinus-tiverton';
-export const APEX_DEALER_HEADER = 'x-apex-dealer-id';
 
-export type DealerContextSource = 'session' | 'header' | 'env_default' | 'legacy_default' | 'none';
+export type DealerContextSource = 'session' | 'env_default' | 'legacy_default' | 'none';
 
 export interface DealerContext {
   dealerId: string | null;
@@ -22,30 +24,19 @@ export interface DealerAwareSession {
   dealerId?: string | null;
 }
 
-/** Read optional Apex dealer hint propagated by middleware or upstream proxies. */
-export function getDealerIdFromRequest(request?: Request): string | null {
-  const hinted = request?.headers.get(APEX_DEALER_HEADER)?.trim();
-  return hinted || null;
-}
-
 /** MERLINUS SINGLE-DEALER fallback when multi-tenant hints are not configured. */
 export function getLegacyDefaultDealerId(): string {
   return process.env.APEX_DEFAULT_DEALER_ID?.trim() || MERLINUS_DEFAULT_DEALER_ID;
 }
 
 /**
- * Resolve the active dealer for the current request/session.
- * Prefers explicit session/header hints; falls back to legacy single-dealer default.
+ * Resolve the active dealer from the authenticated session.
+ * Falls back to env default, then legacy single-dealer default for Merlinus.
  */
 export function resolveDealerContext(input: {
   session?: DealerAwareSession | null;
-  request?: Request;
 }): DealerContext {
   const dealershipId = input.session?.dealershipId ?? null;
-  const headerDealerId = getDealerIdFromRequest(input.request);
-  if (headerDealerId) {
-    return { dealerId: headerDealerId, dealershipId, source: 'header' };
-  }
 
   const sessionDealerId = input.session?.dealerId?.trim();
   if (sessionDealerId) {
@@ -65,10 +56,9 @@ export function resolveDealerContext(input: {
   };
 }
 
-/** Pick dealerId for writes — prefers explicit session value, else resolved context. */
+/** Pick dealerId for writes — session/JWT only. */
 export function resolveDealerIdForWrite(input: {
   session?: DealerAwareSession | null;
-  request?: Request;
 }): string | null {
   const explicit = input.session?.dealerId?.trim();
   if (explicit) return explicit;

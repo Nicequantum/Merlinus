@@ -1,4 +1,6 @@
-import { writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -29,9 +31,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       const updated = await prisma.technician.update({
         where: { id },
-        data: { isActive: parsed.data.isActive },
+        data: { isActive: parsed.data.isActive, ...dealerFields },
         select: {
           id: true,
           d7Number: true,
@@ -49,6 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await writeAuditLog({
         action: parsed.data.isActive ? 'user.reactivate' : 'user.deactivate',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: updated.id,
@@ -99,15 +104,18 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       // ]);
 
       const removedAt = new Date();
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       await prisma.technician.update({
         where: { id },
-        data: { deletedAt: removedAt, isActive: false },
+        data: { deletedAt: removedAt, isActive: false, ...dealerFields },
       });
       await revokeTechnicianSessions(id);
 
       await writeAuditLog({
         action: 'user.delete',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: id,

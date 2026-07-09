@@ -1,3 +1,5 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
@@ -5,13 +7,14 @@ import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { reviewWarrantyStory } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhere } from '@/lib/repairOrderAccess';
+import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { logger } from '@/lib/logger';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
+import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
 
@@ -88,6 +91,7 @@ export async function POST(
             {
               action: 'story.review',
               dealershipId: session.dealershipId,
+              dealerId: auditDealerIdFromSession(session),
               technicianId: session.technicianId,
               entityType: 'repairLine',
               entityId: lineId,
@@ -104,8 +108,12 @@ export async function POST(
               ipAddress: getRequestIp(request),
             },
             {
-              where: scopedRepairLineWhere(lineId, id, session.dealershipId),
-              data: { storyQualityAuditEncrypted: encryptJsonObject(quality) },
+              where: scopedRepairLineWhereForSession(lineId, id, session),
+              data: {
+                storyQualityAuditEncrypted: encryptJsonObject(quality),
+                // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+                ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+              },
             }
           );
         });

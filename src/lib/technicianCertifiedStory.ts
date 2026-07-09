@@ -1,11 +1,14 @@
 import 'server-only';
 
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { prisma } from './db';
 import { logger } from './logger';
 import { readRoNumberFromDb } from './piiFieldRead';
 
 export interface RecordCertifiedStoryInput {
   dealershipId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on certified story records. */
+  dealerId?: string | null;
   technicianId: string;
   repairOrderId: string;
   repairLineId: string;
@@ -29,6 +32,7 @@ export async function recordTechnicianCertifiedStory(input: RecordCertifiedStory
   await prisma.technicianCertifiedStory.create({
     data: {
       dealershipId: input.dealershipId,
+      ...dealerIdWriteFields(input.dealerId),
       technicianId: input.technicianId,
       repairOrderId: input.repairOrderId,
       repairLineId: input.repairLineId,

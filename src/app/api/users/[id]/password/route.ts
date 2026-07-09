@@ -1,4 +1,6 @@
-import { writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { hashPassword, revokeTechnicianSessions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -26,9 +28,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       const passwordHash = await hashPassword(parsed.data.newPassword);
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       await prisma.technician.update({
         where: { id },
-        data: { passwordHash },
+        data: { passwordHash, ...dealerFields },
       });
 
       await revokeTechnicianSessions(user.id);
@@ -36,6 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await writeAuditLog({
         action: 'user.password_reset',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: user.id,

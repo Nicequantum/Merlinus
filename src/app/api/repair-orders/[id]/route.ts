@@ -1,4 +1,6 @@
-import { appendAuditLogInTransaction, writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { appendAuditLogInTransaction, auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
@@ -17,8 +19,8 @@ import { LARGE_JSON_BODY_LIMIT_BYTES } from '@/lib/requestBody';
 import { parseRequestBody, parseRouteParams, routeIdParamsSchema, updateRepairOrderSchema } from '@/lib/validation';
 import {
   canAccessRepairOrder,
-  scopedRepairLineWhere,
-  scopedRepairOrderWhere,
+  scopedRepairLineWhereForSession,
+  scopedRepairOrderWhereForSession,
 } from '@/lib/repairOrderAccess';
 import { enrichRepairOrderCertification } from '@/lib/repairOrderCertificationEnrichment';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
@@ -37,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       if (!ro) return apiError(NOT_FOUND_ERROR, 404);
 
       const full = await prisma.repairOrder.findFirst({
-        where: scopedRepairOrderWhere(id, session.dealershipId),
+        where: scopedRepairOrderWhereForSession(id, session),
         include: {
           repairLines: true,
           serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
@@ -158,10 +160,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         return apiError(CONFLICT_ERROR, 409);
       }
 
+      // APEX NATIONAL PLATFORM — stamp dealerId on writes from authenticated session when present.
+      const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
+
       const advisorCapture = await prisma.$transaction(async (tx) => {
         const roUpdated = await tx.repairOrder.updateMany({
-          where: scopedRepairOrderWhere(id, session.dealershipId),
-          data: repairOrderToDbFields(input as Parameters<typeof repairOrderToDbFields>[0]),
+          where: scopedRepairOrderWhereForSession(id, session),
+          data: {
+            ...repairOrderToDbFields(input as Parameters<typeof repairOrderToDbFields>[0]),
+            ...dealerFields,
+          },
         });
         if (roUpdated.count === 0) {
           throw new Error('Repair order not found for update');
@@ -172,6 +180,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           await appendAuditLogInTransaction(tx, {
             action: 'story.edit',
             dealershipId: session.dealershipId,
+            dealerId: dealerFields.dealerId,
             technicianId: session.technicianId,
             entityType: 'repairLine',
             entityId: edit.lineId,
@@ -227,9 +236,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
               if (existingLine) {
                 await tx.repairLine.updateMany({
-                  where: scopedRepairLineWhere(line.id, id, session.dealershipId),
+                  where: scopedRepairLineWhereForSession(line.id, id, session),
                   data: {
                     ...lineFields,
+                    ...dealerFields,
                     ...(certificationCleared ? CLEAR_STORY_CERTIFICATION_DB : {}),
                   },
                 });
@@ -239,6 +249,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                     id: line.id,
                     repairOrderId: id,
                     ...lineFields,
+                    ...dealerFields,
                   },
                 });
               }
@@ -255,7 +266,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           for (const dbLine of dbLines) {
             if (!incomingIds.has(dbLine.id)) {
               await tx.repairLine.deleteMany({
-                where: scopedRepairLineWhere(dbLine.id, id, session.dealershipId),
+                where: scopedRepairLineWhereForSession(dbLine.id, id, session),
               });
             }
           }
@@ -268,6 +279,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         return captureAdvisorIntelligence(
           {
             dealershipId: session.dealershipId,
+            dealerId: dealerFields.dealerId,
             repairOrderId: id,
             serviceAdvisorName: advisorNameToCapture,
             complaints: input.complaints,
@@ -287,6 +299,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         await writeAuditLog({
           action: 'advisor.capture',
           dealershipId: session.dealershipId,
+          dealerId: dealerFields.dealerId,
           technicianId: session.technicianId,
           entityType: 'serviceAdvisor',
           entityId: advisorCapture.serviceAdvisor.id,
@@ -301,7 +314,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
 
       const updated = await prisma.repairOrder.findFirst({
-        where: scopedRepairOrderWhere(id, session.dealershipId),
+        where: scopedRepairOrderWhereForSession(id, session),
         include: {
           repairLines: true,
           serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
@@ -312,6 +325,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       await writeAuditLog({
         action: 'ro.update',
         dealershipId: session.dealershipId,
+        dealerId: dealerFields.dealerId,
         technicianId: session.technicianId,
         entityType: 'repairOrder',
         entityId: id,
@@ -324,6 +338,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         await writeAuditLog({
           action: 'customerPayStory.edit',
           dealershipId: session.dealershipId,
+          dealerId: dealerFields.dealerId,
           technicianId: session.technicianId,
           entityType: 'repairLine',
           entityId: edit.lineId,
@@ -359,12 +374,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
       await prisma.repairOrder.deleteMany({
-        where: scopedRepairOrderWhere(id, session.dealershipId),
+        where: scopedRepairOrderWhereForSession(id, session),
       });
 
       await writeAuditLog({
         action: 'ro.delete',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'repairOrder',
         entityId: id,
