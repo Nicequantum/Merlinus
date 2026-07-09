@@ -64,6 +64,14 @@ describe('Low priority audit fixes (L1–L5)', () => {
     assert.ok(script.includes('inferCheckKind'));
   });
 
+  it('pre-rollout validation accepts Svix-verified Clerk webhooks without withAuth', () => {
+    const script = readSrc('scripts/pre-rollout-validation.ts');
+    const webhook = readSrc('src/app/api/webhooks/clerk/route.ts');
+    assert.ok(script.includes('verifyWebhook('));
+    assert.ok(script.includes('@clerk/nextjs/webhooks'));
+    assert.ok(webhook.includes('verifyWebhook('));
+  });
+
   it('obsolete IMPROVED_CODE_STRUCTURE.md marked deprecated', () => {
     const doc = readSrc('IMPROVED_CODE_STRUCTURE.md');
     assert.ok(doc.includes('Deprecated'));

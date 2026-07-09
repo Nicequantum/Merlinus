@@ -1,3 +1,7 @@
+/**
+ * Clerk identity webhook — public route secured by Svix signature verification (not withAuth).
+ * Registered in MERLIN_PUBLIC_ROUTE_PATTERNS; pre-rollout audit accepts verifyWebhook().
+ */
 import { verifyWebhook } from '@clerk/nextjs/webhooks';
 import { NextResponse, type NextRequest } from 'next/server';
 import { clerkEnvConfigured } from '@/lib/authMode';

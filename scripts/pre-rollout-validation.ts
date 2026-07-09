@@ -1372,14 +1372,21 @@ async function checkSecurityAndConfig(): Promise<void> {
     const content = readFileSync(file, 'utf8');
     const isPublic = [...publicAllowlist].some((allowed) => rel.endsWith(allowed));
     const hasWithAuth = content.includes('withAuth(');
-    if (!isPublic && !hasWithAuth) {
+    const hasSvixWebhookVerification =
+      content.includes('verifyWebhook(') && content.includes('@clerk/nextjs/webhooks');
+    if (!isPublic && !hasWithAuth && !hasSvixWebhookVerification) {
       unauthenticated.push(rel);
     }
   }
   if (unauthenticated.length === 0) {
     record('Security', 'Sensitive route authentication', 'pass', `${routeFiles.length} API routes audited — all protected`);
   } else {
-    record('Security', 'Sensitive route authentication', 'fail', `Routes without withAuth: ${unauthenticated.join(', ')}`);
+    record(
+      'Security',
+      'Sensitive route authentication',
+      'fail',
+      `Routes without withAuth or Svix webhook verification: ${unauthenticated.join(', ')}`
+    );
   }
 
   const securityExposedKeys = getExposedPublicGrokEnvKeys();
