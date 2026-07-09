@@ -5,6 +5,7 @@
 
 import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
+import { getSupabaseEnvConfig } from '@/lib/supabaseEnv';
 import { APP_VERSION } from '@/lib/version';
 
 const REQUIRED_ENV_VARS = [
@@ -136,6 +137,18 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     warnings.push(
       'ALLOW_BOOTSTRAP is set in production but bootstrap seed is permanently disabled — remove this variable'
     );
+  }
+
+  // APEX NATIONAL PLATFORM — Supabase is optional in Phase 1; warn on partial configuration.
+  const supabase = getSupabaseEnvConfig();
+  if (supabase.url && !supabase.anonKey) {
+    warnings.push('NEXT_PUBLIC_SUPABASE_URL is set without NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
+  if (supabase.url && !supabase.serviceRoleKey) {
+    warnings.push('NEXT_PUBLIC_SUPABASE_URL is set without SUPABASE_SERVICE_ROLE_KEY (server admin client disabled)');
+  }
+  if (!supabase.url && (supabase.anonKey || supabase.serviceRoleKey)) {
+    warnings.push('Supabase keys are set without NEXT_PUBLIC_SUPABASE_URL');
   }
 
   const valid = missing.length === 0 && forbiddenPublicKeys.length === 0;

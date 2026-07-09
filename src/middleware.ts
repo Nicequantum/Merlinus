@@ -8,6 +8,7 @@ import {
 } from './lib/bootstrapGuard';
 import { isProductionRuntime } from './lib/productionRuntime';
 import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeaders';
+import { APEX_DEALER_HEADER, getDealerIdFromRequest } from './lib/apex/dealerContext';
 
 /** M12 CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'. */
 
@@ -62,13 +63,24 @@ export function middleware(request: NextRequest) {
   const crossOriginDenied = denyCrossOriginApi(request);
   if (crossOriginDenied) return crossOriginDenied;
 
+  // APEX NATIONAL PLATFORM — forward optional dealer hint to route handlers via request headers.
+  const dealerHint = getDealerIdFromRequest(request);
+  const requestHeaders = new Headers(request.headers);
+  if (dealerHint) {
+    requestHeaders.set(APEX_DEALER_HEADER, dealerHint);
+  }
+
   // Auth is enforced per API route (withAuth). Middleware applies security headers and marks public paths.
-  const response = NextResponse.next();
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   applySecurityHeaders(response.headers, BASE_SECURITY_HEADERS);
   response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
   if (isPublicPath(pathname)) {
     response.headers.set('x-merlin-public-route', '1');
   }
+  if (dealerHint) {
+    response.headers.set(APEX_DEALER_HEADER, dealerHint);
+  }
+
   return response;
 }
 

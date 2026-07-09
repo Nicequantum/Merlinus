@@ -1,3 +1,4 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import {
@@ -175,6 +176,9 @@ export async function POST(request: Request) {
       const extractionSource: AdvisorExtractionSource =
         data.advisorExtractionSource || (data.fromExtraction ? 'grok' : 'manual');
 
+      // APEX NATIONAL PLATFORM — stamp dealerId on writes when session/headers provide it.
+      const dealerId = resolveDealerIdForWrite({ session, request });
+
       let created;
       let advisorCapture;
       try {
@@ -184,8 +188,12 @@ export async function POST(request: Request) {
               ...repairOrderToDbFields(input),
               technicianId: session.technicianId,
               dealershipId: session.dealershipId,
+              ...(dealerId ? { dealerId } : {}),
               repairLines: {
-                create: input.repairLines.map((line) => repairLineToDbFields(line)),
+                create: input.repairLines.map((line) => ({
+                  ...repairLineToDbFields(line),
+                  ...(dealerId ? { dealerId } : {}),
+                })),
               },
             },
             include: { repairLines: true, serviceAdvisor: { select: { id: true, displayNameEncrypted: true } } },
@@ -233,6 +241,7 @@ export async function POST(request: Request) {
           await writeAuditLog({
             action: 'advisor.capture',
             dealershipId: session.dealershipId,
+            dealerId: session.dealerId ?? dealerId ?? undefined,
             technicianId: session.technicianId,
             entityType: 'serviceAdvisor',
             entityId: advisorCapture.serviceAdvisor.id,
@@ -249,6 +258,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: 'ro.create',
           dealershipId: session.dealershipId,
+          dealerId: session.dealerId ?? dealerId ?? undefined,
           technicianId: session.technicianId,
           entityType: 'repairOrder',
           entityId: created.id,

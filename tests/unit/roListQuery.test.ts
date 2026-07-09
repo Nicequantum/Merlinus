@@ -32,8 +32,18 @@ describe('repair order list query', () => {
       { scope: 'today', limit: 50 }
     );
     assert.equal(where.technicianId, 't1');
+    assert.equal(where.dealerId, undefined);
     assert.ok(where.updatedAt && 'gte' in where.updatedAt);
     assert.ok((where.updatedAt as { gte: Date }).gte instanceof Date);
+  });
+
+  test('optional dealerId adds defense-in-depth tenant filter', () => {
+    const where = buildRepairOrderListWhere(
+      { role: 'manager', dealershipId: 'd1', technicianId: 't1', dealerId: 'apex-dealer' },
+      { scope: 'today', limit: 50 }
+    );
+    assert.equal(where.dealershipId, 'd1');
+    assert.equal(where.dealerId, 'apex-dealer');
   });
 
   test('previous where clause filters before dealership midnight', () => {

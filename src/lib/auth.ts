@@ -40,12 +40,22 @@ export interface SessionPayload {
   isAdmin: boolean;
   dealershipId: string;
   dealershipName: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant; absent in legacy JWTs. */
+  dealerId?: string | null;
   serviceAdvisorId: string | null;
   consentAt: string | null;
   consentVersion: string | null;
   legalDisclaimerAt: string | null;
   legalDisclaimerVersion: string | null;
   sessionVersion: number;
+}
+
+/** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
+function resolveDealerIdFromTechnician(tech: {
+  dealerId?: string | null;
+  dealership: { dealerId?: string | null };
+}): string | null {
+  return tech.dealerId?.trim() || tech.dealership.dealerId?.trim() || null;
 }
 
 function getSecret(): Uint8Array {
@@ -142,6 +152,7 @@ async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<Sess
     isAdmin: tech.isAdmin,
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
+    dealerId: resolveDealerIdFromTechnician(tech),
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
     consentVersion: tech.consentVersion ?? null,
@@ -233,6 +244,7 @@ export async function loginTechnician(d7Number: string, password: string): Promi
     isAdmin: tech.isAdmin,
     dealershipId: tech.dealershipId,
     dealershipName: tech.dealership.name,
+    dealerId: resolveDealerIdFromTechnician(tech),
     serviceAdvisorId: tech.serviceAdvisorId ?? null,
     consentAt: tech.consentAt?.toISOString() ?? null,
     consentVersion: tech.consentVersion ?? null,

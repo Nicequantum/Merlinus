@@ -4,8 +4,10 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
+  // MERLINUS SINGLE-DEALER: Neon/Prisma Postgres via DATABASE_URL (+ DIRECT_URL for migrations).
+  // APEX NATIONAL PLATFORM: Supabase Postgres — pooled DATABASE_URL, direct DIRECT_URL (see .env.example).
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // For Neon: use pooled in DATABASE_URL + direct (non-pooled) in DIRECT_URL for migrations
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── PII ENCRYPTION AT REST (Merlinus v2.0 — Phase 5 complete) ───────────────
@@ -36,9 +38,38 @@ enum TechnicianRole {
   service_advisor
 }
 
+// APEX NATIONAL PLATFORM — top-level franchise tenant for multi-dealer deployments.
+// MERLINUS SINGLE-DEALER: one default Dealer row backs the existing Tiverton dealership.
+model Dealer {
+  id                        String                        @id @default(cuid())
+  code                      String                        @unique
+  name                      String
+  status                    String                        @default("active")
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+  dealerships               Dealership[]
+  technicians               Technician[]
+  repairOrders              RepairOrder[]
+  repairLines               RepairLine[]
+  auditLogs                 AuditLog[]
+  usageLogs                 UsageLog[]
+  serviceAdvisors           ServiceAdvisor[]
+  advisorObservations       AdvisorComplaintObservation[]
+  certifiedStories          TechnicianCertifiedStory[]
+  technicianActivityLogs    TechnicianActivityLog[]
+  templates                 Template[]
+  knowledgeBaseEntries      KnowledgeBase[]
+
+  @@index([status])
+  @@map("Dealer")
+}
+
+// MERLINUS SINGLE-DEALER — physical store / rooftop (unchanged concept; now optionally under Dealer).
 model Dealership {
   id              String                        @id @default(cuid())
   name            String
+  dealerId        String?                       @map("dealer_id")
+  dealer          Dealer?                       @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   createdAt       DateTime                      @default(now())
   technicians     Technician[]
   repairOrders    RepairOrder[]
@@ -46,8 +77,11 @@ model Dealership {
   usageLogs       UsageLog[]
   serviceAdvisors ServiceAdvisor[]
   advisorObservations AdvisorComplaintObservation[]
+
+  @@index([dealerId])
 }
 
+// MERLINUS SINGLE-DEALER — Technician is the authenticated user model (no separate User table).
 model Technician {
   id             String        @id @default(cuid())
   email          String        @unique
@@ -58,6 +92,8 @@ model Technician {
   isAdmin        Boolean       @default(false)
   isActive       Boolean       @default(true)
   sessionVersion Int           @default(0)
+  dealerId       String?       @map("dealer_id")
+  dealer         Dealer?       @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId   String
   dealership     Dealership    @relation(fields: [dealershipId], references: [id])
   /** Links service_advisor role logins to their ServiceAdvisor profile for RO scoping. */
@@ -78,6 +114,7 @@ model Technician {
   technicianActivityLogs TechnicianActivityLog[]
   certifiedStories       TechnicianCertifiedStory[]
 
+  @@index([dealerId])
   @@index([dealershipId])
   @@index([isActive])
   @@index([deletedAt])
@@ -92,6 +129,8 @@ model RepairOrder {
   roNumberSearchTokens       String[]     @default([])
   technicianId               String
   technician                 Technician   @relation(fields: [technicianId], references: [id])
+  dealerId                   String?      @map("dealer_id")
+  dealer                     Dealer?      @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId               String
   dealership                 Dealership   @relation(fields: [dealershipId], references: [id])
   serviceAdvisorId           String?
@@ -116,15 +155,19 @@ model RepairOrder {
   advisorObservations        AdvisorComplaintObservation[]
 
   @@index([technicianId])
+  @@index([dealerId])
   @@index([dealershipId])
   @@index([roNumberSearchTokens], type: Gin)
   @@index([serviceAdvisorId])
+  @@index([dealerId, dealershipId])
 }
 
 // ─── Advisor Intelligence (Phase 1) ─────────────────────────────────────────
 
 model ServiceAdvisor {
   id              String   @id @default(cuid())
+  dealerId        String?  @map("dealer_id")
+  dealer          Dealer?  @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId    String
   dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   /** Encrypted advisor display name — sole source of truth at rest. */
@@ -148,6 +191,7 @@ model ServiceAdvisor {
   linkedAccounts  Technician[]
 
   @@unique([dealershipId, nameFingerprint])
+  @@index([dealerId])
   @@index([dealershipId, lastSeenAt])
   @@index([dealershipId, status])
   @@index([dealershipId, deletedAt])
@@ -168,6 +212,8 @@ model ServiceAdvisorAlias {
 
 model AdvisorComplaintObservation {
   id                     String         @id @default(cuid())
+  dealerId               String?        @map("dealer_id")
+  dealer                 Dealer?        @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId           String
   dealership             Dealership     @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   serviceAdvisorId       String
@@ -186,6 +232,7 @@ model AdvisorComplaintObservation {
 
   @@index([serviceAdvisorId, observedAt])
   @@index([repairOrderId])
+  @@index([dealerId])
   @@index([dealershipId, observedAt])
 }
 
@@ -205,6 +252,8 @@ model RepairLine {
   id                        String      @id @default(cuid())
   repairOrderId             String
   repairOrder               RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  dealerId                  String?     @map("dealer_id")
+  dealer                    Dealer?     @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   lineNumber                Int
   /** Encrypted line description — sole source of truth at rest. */
   descriptionEncrypted      String      @default("")
@@ -234,6 +283,7 @@ model RepairLine {
   updatedAt                 DateTime    @updatedAt
 
   @@index([repairOrderId])
+  @@index([dealerId])
   @@index([storyCertifiedAt])
 }
 
@@ -247,6 +297,8 @@ model Template {
   templateType  String   @default("Warranty")
   description   String?
   source       String    @default("seed")
+  dealerId     String?   @map("dealer_id")
+  dealer       Dealer?   @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId String    @default("__global__")
   createdById  String?
   useCount     Int       @default(0)
@@ -256,6 +308,7 @@ model Template {
 
   @@unique([dealershipId, title])
   @@index([category])
+  @@index([dealerId])
   @@index([dealershipId, lastUsedAt])
   @@index([source])
 }
@@ -269,12 +322,15 @@ model KnowledgeBase {
   cleanTemplateEncrypted    String  @db.Text
   tags             String   @default("[]")
   source           String   @default("seed")
+  dealerId         String?  @map("dealer_id")
+  dealer           Dealer?  @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId     String   @default("__global__")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@unique([dealershipId, title])
   @@index([category])
+  @@index([dealerId])
   @@index([dealershipId])
   @@index([source])
 }
@@ -286,6 +342,8 @@ model AuditLog {
   entityId     String?
   technicianId String?
   technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  dealerId     String?     @map("dealer_id")
+  dealer       Dealer?     @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId String
   dealership   Dealership  @relation(fields: [dealershipId], references: [id])
   metadata       String      @default("{}")
@@ -296,17 +354,21 @@ model AuditLog {
   entryHash      String      @default("")
   createdAt      DateTime    @default(now())
 
+  @@index([dealerId])
   @@index([dealershipId])
   @@index([technicianId])
   @@index([action])
   @@index([createdAt])
   @@index([dealershipId, createdAt])
+  @@index([dealerId, createdAt])
 }
 
 /** Operational technician activity — isolated from compliance AuditLog and advisor intelligence. */
 /** Certified warranty story indexed per technician — separate from audit/advisor data. */
 model TechnicianCertifiedStory {
   id              String     @id @default(cuid())
+  dealerId        String?    @map("dealer_id")
+  dealer          Dealer?    @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId    String
   technicianId    String
   technician      Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
@@ -321,6 +383,7 @@ model TechnicianCertifiedStory {
   createdAt       DateTime   @default(now())
 
   @@index([technicianId, certifiedAt(sort: Desc)])
+  @@index([dealerId])
   @@index([dealershipId, certifiedAt(sort: Desc)])
   @@index([repairOrderId])
   @@index([repairLineId])
@@ -328,6 +391,8 @@ model TechnicianCertifiedStory {
 
 model TechnicianActivityLog {
   id              String   @id @default(cuid())
+  dealerId        String?  @map("dealer_id")
+  dealer          Dealer?  @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId    String
   technicianId    String
   technician      Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
@@ -341,6 +406,7 @@ model TechnicianActivityLog {
   createdAt       DateTime @default(now())
 
   @@index([technicianId, createdAt])
+  @@index([dealerId])
   @@index([dealershipId, category, createdAt])
   @@index([repairLineId, createdAt])
   @@index([clientSessionId, createdAt])
@@ -350,11 +416,14 @@ model UsageLog {
   id           String      @id @default(cuid())
   technicianId String
   technician   Technician  @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  dealerId     String?     @map("dealer_id")
+  dealer       Dealer?     @relation(fields: [dealerId], references: [id], onDelete: SetNull)
   dealershipId String
   dealership   Dealership  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   routeKey     String
   createdAt    DateTime    @default(now())
 
   @@index([technicianId, createdAt])
+  @@index([dealerId])
   @@index([dealershipId, createdAt])
 }

@@ -93,6 +93,8 @@ export const STORY_PROMPT_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
 export interface AuditLogInput {
   action: AuditAction;
   dealershipId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on audit entries. */
+  dealerId?: string | null;
   technicianId?: string;
   entityType?: string;
   entityId?: string;
@@ -211,6 +213,7 @@ export async function appendAuditLogInTransaction(
       id,
       action: input.action,
       dealershipId: input.dealershipId,
+      ...(input.dealerId?.trim() ? { dealerId: input.dealerId.trim() } : {}),
       technicianId: input.technicianId,
       entityType: input.entityType,
       entityId: input.entityId,

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
+import { withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
 import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
 import { repairOrderListQuerySchema } from '@/lib/validation';
@@ -26,15 +27,20 @@ export function buildRepairOrderListWhere(
     dealershipId: string;
     technicianId: string;
     serviceAdvisorId?: string | null;
+    /** APEX NATIONAL PLATFORM — optional defense-in-depth tenant filter. */
+    dealerId?: string | null;
   },
   params: RepairOrderListParams
 ): Prisma.RepairOrderWhereInput {
-  const roleWhere: Prisma.RepairOrderWhereInput =
+  // MERLINUS SINGLE-DEALER: dealershipId remains the primary scope; dealerId is additive when present.
+  const roleWhere: Prisma.RepairOrderWhereInput = withOptionalDealerId(
     session.role === 'manager'
       ? { dealershipId: session.dealershipId }
       : session.role === 'service_advisor' && session.serviceAdvisorId
         ? { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId }
-        : { dealershipId: session.dealershipId, technicianId: session.technicianId };
+        : { dealershipId: session.dealershipId, technicianId: session.technicianId },
+    session.dealerId
+  );
 
   if (params.q) {
     const term = params.q;
