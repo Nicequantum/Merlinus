@@ -5,7 +5,8 @@ generator client {
 datasource db {
   provider  = "postgresql"
   // MERLINUS SINGLE-DEALER: Neon/Prisma Postgres via DATABASE_URL (+ DIRECT_URL for migrations).
-  // APEX NATIONAL PLATFORM: Supabase Postgres — pooled DATABASE_URL, direct DIRECT_URL (see .env.example).
+  // APEX NATIONAL PLATFORM (Phase 1.5): Supabase pooler on DATABASE_URL, DIRECT_URL for migrations.
+  // Set SUPABASE_DATABASE_URL or SUPABASE_DB_PASSWORD — resolved in src/lib/apex/databaseConfig.ts.
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }

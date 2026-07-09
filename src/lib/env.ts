@@ -5,7 +5,7 @@
 
 import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
-import { getSupabaseEnvConfig } from '@/lib/supabaseEnv';
+import { getSupabaseEnvConfig, isApexSupabaseProductionReady } from '@/lib/supabaseEnv';
 import { APP_VERSION } from '@/lib/version';
 
 const REQUIRED_ENV_VARS = [
@@ -149,6 +149,16 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
   }
   if (!supabase.url && (supabase.anonKey || supabase.serviceRoleKey)) {
     warnings.push('Supabase keys are set without NEXT_PUBLIC_SUPABASE_URL');
+  }
+  if (supabase.isServiceConfigured && !supabase.isPostgresConfigured) {
+    warnings.push(
+      'Supabase API is configured but Postgres connection is missing (SUPABASE_DATABASE_URL or SUPABASE_DB_PASSWORD)'
+    );
+  }
+  if (isProduction && supabase.url && supabase.serviceRoleKey && !isApexSupabaseProductionReady()) {
+    warnings.push(
+      'Apex Supabase production deployment incomplete — add Postgres connection vars from Supabase dashboard'
+    );
   }
 
   const valid = missing.length === 0 && forbiddenPublicKeys.length === 0;

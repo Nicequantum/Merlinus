@@ -1,7 +1,28 @@
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { withSentryConfig } from '@sentry/nextjs';
 import { BASE_SECURITY_HEADERS } from './security-policy.mjs';
+
+// APEX NATIONAL PLATFORM — load .env.apex.local early when APEX_ENV=1 (before Next env merge).
+const apexEnvEnabled = ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase());
+if (apexEnvEnabled) {
+  const apexEnvPath = path.join(process.cwd(), '.env.apex.local');
+  if (existsSync(apexEnvPath)) {
+    for (const line of readFileSync(apexEnvPath, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  }
+}
 
 // Permissions-Policy: camera=(self), microphone=(self), geolocation=()
 // CSP (security-policy.mjs): default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'

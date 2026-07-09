@@ -1,13 +1,20 @@
 import 'server-only';
 import { PrismaClient } from '@prisma/client';
+import { applyResolvedDatabaseEnv, getDatabaseBackendSummary } from '@/lib/apex/databaseConfig';
 import { logger } from './logger';
 import { withDbConnectionRetry } from './dbRetry';
+
+// APEX NATIONAL PLATFORM — apply Supabase Postgres URLs before PrismaClient reads DATABASE_URL.
+const databaseBackend = applyResolvedDatabaseEnv();
 
 const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
 function createPrismaClient(): PrismaClient {
+  if (process.env.NODE_ENV === 'development' && databaseBackend.backend === 'apex_supabase') {
+    logger.info('db.backend', getDatabaseBackendSummary());
+  }
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });

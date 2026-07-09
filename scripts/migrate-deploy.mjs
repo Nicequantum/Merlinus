@@ -4,6 +4,7 @@
  * Falls back DIRECT_URL to DATABASE_URL when a dedicated direct connection is not configured.
  */
 import { execSync } from 'node:child_process';
+import { applyApexDatabaseEnv } from './resolve-apex-database-env.mjs';
 
 const isVercel = process.env.VERCEL === '1';
 const shouldMigrate =
@@ -12,6 +13,12 @@ const shouldMigrate =
 if (!shouldMigrate) {
   console.log('[merlin:migrate] Skipping migrate deploy (not Vercel/CI)');
   process.exit(0);
+}
+
+// APEX NATIONAL PLATFORM — prefer Supabase Postgres in production when configured.
+const apexDb = applyApexDatabaseEnv();
+if (apexDb.applied) {
+  console.log('[merlin:migrate] Using Apex Supabase Postgres (resolved DATABASE_URL)');
 }
 
 if (!process.env.DATABASE_URL?.trim()) {

@@ -6,8 +6,11 @@ import { encryptPII, decryptPII } from './encryption';
 import 'server-only';
 
 import { prisma, probeDatabaseConnection } from './db';
+import { getDatabaseBackendSummary } from '@/lib/apex/databaseConfig';
 import { isCiOrTestRuntime, isKvConfigured, isProductionEnv } from './rate-limit';
 import { logger } from './logger';
+import { isApexSupabaseProductionReady } from '@/lib/supabaseEnv';
+import { probeSupabaseConnection } from '@/lib/supabase';
 
 /** Lightweight Grok reachability probe — models list only (no token spend). */
 const GROK_MODELS_URL = 'https://api.x.ai/v1/models';
@@ -332,11 +335,34 @@ export function checkMaintenanceMode(): DependencyCheck {
   return { status: 'ok', detail: 'Normal operation' };
 }
 
+/** APEX NATIONAL PLATFORM — optional Supabase API probe (warn when partially configured). */
+export async function checkSupabase(): Promise<DependencyCheck> {
+  const backend = getDatabaseBackendSummary();
+  if (!isApexSupabaseProductionReady()) {
+    return { status: 'ok', detail: 'Supabase not configured (Merlinus legacy mode)' };
+  }
+
+  const probe = await probeSupabaseConnection('service');
+  if (!probe.ok) {
+    return {
+      status: 'warn',
+      latencyMs: probe.latencyMs,
+      detail: probe.detail || 'Supabase API probe failed',
+    };
+  }
+
+  return {
+    status: 'ok',
+    latencyMs: probe.latencyMs,
+    detail: `Apex Supabase connected (${backend.supabaseProjectRef ?? 'project'})`,
+  };
+}
+
 export async function runAllHealthChecks(): Promise<Record<string, DependencyCheck>> {
   const environment = checkEnvironmentConfig();
   const voice = checkVoiceInput();
   const maintenance = checkMaintenanceMode();
-  const [database, encryption, session, blob, grok, kv, advisorIntelligence] = await Promise.all([
+  const [database, encryption, session, blob, grok, kv, advisorIntelligence, supabase] = await Promise.all([
     checkDatabase(),
     checkEncryption(),
     checkSessionSecret(),
@@ -344,9 +370,22 @@ export async function runAllHealthChecks(): Promise<Record<string, DependencyChe
     checkGrokApi(),
     checkKvStore(),
     checkAdvisorIntelligence(),
+    checkSupabase(),
   ]);
 
-  return { environment, database, encryption, session, blob, grok, kv, voice, maintenance, advisorIntelligence };
+  return {
+    environment,
+    database,
+    encryption,
+    session,
+    blob,
+    grok,
+    kv,
+    voice,
+    maintenance,
+    advisorIntelligence,
+    supabase,
+  };
 }
 
 /**

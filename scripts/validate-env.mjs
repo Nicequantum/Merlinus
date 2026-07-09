@@ -6,6 +6,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { applyApexDatabaseEnv } from './resolve-apex-database-env.mjs';
 
 const REQUIRED = ['DATABASE_URL', 'DATA_ENCRYPTION_KEY', 'SEARCH_HMAC_KEY', 'SESSION_SECRET'];
 /** Must never be set — exposes xAI keys to the browser bundle. Use GROK_API_KEY only. */
@@ -40,6 +41,18 @@ function loadDotEnvFile(filename) {
 loadDotEnvFile('.env');
 loadDotEnvFile('.env.local');
 loadDotEnvFile('.env.production');
+
+const apexEnvEnabled = ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase());
+if (apexEnvEnabled) {
+  loadDotEnvFile('.env.apex.local');
+  console.log('[merlin:build] APEX_ENV active — loaded .env.apex.local');
+}
+
+// APEX NATIONAL PLATFORM — resolve Supabase Postgres URLs before build/migrate checks.
+const apexDb = applyApexDatabaseEnv({ loadApexEnvFile: false });
+if (apexDb.applied) {
+  console.log('[merlin:build] Apex Supabase Postgres active (DATABASE_URL resolved)');
+}
 
 const isProduction =
   process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';

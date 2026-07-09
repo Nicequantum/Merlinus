@@ -11,6 +11,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { applyApexDatabaseEnv } from './resolve-apex-database-env.mjs';
 
 const PREFIX = '[merlin:pre-deploy]';
 const ROOT = process.cwd();
@@ -282,6 +283,15 @@ async function main() {
   loadDotEnvFile('.env');
   loadDotEnvFile('.env.local');
   loadDotEnvFile('.env.production');
+  const apexEnvEnabled = ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase());
+  if (apexEnvEnabled) {
+    loadDotEnvFile('.env.apex.local');
+  }
+
+  const apexDb = applyApexDatabaseEnv({ loadApexEnvFile: false });
+  if (apexDb.applied) {
+    pass('Apex Supabase Postgres resolved for DATABASE_URL');
+  }
 
   checkProductionEnv();
   checkForbiddenPublicGrokKeys();
