@@ -112,6 +112,12 @@ if (publicAuthModeRaw && publicAuthMode !== authMode) {
   );
 }
 
+if ((authMode === 'dual' || authMode === 'clerk') && clerkKeysConfigured && !process.env.CLERK_WEBHOOK_SIGNING_SECRET?.trim()) {
+  console.warn(
+    '[merlin:build] CLERK_WEBHOOK_SIGNING_SECRET is unset — Clerk webhooks will fail verification until configured.'
+  );
+}
+
 if (isProduction) {
   const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingScanning.length > 0) {

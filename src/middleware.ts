@@ -1,3 +1,4 @@
+import { clerkMiddleware } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { BASE_SECURITY_HEADERS, CONTENT_SECURITY_POLICY } from '../security-policy.mjs';
@@ -6,6 +7,7 @@ import {
   BOOTSTRAP_SEED_PATH,
   logBootstrapSeedBlockedAttempt,
 } from './lib/bootstrapGuard';
+import { isClerkAuthPathEnabled } from './lib/authMode';
 import { isProductionRuntime } from './lib/productionRuntime';
 import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeaders';
 
@@ -20,6 +22,8 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/me',
   '/api/auth/logout',
+  '/api/auth/clerk/link',
+  '/api/webhooks/clerk',
 ]);
 
 function isPublicPath(pathname: string): boolean {
@@ -55,7 +59,7 @@ function denyBootstrapSeedInProduction(request: NextRequest): NextResponse | nul
   return denied;
 }
 
-export function middleware(request: NextRequest) {
+function merlinMiddleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   const bootstrapDenied = denyBootstrapSeedInProduction(request);
@@ -64,7 +68,6 @@ export function middleware(request: NextRequest) {
   const crossOriginDenied = denyCrossOriginApi(request);
   if (crossOriginDenied) return crossOriginDenied;
 
-  // Auth is enforced per API route (withAuth). Middleware applies security headers and marks public paths.
   const response = NextResponse.next();
   applySecurityHeaders(response.headers, BASE_SECURITY_HEADERS);
   response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
@@ -74,6 +77,12 @@ export function middleware(request: NextRequest) {
 
   return response;
 }
+
+const middleware = isClerkAuthPathEnabled()
+  ? clerkMiddleware((_auth, request) => merlinMiddleware(request))
+  : merlinMiddleware;
+
+export default middleware;
 
 export const config = {
   matcher: [

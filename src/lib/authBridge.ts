@@ -2,14 +2,12 @@ import 'server-only';
 
 import { auth } from '@clerk/nextjs/server';
 import {
-  buildSessionPayloadFromTechnician,
   getSessionContext,
   type SessionPayload,
 } from '@/lib/auth';
+import { attemptClerkEmailLinkOnSignIn, loadLinkedTechnicianSession } from '@/lib/clerkIdentity';
 import { isClerkAuthPathEnabled, isLegacyAuthPathEnabled } from '@/lib/authMode';
-import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
 export type AuthSource = 'clerk' | 'legacy';
 
@@ -21,25 +19,17 @@ export interface AppSessionContext {
   jwtPayload: SessionPayload | null;
 }
 
-async function resolveClerkLinkedSession(clerkUserId: string): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { clerkUserId },
-    include: { dealership: true },
-  });
-
-  if (!tech || !isTechnicianAccountActive(tech)) return null;
-  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
-
-  return buildSessionPayloadFromTechnician(tech);
-}
-
 async function tryResolveClerkSession(): Promise<SessionPayload | null> {
   if (!isClerkAuthPathEnabled()) return null;
 
   try {
     const { userId } = await auth();
     if (!userId) return null;
-    return resolveClerkLinkedSession(userId);
+
+    const linked = await loadLinkedTechnicianSession(userId);
+    if (linked) return linked;
+
+    return attemptClerkEmailLinkOnSignIn(userId);
   } catch (error) {
     logger.warn('auth.clerk_session_resolve_failed', {
       error: error instanceof Error ? error.message : String(error),

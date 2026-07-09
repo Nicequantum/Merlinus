@@ -51,6 +51,14 @@ export interface TechnicianUser {
   deletedAt?: string | null;
 }
 
+export interface ClerkLinkStatus {
+  clerkEnabled: boolean;
+  legacySignedIn: boolean;
+  clerkSignedIn: boolean;
+  linked: boolean;
+  canLink: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -178,6 +186,13 @@ export const api = {
   logout: () => apiFetch<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 
   me: () => apiFetch<{ session: TechnicianSession | null }>('/api/auth/me'),
+
+  getClerkLinkStatus: () => apiFetch<ClerkLinkStatus>('/api/auth/clerk/link'),
+
+  linkClerkAccount: () =>
+    apiFetch<{ linked: boolean; session: TechnicianSession }>('/api/auth/clerk/link', {
+      method: 'POST',
+    }),
 
   acceptConsent: () =>
     apiFetch<{

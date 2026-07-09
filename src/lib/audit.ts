@@ -18,6 +18,7 @@ export type AuditAction =
   | 'auth.login'
   | 'auth.logout'
   | 'auth.password_change'
+  | 'auth.clerk_link'
   | 'consent.accept'
   | 'legalDisclaimer.accept'
   | 'ro.create'

@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { api, type TechnicianUser } from '@/lib/api';
 import type { AdvisorListItem, TechnicianSession } from '@/types';
 import { DealershipBranding } from '@/components/DealershipBranding';
+import { ClerkLinkAccountSection } from '@/components/ClerkLinkAccountSection';
 import { SecurityComplianceSection } from '@/components/SecurityComplianceSection';
 
 interface SettingsViewProps {
@@ -253,6 +254,8 @@ export function SettingsView({
           <DealershipBranding size="sm" />
         </div>
       </div>
+
+      <ClerkLinkAccountSection />
 
       <div className="benz-card p-5 mb-5">
         <div className="flex items-center gap-2.5 mb-4">

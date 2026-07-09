@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { ClerkSignInView } from '@/components/ClerkSignInView';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { clerkEnvConfigured, getAuthMode } from '@/lib/authMode';
 
 export default function SignInPage() {
@@ -9,5 +11,13 @@ export default function SignInPage() {
     redirect('/');
   }
 
-  return <ClerkSignInView showLegacyLink={mode === 'dual'} />;
+  return (
+    <Suspense
+      fallback={
+        <LoadingScreen label="Loading sign-in" sublabel="Preparing secure authentication…" />
+      }
+    >
+      <ClerkSignInView showLegacyLink={mode === 'dual'} />
+    </Suspense>
+  );
 }

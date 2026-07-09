@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConsentModal } from '@/components/ConsentModal';
@@ -15,7 +15,8 @@ import {
   loginWithCredentials,
   logoutSession,
 } from '@/lib/loginSession';
-import { shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
+import { api } from '@/lib/api';
+import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
 import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
@@ -39,6 +40,7 @@ type SessionPhase = 'checking' | 'anonymous' | 'authenticated';
 
 export function BenzTechApp() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [session, setSession] = useState<TechnicianSession | null>(null);
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking');
   const [consentLoading, setConsentLoading] = useState(false);
@@ -90,6 +92,32 @@ export function BenzTechApp() {
       return null;
     }
   }, []);
+
+  useEffect(() => {
+    if (sessionPhase !== 'authenticated' || searchParams.get('link_account') !== '1') return;
+    if (!isClerkSignInAvailable()) return;
+
+    let cancelled = false;
+
+    api
+      .getClerkLinkStatus()
+      .then(async (status) => {
+        if (cancelled || !status.canLink) return;
+        await api.linkClerkAccount();
+        if (cancelled) return;
+        toast.success('Clerk account linked');
+        router.replace('/');
+        await refreshSession();
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        clientLog.warn('auth.clerk_auto_link_skipped', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionPhase, searchParams, router, refreshSession]);
 
   const login = useCallback(async (d7Number: string, password: string) => {
     await loginWithCredentials(d7Number, password);

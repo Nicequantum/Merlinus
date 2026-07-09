@@ -2,6 +2,7 @@
 
 import { SignIn } from '@clerk/nextjs';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 
@@ -10,6 +11,9 @@ interface ClerkSignInViewProps {
 }
 
 export function ClerkSignInView({ showLegacyLink = false }: ClerkSignInViewProps) {
+  const searchParams = useSearchParams();
+  const linkingAccount = searchParams.get('link_account') === '1';
+
   return (
     <div className="login-shell">
       <div className="login-panel">
@@ -22,6 +26,13 @@ export function ClerkSignInView({ showLegacyLink = false }: ClerkSignInViewProps
           <div className="merlin-brand-divider" aria-hidden="true" />
           <DealershipBranding size="lg" />
         </div>
+
+        {linkingAccount ? (
+          <p className="login-footer mb-4">
+            Sign in with the same email as your D7 account, then return to Settings to complete
+            linking.
+          </p>
+        ) : null}
 
         <div className="clerk-sign-in-root benz-card-elevated benz-card-elevated-accent">
           <SignIn
@@ -46,7 +57,13 @@ export function ClerkSignInView({ showLegacyLink = false }: ClerkSignInViewProps
           />
         </div>
 
-        {showLegacyLink ? (
+        {linkingAccount ? (
+          <p className="login-footer">
+            <Link href="/?link_account=1" className="login-alt-link">
+              Return to app to complete linking
+            </Link>
+          </p>
+        ) : showLegacyLink ? (
           <p className="login-footer">
             <Link href="/" className="login-alt-link">
               Sign in with D7 number instead
