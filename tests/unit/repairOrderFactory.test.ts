@@ -6,8 +6,8 @@ import {
 } from '../../src/utils/repairOrderFactory';
 
 describe('repairOrderFactory', () => {
-  test('createRepairOrderFromScan creates one repair line per complaint', () => {
-    const ro = createRepairOrderFromScan({
+  test('createRepairOrderFromScan creates one repair line per complaint', async () => {
+    const ro = await createRepairOrderFromScan({
       roNumber: '482910',
       vehicle: { vin: '', year: '2022', make: 'Mercedes-Benz', model: 'GLE', mileageIn: '', mileageOut: '' },
       customerName: 'JOHN SMITH',
@@ -29,14 +29,14 @@ describe('repairOrderFactory', () => {
     assert.ok(ro.repairLines[3].description.startsWith('D.'));
   });
 
-  test('syncRepairLinesWithComplaints adds lines when complaints grow', () => {
-    const existing = createRepairOrderFromScan({
+  test('syncRepairLinesWithComplaints adds lines when complaints grow', async () => {
+    const existing = (await createRepairOrderFromScan({
       roNumber: '1',
       vehicle: { vin: '', year: '', make: '', model: '', mileageIn: '', mileageOut: '' },
       customerName: 'Test',
       complaints: ['Concern A'],
       complaintLabels: ['A'],
-    }).repairLines;
+    })).repairLines;
 
     const synced = syncRepairLinesWithComplaints(
       existing,

@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       let input: RepairOrderInput;
 
       if (data.fromExtraction) {
-        const ro = createRepairOrderFromScan({
+        const ro = await createRepairOrderFromScan({
           roNumber: data.roNumber || `R-${Date.now().toString().slice(-6)}`,
           vehicle: {
             vin: data.vehicle?.vin || '',

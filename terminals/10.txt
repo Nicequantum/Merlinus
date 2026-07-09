@@ -3,7 +3,7 @@ pid: 10832
 cwd: "C:\Users\hombr\viti-ai-clone"
 command: "Set-Location C:\\Users\\hombr\\viti-ai-clone; npm run dev"
 started_at: 2026-07-04T02:21:10.602Z
-running_for_ms: 810005   
+running_for_ms: 86400004 
 ---
 
 > merlinus@3.0.0 dev
@@ -66,3 +66,9 @@ Please make sure your database server is running at `db.prisma.io:5432`.
 <w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (127kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
 <w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (139kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
  ✓ Compiled in 1193ms (1604 modules)
+
+---
+exit_code: -1
+elapsed_ms: 86400004
+ended_at: 2026-07-05T02:21:10.632Z
+---

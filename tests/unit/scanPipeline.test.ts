@@ -6,6 +6,7 @@ import {
   enrichScannedRepairLinesWithCustomerPayTemplates,
   filterScannedComplaintsForProcessing,
   formatScanApiError,
+  generateDynamicCustomerPayNarrative,
   isRetriableScanMessage,
   isStrongGrokExtraction,
   matchCustomerPayTemplateFromScanText,
@@ -85,8 +86,24 @@ describe('scan pipeline service lines', () => {
     assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
   });
 
-  it('applies pre-written narratives only to matching unscanned lines', () => {
-    const lines = enrichScannedRepairLinesWithCustomerPayTemplates(
+  it('matches expanded customer pay templates from scan text', () => {
+    const match = matchCustomerPayTemplateFromScanText('C. Wiper blade replacement — streaking windshield');
+    assert.equal(match?.templateTitle, 'Wiper Blade Replacement');
+  });
+
+  it('generateDynamicCustomerPayNarrative falls back to base template without Grok', async () => {
+    const base =
+      'Performed wiper blade replacement service. Removed the worn wiper blade inserts or complete blade assemblies and installed new wiper blades.';
+    const narrative = await generateDynamicCustomerPayNarrative({
+      templateTitle: 'Wiper Blade Replacement',
+      baseTemplate: base,
+      customerComplaint: 'Customer states wipers streak',
+    });
+    assert.equal(narrative, base);
+  });
+
+  it('applies pre-written narratives only to matching unscanned lines', async () => {
+    const lines = await enrichScannedRepairLinesWithCustomerPayTemplates(
       [
         {
           id: 'line-1',
@@ -117,9 +134,9 @@ describe('scan pipeline service lines', () => {
     assert.match(lines[1].warrantyStory ?? '', /^Performed a complete front brake service/);
   });
 
-  it('does not overwrite an existing warranty story', () => {
+  it('does not overwrite an existing warranty story', async () => {
     const existingStory = 'Existing warranty narrative.';
-    const lines = enrichScannedRepairLinesWithCustomerPayTemplates(
+    const lines = await enrichScannedRepairLinesWithCustomerPayTemplates(
       [
         {
           id: 'line-1',

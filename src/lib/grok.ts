@@ -18,6 +18,10 @@ import {
   type StoryQualityResult,
   type StoryReviewResult,
 } from '@/prompts/storyQuality';
+import {
+  CUSTOMER_PAY_DYNAMIC_SYSTEM_PROMPT,
+  buildCustomerPayDynamicUserMessage,
+} from '@/prompts/customerPayDynamic';
 import { PROMPT_VERSION } from '@/prompts/version';
 import {
   SYSTEM_PROMPT,
@@ -167,6 +171,105 @@ async function grokChat(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export interface GenerateDynamicCustomerPayNarrativeInput {
+  templateTitle: string;
+  baseTemplate: string;
+  customerComplaint: string;
+}
+
+const CUSTOMER_PAY_DYNAMIC_MAX_TOKENS = 900;
+const CUSTOMER_PAY_DYNAMIC_TIMEOUT_MS = 25_000;
+const CUSTOMER_PAY_MIN_TOKEN_VARIATION = 0.08;
+
+function tokenizeForVariationCheck(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 2)
+  );
+}
+
+function customerPayNarrativeHasMinimumVariation(baseTemplate: string, candidate: string): boolean {
+  const normalizedBase = baseTemplate.trim().toLowerCase();
+  const normalizedCandidate = candidate.trim().toLowerCase();
+  if (!normalizedCandidate || normalizedCandidate === normalizedBase) return false;
+
+  const baseTokens = tokenizeForVariationCheck(baseTemplate);
+  const candidateTokens = tokenizeForVariationCheck(candidate);
+  if (baseTokens.size === 0) return normalizedCandidate !== normalizedBase;
+
+  let shared = 0;
+  for (const token of baseTokens) {
+    if (candidateTokens.has(token)) shared += 1;
+  }
+  const overlapRatio = shared / baseTokens.size;
+  return overlapRatio <= 1 - CUSTOMER_PAY_MIN_TOKEN_VARIATION;
+}
+
+function customerPayNarrativeToneOk(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (trimmed.length < 40) return false;
+  if (/[{}\[\]"]/.test(trimmed)) return false;
+  return /^Performed\b/i.test(trimmed);
+}
+
+/**
+ * Light Grok rewrite of a Customer Pay base template using the scanned customer complaint.
+ * Falls back to the base template when Grok is unavailable or output fails guardrails.
+ */
+export async function generateDynamicCustomerPayNarrative(
+  input: GenerateDynamicCustomerPayNarrativeInput
+): Promise<string> {
+  const baseTemplate = input.baseTemplate?.trim() ?? '';
+  if (!baseTemplate) return baseTemplate;
+
+  if (!isGrokConfigured()) {
+    return baseTemplate;
+  }
+
+  const userMessage = buildCustomerPayDynamicUserMessage(input);
+  const attempts: Array<{ temperature: number; perfLabel: string }> = [
+    { temperature: 0.35, perfLabel: 'grok.customer_pay.dynamic' },
+    { temperature: 0.5, perfLabel: 'grok.customer_pay.dynamic_retry' },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const raw = await grokChat(
+        [
+          { role: 'system', content: CUSTOMER_PAY_DYNAMIC_SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+        {
+          model: GROK_STORY_MODEL,
+          temperature: attempt.temperature,
+          max_tokens: CUSTOMER_PAY_DYNAMIC_MAX_TOKENS,
+          timeoutMs: CUSTOMER_PAY_DYNAMIC_TIMEOUT_MS,
+          perfLabel: attempt.perfLabel,
+        }
+      );
+      const candidate = raw?.trim() ?? '';
+      if (
+        customerPayNarrativeToneOk(candidate) &&
+        customerPayNarrativeHasMinimumVariation(baseTemplate, candidate)
+      ) {
+        return candidate;
+      }
+    } catch (error) {
+      logger.warn('grok.customer_pay.dynamic_failed', {
+        templateTitle: input.templateTitle,
+        error: error instanceof Error ? error.message : 'unknown',
+        perfLabel: attempt.perfLabel,
+      });
+      break;
+    }
+  }
+
+  return baseTemplate;
 }
 
 export async function generateWarrantyStory(ro: RepairOrder, line: RepairLine): Promise<string> {

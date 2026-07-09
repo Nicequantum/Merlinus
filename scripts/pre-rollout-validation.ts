@@ -1035,7 +1035,7 @@ async function checkCoreFeatures(): Promise<void> {
   }
 
   try {
-    const ro = createRepairOrderFromScan({
+    const ro = await createRepairOrderFromScan({
       roNumber: 'PRE-ROLLOUT',
       vehicle: { vin: 'WDDGF4HB0CA000000', year: '2022', make: 'Mercedes-Benz', model: 'C300', mileageIn: '45000', mileageOut: '' },
       customerName: 'PRE-ROLLOUT TEST',

@@ -70,21 +70,21 @@ export function syncRepairLinesWithComplaints(
   });
 }
 
-export function createRepairOrderFromScan(params: {
+export async function createRepairOrderFromScan(params: {
   roNumber: string;
   vehicle: VehicleInfo;
   customerName: string;
   complaints: string[];
   complaintLabels?: string[];
   serviceAdvisorName?: string;
-}): RepairOrder {
+}): Promise<RepairOrder> {
   const filtered = filterScannedComplaintsForProcessing(
     params.complaints,
     params.complaintLabels
   );
   const labels = filtered.complaintLabels;
   const complaints = filtered.complaints;
-  const repairLines = enrichScannedRepairLinesWithCustomerPayTemplates(
+  const repairLines = await enrichScannedRepairLinesWithCustomerPayTemplates(
     complaints.length > 0
       ? complaints.map((complaint, i) => defaultRepairLine(complaint, i + 1, labels[i]))
       : [defaultRepairLine()],

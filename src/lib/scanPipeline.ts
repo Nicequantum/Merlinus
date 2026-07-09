@@ -171,8 +171,61 @@ function scoreCustomerPayTemplateMatch(scanText: string, templateTitle: string):
   if (titleNorm.includes('main battery') && normalized.includes('auxiliary') && !normalized.includes('main')) {
     return 0;
   }
+  if (titleNorm.includes('flat tire repair') && normalized.includes('replace') && !normalized.includes('repair')) {
+    return 0;
+  }
+  if (titleNorm.includes('tire replacement') && normalized.includes('repair') && !normalized.includes('replace')) {
+    return 0;
+  }
+  if (titleNorm.includes('headlight bulb') && normalized.includes('tail') && !normalized.includes('head')) {
+    return 0;
+  }
+  if (titleNorm.includes('taillight bulb') && normalized.includes('head') && !normalized.includes('tail')) {
+    return 0;
+  }
+  if (titleNorm.includes('dome light') && normalized.includes('headlight')) {
+    return 0;
+  }
+  if (titleNorm.includes('cabin air filter') && normalized.includes('engine air') && !normalized.includes('cabin')) {
+    return 0;
+  }
+  if (titleNorm.includes('engine air filter') && normalized.includes('cabin') && !normalized.includes('engine')) {
+    return 0;
+  }
+  if (titleNorm.includes('battery test') && normalized.includes('replace') && !normalized.includes('test')) {
+    return 0;
+  }
 
   return Math.round(matchedTokens.reduce((sum, token) => sum + token.length, 0) * coverage);
+}
+
+export interface GenerateDynamicCustomerPayNarrativeInput {
+  templateTitle: string;
+  baseTemplate: string;
+  customerComplaint: string;
+}
+
+/**
+ * Dynamic Customer Pay templating — light Grok variation of a matched base template.
+ * Server-only Grok call; returns the base template unchanged on client or when Grok fails.
+ */
+export async function generateDynamicCustomerPayNarrative(
+  input: GenerateDynamicCustomerPayNarrativeInput
+): Promise<string> {
+  const baseTemplate = input.baseTemplate?.trim() ?? '';
+  if (!baseTemplate) return baseTemplate;
+  if (typeof window !== 'undefined') return baseTemplate;
+
+  try {
+    const { generateDynamicCustomerPayNarrative: generateWithGrok } = await import('@/lib/grok');
+    return await generateWithGrok(input);
+  } catch {
+    return baseTemplate;
+  }
+}
+
+function isCustomerPayEligibleForDynamicStory(line: RepairLine): boolean {
+  return !line.isCustomerPay && !line.warrantyStory?.trim();
 }
 
 /** Match a scanned line to a defined Customer Pay template, if any. */
@@ -195,34 +248,51 @@ export function matchCustomerPayTemplateFromScanText(scanText: string): Customer
 }
 
 /**
- * Apply Customer Pay pre-written narratives to scanned repair lines when scan text matches
- * a defined template. Warranty lines without a match are unchanged; existing stories are never
- * overwritten.
+ * Apply Customer Pay narratives to scanned repair lines when scan text matches a defined template.
+ * Uses generateDynamicCustomerPayNarrative for light Grok variation tied to the customer complaint.
+ * Guardrails: only unmatched-warranty lines with no existing story; warranty lines are never modified.
  */
-export function enrichScannedRepairLinesWithCustomerPayTemplates(
+export async function enrichScannedRepairLinesWithCustomerPayTemplates(
   repairLines: RepairLine[],
   complaints: string[],
   complaintLabels?: string[]
-): RepairLine[] {
+): Promise<RepairLine[]> {
   const { complaints: filteredComplaints } = filterScannedComplaintsForProcessing(
     complaints,
     complaintLabels
   );
 
-  return repairLines.map((line, index) => {
-    if (line.isCustomerPay || line.warrantyStory?.trim()) return line;
+  const enriched: RepairLine[] = [];
+
+  for (let index = 0; index < repairLines.length; index += 1) {
+    const line = repairLines[index];
+    if (!isCustomerPayEligibleForDynamicStory(line)) {
+      enriched.push(line);
+      continue;
+    }
 
     const scanText = [filteredComplaints[index], line.customerConcern, line.description]
       .filter(Boolean)
       .join(' ');
 
     const match = matchCustomerPayTemplateFromScanText(scanText);
-    if (!match) return line;
+    if (!match) {
+      enriched.push(line);
+      continue;
+    }
 
-    return {
+    const warrantyStory = await generateDynamicCustomerPayNarrative({
+      templateTitle: match.templateTitle,
+      baseTemplate: match.preWrittenStory,
+      customerComplaint: scanText,
+    });
+
+    enriched.push({
       ...line,
-      warrantyStory: match.preWrittenStory,
+      warrantyStory,
       isCustomerPay: true,
-    };
-  });
+    });
+  }
+
+  return enriched;
 }

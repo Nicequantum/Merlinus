@@ -1,9 +1,10 @@
 /**
- * Customer Pay story templates — pre-written narratives for non-warranty work.
+ * Customer Pay story templates — base narratives for non-warranty work.
  *
- * Compliance: Customer Pay repairs do not require Merlin AI generation, MI 2.0
- * quality scoring, or warranty-grade audit promptVersion tracking. Applying these
- * templates bypasses Grok entirely and writes a lightweight audit entry instead.
+ * Compliance: Customer Pay repairs do not require MI 2.0 quality scoring or
+ * warranty-grade audit promptVersion tracking. Manual template apply uses these
+ * stories directly. Scan enrichment may apply light Grok variation via
+ * generateDynamicCustomerPayNarrative while preserving template facts and tone.
  */
 
 export type TemplateTypeLabel = 'Warranty' | 'CustomerPay';
@@ -86,6 +87,72 @@ export const CUSTOMER_PAY_TEMPLATES: CustomerPayTemplate[] = [
     description: 'Transmission fluid and filter service with Xentry level check.',
     preWrittenStory:
       'Performed transmission service. Drained the old transmission fluid and replaced the internal filter. Refilled with new Mercedes-Benz approved transmission fluid. Connected Xentry and used the ultrasonic sensor to check and set the transmission fluid to the correct level at operating temperature. Performed a transmission adaptation reset and test drove the vehicle to verify smooth shifting and proper operation.',
+  },
+  {
+    title: 'Flat Tire Repair',
+    description: 'Puncture repair or tire dismount, patch/plug, and rebalance.',
+    preWrittenStory:
+      'Performed flat tire repair service. Located the puncture in the tire tread and removed the foreign object. Dismounted the tire, installed an approved patch/plug repair per manufacturer guidelines, and rebalanced the wheel assembly. Reinstalled the tire, torqued the lug bolts to specification, and verified proper tire pressure. Conducted a brief road test to confirm no vibration or pull.',
+  },
+  {
+    title: 'Tire Replacement',
+    description: 'Single or multiple tire replacement with mount, balance, and torque.',
+    preWrittenStory:
+      'Performed tire replacement service. Removed the worn tire(s) and installed new tire(s) of matching specification. Mounted and balanced each wheel assembly, reinstalled on the vehicle, and torqued all lug bolts to manufacturer specification. Set tire pressures to the recommended placard values and verified no TPMS warnings after a brief road test.',
+  },
+  {
+    title: 'Headlight Bulb Replacement',
+    description: 'Headlamp bulb replacement with aim check.',
+    preWrittenStory:
+      'Performed headlight bulb replacement. Removed and replaced the failed headlamp bulb with a new unit of correct specification. Reinstalled all trim and fasteners, verified proper bulb seating and connector retention, and checked headlamp operation on low and high beam. Adjusted aim as needed to ensure proper road illumination.',
+  },
+  {
+    title: 'Taillight Bulb Replacement',
+    description: 'Tail lamp or brake light bulb replacement.',
+    preWrittenStory:
+      'Performed taillight bulb replacement. Accessed the tail lamp assembly and replaced the failed bulb with a new unit of correct specification. Reassembled the lamp housing and verified brake light, tail light, and turn signal operation. Confirmed no related warning messages on the instrument cluster.',
+  },
+  {
+    title: 'Interior Dome Light Replacement',
+    description: 'Overhead courtesy or dome lamp bulb replacement.',
+    preWrittenStory:
+      'Performed interior dome light bulb replacement. Removed the overhead lens or assembly and replaced the failed courtesy lamp bulb with a new unit. Reinstalled the lens securely and verified proper illumination on door-open and manual switch settings. Confirmed no flicker or intermittent operation.',
+  },
+  {
+    title: 'Fuse Replacement — Power Outlet',
+    description: 'Fuse replacement restoring cigarette lighter or 12-volt power outlet.',
+    preWrittenStory:
+      'Performed fuse replacement for the cigarette lighter / 12-volt power outlet circuit. Located the failed fuse in the fuse panel, replaced it with a new fuse of correct amperage, and tested the power outlet for proper voltage and retention of accessories. Verified related circuits were unaffected and no warning messages remained.',
+  },
+  {
+    title: 'Washer Fluid Top-Off',
+    description: 'Windshield washer fluid fill and spray pattern check.',
+    preWrittenStory:
+      'Performed windshield washer fluid top-off service. Filled the washer reservoir with approved washer fluid to the correct level. Operated the front and rear washer systems to verify proper spray pattern, pump operation, and wiper sweep. Confirmed no leaks at the reservoir or fluid lines.',
+  },
+  {
+    title: 'Coolant Top-Off',
+    description: 'Engine coolant level correction and leak visual inspection.',
+    preWrittenStory:
+      'Performed engine coolant top-off service. Verified the cooling system was cool, inspected for obvious external leaks, and added manufacturer-approved coolant to bring the level to the correct mark in the expansion tank. Reinstalled the cap securely and confirmed proper coolant color and level after a brief idle cycle.',
+  },
+  {
+    title: 'Battery Test',
+    description: '12-volt battery load test with printout and recommendation.',
+    preWrittenStory:
+      'Performed 12-volt battery test service. Connected electronic battery tester and conducted a load test on the main battery. Reviewed state-of-health and cranking performance results with the customer. Reinstalled all covers and verified normal system voltage with the engine running. Documented findings and recommendations.',
+  },
+  {
+    title: 'Wiper Blade Replacement',
+    description: 'Front or rear wiper blade/insert replacement.',
+    preWrittenStory:
+      'Performed wiper blade replacement service. Removed the worn wiper blade inserts or complete blade assemblies and installed new wiper blades. Verified correct attachment and full sweep across the windshield without chatter or streaking. Operated the washer system to confirm clear wiping performance.',
+  },
+  {
+    title: 'Cabin Air Filter Replacement',
+    description: 'HVAC cabin/pollen filter element replacement.',
+    preWrittenStory:
+      'Performed cabin air filter replacement service. Accessed the cabin filter housing, removed the old filter element, and cleaned debris from the housing. Installed a new cabin filter and reassembled all panels and clips. Verified proper HVAC airflow and no abnormal odor from the ventilation system.',
   },
 ];
 
