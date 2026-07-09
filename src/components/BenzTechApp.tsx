@@ -12,10 +12,11 @@ import { useMerlinLogout } from '@/hooks/useMerlinLogout';
 import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
+  fetchClerkLinkStatus,
   fetchCurrentSession,
+  linkClerkAccountSession,
   loginWithCredentials,
 } from '@/lib/loginSession';
-import { api } from '@/lib/api';
 import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
 import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
@@ -100,11 +101,10 @@ export function BenzTechApp() {
 
     let cancelled = false;
 
-    api
-      .getClerkLinkStatus()
+    fetchClerkLinkStatus()
       .then(async (status) => {
         if (cancelled || !status.canLink) return;
-        await api.linkClerkAccount();
+        await linkClerkAccountSession();
         if (cancelled) return;
         toast.success('Clerk account linked');
         router.replace('/');

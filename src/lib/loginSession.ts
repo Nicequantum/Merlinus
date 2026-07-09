@@ -40,6 +40,46 @@ export async function logoutSession(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
 }
 
+export interface ClerkLinkStatus {
+  clerkEnabled: boolean;
+  legacySignedIn: boolean;
+  clerkSignedIn: boolean;
+  linked: boolean;
+  canLink: boolean;
+}
+
+export async function fetchClerkLinkStatus(): Promise<ClerkLinkStatus> {
+  const res = await fetch('/api/auth/clerk/link', { credentials: 'include', cache: 'no-store' });
+  const data = (await res.json().catch(() => ({}))) as ClerkLinkStatus & { error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || `Clerk link status failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function linkClerkAccountSession(): Promise<{
+  linked: boolean;
+  session: TechnicianSession;
+}> {
+  const res = await fetch('/api/auth/clerk/link', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    linked?: boolean;
+    session?: TechnicianSession;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Could not link Clerk account');
+  }
+  if (!data.session) {
+    throw new Error('Clerk link succeeded but no session was returned');
+  }
+  return { linked: data.linked ?? true, session: data.session };
+}
+
 export async function acceptConsentSession(): Promise<TechnicianSession> {
   const res = await fetch('/api/consent', { method: 'POST', credentials: 'include' });
   const data = (await res.json().catch(() => ({}))) as {
