@@ -7,6 +7,7 @@ import type { ExtractedData } from '@/types';
 
 export interface DiagnosticExtractAuditInput {
   dealershipId: string;
+  dealerId?: string | null;
   technicianId: string;
   pathname: string;
   durationMs: number;
@@ -57,6 +58,7 @@ export async function writeDiagnosticExtractAudit(input: DiagnosticExtractAuditI
   await writeAuditLog({
     action: 'diagnostics.extract',
     dealershipId: input.dealershipId,
+    dealerId: input.dealerId,
     technicianId: input.technicianId,
     entityType: 'image',
     entityId: `diag-${metadata.pathnameDigest}`,

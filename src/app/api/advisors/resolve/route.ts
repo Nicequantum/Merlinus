@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { resolveServiceAdvisor } from '@/lib/advisorIntelligence';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       await writeAuditLog({
         action: 'advisor.resolve',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'serviceAdvisor',
         entityId: resolved.id,

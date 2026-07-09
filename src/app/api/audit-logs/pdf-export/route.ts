@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: 'customerPayStory.pdf_export',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'repairLine',
           entityId: repairLineId,
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: 'story.pdf_export',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'repairLine',
           entityId: repairLineId,

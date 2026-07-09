@@ -1,3 +1,4 @@
+import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
@@ -27,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const logs = await prisma.technicianActivityLog.findMany({
         where: {
           technicianId: id,
-          dealershipId: session.dealershipId,
+          ...scopedDealershipWhere(session.dealershipId, session.dealerId),
           ...(category ? { category } : {}),
         },
         orderBy: { createdAt: 'desc' },

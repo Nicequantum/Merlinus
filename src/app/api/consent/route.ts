@@ -1,4 +1,4 @@
-import { appendAuditLogInTransaction } from '@/lib/audit';
+import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
         await appendAuditLogInTransaction(tx, {
           action: 'consent.accept',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'technician',
           entityId: session.technicianId,

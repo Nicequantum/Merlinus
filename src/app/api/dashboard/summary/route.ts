@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { scopedDealershipWhere, withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
 import { prisma } from '@/lib/db';
@@ -9,14 +10,21 @@ function buildRoleScopedRoWhere(session: {
   dealershipId: string;
   technicianId: string;
   serviceAdvisorId: string | null;
+  dealerId?: string | null;
 }): Prisma.RepairOrderWhereInput {
   if (session.role === 'manager') {
-    return { dealershipId: session.dealershipId };
+    return withOptionalDealerId({ dealershipId: session.dealershipId }, session.dealerId);
   }
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
-    return { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId };
+    return withOptionalDealerId(
+      { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId },
+      session.dealerId
+    );
   }
-  return { dealershipId: session.dealershipId, technicianId: session.technicianId };
+  return withOptionalDealerId(
+    { dealershipId: session.dealershipId, technicianId: session.technicianId },
+    session.dealerId
+  );
 }
 
 export async function GET(request: Request) {
@@ -49,13 +57,16 @@ export async function GET(request: Request) {
           orderBy: { updatedAt: 'desc' },
           take: 5,
         }),
-        isManager ? getAuditDashboardSummary(dealershipId) : null,
+        isManager
+          ? getAuditDashboardSummary({ dealershipId, dealerId: session.dealerId })
+          : null,
       ]);
 
+      const auditScope = scopedDealershipWhere(dealershipId, session.dealerId);
       const activityThisWeek = await prisma.auditLog.count({
         where: isManager
-          ? { dealershipId, createdAt: { gte: weekAgo } }
-          : { dealershipId, technicianId: session.technicianId, createdAt: { gte: weekAgo } },
+          ? { ...auditScope, createdAt: { gte: weekAgo } }
+          : { ...auditScope, technicianId: session.technicianId, createdAt: { gte: weekAgo } },
       });
 
       return {

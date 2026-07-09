@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   dealerIdWriteFields,
+  scopedDealershipWhere,
   withOptionalDealerId,
   withOptionalDealerIdOnRepairOrderScope,
 } from '../../src/lib/apex/dealerScope';
@@ -30,6 +31,17 @@ describe('apex dealer scope helpers (Phase 2.1)', () => {
 
   test('dealerIdWriteFields returns stamped field when dealerId is present', () => {
     assert.deepEqual(dealerIdWriteFields(' apex-dealer '), { dealerId: 'apex-dealer' });
+  });
+
+  test('scopedDealershipWhere is dealership-only when dealerId is absent', () => {
+    assert.deepEqual(scopedDealershipWhere('d1', null), { dealershipId: 'd1' });
+  });
+
+  test('scopedDealershipWhere adds dealerId when provided', () => {
+    assert.deepEqual(scopedDealershipWhere('d1', 'apex-dealer'), {
+      dealershipId: 'd1',
+      dealerId: 'apex-dealer',
+    });
   });
 
   test('withOptionalDealerIdOnRepairOrderScope preserves id and dealershipId', () => {

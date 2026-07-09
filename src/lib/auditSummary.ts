@@ -1,5 +1,11 @@
+import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { computeAuditEntryHash, verifyAuditChain, type AuditChainPayload } from './auditChain';
 import { prisma } from './db';
+
+export interface AuditSummaryScope {
+  dealershipId: string;
+  dealerId?: string | null;
+}
 
 /** H-3: Default chain verification window — avoids loading full dealership history. */
 const DEFAULT_CHAIN_VERIFY_LIMIT = 500;
@@ -41,19 +47,20 @@ function verifyAuditChainWindow(
 }
 
 async function loadChainLogsForVerification(
-  dealershipId: string,
+  scope: AuditSummaryScope,
   verifyFullChain: boolean
 ) {
+  const where = { ...scopedDealershipWhere(scope.dealershipId, scope.dealerId), entryHash: { not: '' } };
   if (verifyFullChain) {
     return prisma.auditLog.findMany({
-      where: { dealershipId, entryHash: { not: '' } },
+      where,
       orderBy: { createdAt: 'asc' },
       select: chainLogSelect,
     });
   }
 
   const recent = await prisma.auditLog.findMany({
-    where: { dealershipId, entryHash: { not: '' } },
+    where,
     orderBy: { createdAt: 'desc' },
     take: DEFAULT_CHAIN_VERIFY_LIMIT,
     select: chainLogSelect,
@@ -85,9 +92,14 @@ export interface AuditDashboardSummary {
 }
 
 export async function getAuditDashboardSummary(
-  dealershipId: string,
+  scope: AuditSummaryScope | string,
   options: GetAuditDashboardSummaryOptions = {}
 ): Promise<AuditDashboardSummary> {
+  const resolvedScope: AuditSummaryScope =
+    typeof scope === 'string' ? { dealershipId: scope } : scope;
+  const { dealershipId, dealerId } = resolvedScope;
+  const auditWhere = scopedDealershipWhere(dealershipId, dealerId);
+
   const verifyFullChain = options.verifyFullChain === true;
   const now = new Date();
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -95,29 +107,29 @@ export async function getAuditDashboardSummary(
 
   const [totalEntries, last24Hours, last7Days, grouped, recent, hashedEntryCount, legacyEntries, chainLogs] =
     await Promise.all([
-    prisma.auditLog.count({ where: { dealershipId } }),
-    prisma.auditLog.count({ where: { dealershipId, createdAt: { gte: dayAgo } } }),
-    prisma.auditLog.count({ where: { dealershipId, createdAt: { gte: weekAgo } } }),
+    prisma.auditLog.count({ where: auditWhere }),
+    prisma.auditLog.count({ where: { ...auditWhere, createdAt: { gte: dayAgo } } }),
+    prisma.auditLog.count({ where: { ...auditWhere, createdAt: { gte: weekAgo } } }),
     prisma.auditLog.groupBy({
       by: ['action'],
-      where: { dealershipId, createdAt: { gte: weekAgo } },
+      where: { ...auditWhere, createdAt: { gte: weekAgo } },
       _count: { action: true },
       orderBy: { _count: { action: 'desc' } },
     }),
     prisma.auditLog.findMany({
-      where: { dealershipId },
+      where: auditWhere,
       include: { technician: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 8,
     }),
-    prisma.auditLog.count({ where: { dealershipId, entryHash: { not: '' } } }),
+    prisma.auditLog.count({ where: { ...auditWhere, entryHash: { not: '' } } }),
     prisma.auditLog.count({
       where: {
-        dealershipId,
+        ...auditWhere,
         entryHash: '',
       },
     }),
-    loadChainLogsForVerification(dealershipId, verifyFullChain),
+    loadChainLogsForVerification(resolvedScope, verifyFullChain),
   ]);
 
   const hashed = chainLogs.filter((l) => l.entryHash);

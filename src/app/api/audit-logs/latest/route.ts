@@ -1,3 +1,4 @@
+import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
 
       const latestLog = await prisma.auditLog.findFirst({
         where: {
-          dealershipId: session.dealershipId,
+          ...scopedDealershipWhere(session.dealershipId, session.dealerId),
           entityType: 'repairLine',
           entityId: repairLineId,
           action: { in: actions },

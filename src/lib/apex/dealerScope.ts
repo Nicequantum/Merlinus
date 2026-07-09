@@ -34,3 +34,11 @@ export function withOptionalDealerIdOnRepairOrderScope(
 ): { id?: string; dealershipId: string; dealerId?: string } {
   return withOptionalDealerId(scope, dealerId);
 }
+
+/** Flat dealership scope — optional dealerId filter for list/count queries. */
+export function scopedDealershipWhere(
+  dealershipId: string,
+  dealerId: string | null | undefined
+): { dealershipId: string; dealerId?: string } {
+  return withOptionalDealerId({ dealershipId }, dealerId);
+}

@@ -1,3 +1,4 @@
+import { dealerIdWriteFields, scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { prisma } from './db';
 
 /** M28: configurable daily AI usage cap per technician. */
@@ -78,6 +79,7 @@ export async function isDailyUsageLimitReached(technicianId: string): Promise<bo
 export async function logApiUsage(input: {
   technicianId: string;
   dealershipId: string;
+  dealerId?: string | null;
   routeKey: string;
 }): Promise<void> {
   await prisma.usageLog.create({
@@ -85,6 +87,7 @@ export async function logApiUsage(input: {
       technicianId: input.technicianId,
       dealershipId: input.dealershipId,
       routeKey: input.routeKey,
+      ...dealerIdWriteFields(input.dealerId),
     },
   });
 }
@@ -104,9 +107,13 @@ export interface UsageAnalytics {
   technicians: TechnicianUsageSummary[];
 }
 
-export async function getUsageAnalytics(dealershipId: string): Promise<UsageAnalytics> {
+export async function getUsageAnalytics(
+  dealershipId: string,
+  dealerId?: string | null
+): Promise<UsageAnalytics> {
   const dayStart = startOfZonedDay();
   const weekStart = startOfZonedWeek();
+  const usageWhere = scopedDealershipWhere(dealershipId, dealerId);
 
   const [technicians, dailyLogs, weeklyLogs] = await Promise.all([
     prisma.technician.findMany({
@@ -116,12 +123,12 @@ export async function getUsageAnalytics(dealershipId: string): Promise<UsageAnal
     }),
     prisma.usageLog.groupBy({
       by: ['technicianId'],
-      where: { dealershipId, createdAt: { gte: dayStart } },
+      where: { ...usageWhere, createdAt: { gte: dayStart } },
       _count: { _all: true },
     }),
     prisma.usageLog.groupBy({
       by: ['technicianId'],
-      where: { dealershipId, createdAt: { gte: weekStart } },
+      where: { ...usageWhere, createdAt: { gte: weekStart } },
       _count: { _all: true },
     }),
   ]);

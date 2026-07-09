@@ -6,6 +6,7 @@ import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
 import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
+import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeDiagnosticExtractAudit } from '@/lib/diagnosticExtractAudit';
 import { logger } from '@/lib/logger';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
 
         await writeDiagnosticExtractAudit({
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           pathname,
           durationMs,

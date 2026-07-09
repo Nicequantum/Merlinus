@@ -149,6 +149,7 @@ function assertPromptVersionValid(action: AuditAction, promptVersion: string): v
 
 export interface CustomerPayTemplateAuditInput {
   dealershipId: string;
+  dealerId?: string | null;
   technicianId: string;
   repairLineId: string;
   repairOrderId: string;
@@ -165,6 +166,7 @@ export async function writeCustomerPayTemplateAudit(input: CustomerPayTemplateAu
   await writeAuditLog({
     action: 'customerPayTemplateApplied',
     dealershipId: input.dealershipId,
+    dealerId: input.dealerId,
     technicianId: input.technicianId,
     entityType: 'repairLine',
     entityId: input.repairLineId,

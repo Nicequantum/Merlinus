@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import {
   buildSessionClearCookieHeader,
   clearSessionCookie,
@@ -19,6 +19,7 @@ async function performLogout(request: Request) {
     await writeAuditLog({
       action: 'auth.logout',
       dealershipId: session.dealershipId,
+      dealerId: auditDealerIdFromSession(session),
       technicianId: session.technicianId,
       ipAddress: getRequestIp(request),
     });

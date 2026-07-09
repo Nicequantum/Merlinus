@@ -1,4 +1,5 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { withAuth } from '@/lib/apiRoute';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
         finalText: data.finalText,
         generatedText: data.generatedText,
         dealershipId: session.dealershipId,
+        dealerId: resolveDealerIdForWrite({ session }),
         createdById: session.technicianId,
         lineDescription: data.lineDescription,
         vehicleMake: data.vehicleMake,
@@ -33,6 +35,7 @@ export async function POST(request: Request) {
       await writeAuditLog({
         action: 'template.save',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'template',
         entityId: result.template.id,

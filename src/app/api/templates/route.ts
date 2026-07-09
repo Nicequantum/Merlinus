@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
       const templates = await prisma.template.findMany({
         where: {
-          ...templatesForDealershipWhere(session.dealershipId),
+          ...templatesForDealershipWhere(session.dealershipId, session.dealerId),
           ...(category ? { category } : {}),
         },
         orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }, { title: 'asc' }],

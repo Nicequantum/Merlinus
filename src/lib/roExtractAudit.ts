@@ -8,6 +8,7 @@ import type { StructuredROExtraction } from '@/types';
 
 export interface RoExtractAuditInput {
   dealershipId: string;
+  dealerId?: string | null;
   technicianId: string;
   pageCount: number;
   durationMs: number;
@@ -49,6 +50,7 @@ export async function writeRoExtractAudit(input: RoExtractAuditInput): Promise<v
   await writeAuditLog({
     action: 'ro.extract',
     dealershipId: input.dealershipId,
+    dealerId: input.dealerId,
     technicianId: input.technicianId,
     entityType: 'image',
     entityId: `scan-${input.pageCount}pg`,

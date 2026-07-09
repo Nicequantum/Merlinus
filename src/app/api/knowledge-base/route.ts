@@ -1,5 +1,6 @@
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
+import { knowledgeBaseForDealershipWhere } from '@/lib/saveTemplateFromStory';
 import { mapKnowledgeBase, seedTemplateLibraryIfEmpty } from '@/lib/templateLibrary';
 import { knowledgeBaseListQuerySchema, parseQueryParams } from '@/lib/validation';
 
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
 
       const entries = await prisma.knowledgeBase.findMany({
         where: {
-          OR: [{ dealershipId: '__global__' }, { dealershipId: session.dealershipId, source: 'user' }],
+          ...knowledgeBaseForDealershipWhere(session.dealershipId, session.dealerId),
           ...(category ? { category } : {}),
         },
         orderBy: [{ source: 'desc' }, { updatedAt: 'desc' }, { title: 'asc' }],

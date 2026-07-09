@@ -1,3 +1,4 @@
+import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { auditLogQuerySchema, parseQueryParams } from '@/lib/validation';
@@ -25,10 +26,11 @@ export async function GET(request: Request) {
       const { technicianId, action, from, to, format } = query.data;
       const where: {
         dealershipId: string;
+        dealerId?: string;
         technicianId?: string;
         action?: string;
         createdAt?: { gte?: Date; lte?: Date };
-      } = { dealershipId: session.dealershipId };
+      } = scopedDealershipWhere(session.dealershipId, session.dealerId);
 
       if (technicianId) where.technicianId = technicianId;
       if (action) where.action = action;

@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { uploadImageToBlob } from '@/lib/blob';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
@@ -77,6 +77,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: 'image.upload',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'image',
           entityId: uploaded.pathname,

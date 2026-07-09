@@ -126,6 +126,7 @@ export async function POST(
 
       void logStoryTechnicianActivity({
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         event: 'story.review',
         message: `Reviewed warranty story for RO ${mapped.roNumber}, line ${line.lineNumber}`,

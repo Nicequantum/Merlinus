@@ -1,3 +1,4 @@
+import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { writeTechnicianActivityLog } from '@/lib/technicianActivityLog';
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
 
       await writeTechnicianActivityLog({
         dealershipId: session.dealershipId,
+        dealerId: resolveDealerIdForWrite({ session }),
         technicianId: session.technicianId,
         category: 'app_start',
         event: 'app.ready',

@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { mapAdvisorListItem, parseAdvisorProfileData } from '@/lib/advisorApiMappers';
 import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
@@ -124,6 +124,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await writeAuditLog({
         action: parsed.data.status === 'active' ? 'advisor.reactivate' : 'advisor.deactivate',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'service_advisor',
         entityId: updated.id,
@@ -181,6 +182,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       await writeAuditLog({
         action: 'advisor.delete',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'service_advisor',
         entityId: id,

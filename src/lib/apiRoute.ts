@@ -108,6 +108,7 @@ export async function withAuth<T>(
       await logApiUsage({
         technicianId: session.technicianId,
         dealershipId: session.dealershipId,
+        dealerId: session.dealerId,
         routeKey: routeKey,
       });
     }

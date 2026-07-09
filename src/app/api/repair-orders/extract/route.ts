@@ -8,6 +8,7 @@ import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
 import { logger } from '@/lib/logger';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeRoExtractAudit } from '@/lib/roExtractAudit';
 import { imagePathnamesSchema, parseRequestBody } from '@/lib/validation';
 
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
 
         await writeRoExtractAudit({
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           pageCount: pathnames.length,
           durationMs,

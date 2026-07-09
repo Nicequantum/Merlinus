@@ -1,3 +1,4 @@
+import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { sanitizeTechnicianLogMetadata } from '@/lib/technicianLogMetadata';
@@ -13,6 +14,8 @@ export type TechnicianLogEvent =
 
 export interface WriteTechnicianActivityLogInput {
   dealershipId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on writes. */
+  dealerId?: string | null;
   technicianId: string;
   category: TechnicianLogCategory;
   event: TechnicianLogEvent;
@@ -37,6 +40,7 @@ export async function writeTechnicianActivityLog(
     await prisma.technicianActivityLog.create({
       data: {
         dealershipId: input.dealershipId,
+        ...dealerIdWriteFields(input.dealerId),
         technicianId: input.technicianId,
         category: input.category,
         event: input.event,

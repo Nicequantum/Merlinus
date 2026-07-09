@@ -1,4 +1,4 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { mapAdvisorListItem } from '@/lib/advisorApiMappers';
 import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
         await writeAuditLog({
           action: reactivated ? 'advisor.reactivate' : 'advisor.create',
           dealershipId: session.dealershipId,
+          dealerId: auditDealerIdFromSession(session),
           technicianId: session.technicianId,
           entityType: 'service_advisor',
           entityId: advisor.id,

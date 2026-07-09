@@ -5,6 +5,7 @@ import {
 
 interface LogStoryTechnicianActivityInput {
   dealershipId: string;
+  dealerId?: string | null;
   technicianId: string;
   event: Extract<TechnicianLogEvent, 'story.generate' | 'story.score' | 'story.review' | 'story.certify'>;
   message: string;
@@ -20,6 +21,7 @@ export async function logStoryTechnicianActivity(
 ): Promise<void> {
   await writeTechnicianActivityLog({
     dealershipId: input.dealershipId,
+    dealerId: input.dealerId,
     technicianId: input.technicianId,
     category: 'story',
     event: input.event,

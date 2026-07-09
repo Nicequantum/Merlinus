@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { dealerIdWriteFields, withOptionalDealerId } from '@/lib/apex/dealerScope';
 import {
   encryptOptionalSensitiveText,
   encryptSensitiveText,
@@ -14,6 +15,8 @@ export interface SaveTemplateFromStoryInput {
   finalText: string;
   generatedText: string;
   dealershipId: string;
+  /** APEX NATIONAL PLATFORM — optional franchise tenant stamp on writes. */
+  dealerId?: string | null;
   createdById: string;
   lineDescription?: string;
   vehicleMake?: string;
@@ -25,6 +28,8 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
   const tags = buildTemplateTags(input);
   const tagsJson = JSON.stringify(tags);
   const now = new Date();
+
+  const dealerFields = dealerIdWriteFields(input.dealerId);
 
   const template = await prisma.template.upsert({
     where: {
@@ -40,6 +45,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       templateType: input.category === 'customer' ? 'CustomerPay' : 'Warranty',
       source: 'user',
       updatedAt: now,
+      ...dealerFields,
     },
     create: {
       title: input.title,
@@ -50,6 +56,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       source: 'user',
       dealershipId: input.dealershipId,
       createdById: input.createdById,
+      ...dealerFields,
     },
   });
 
@@ -71,6 +78,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       tags: tagsJson,
       source: 'user',
       updatedAt: now,
+      ...dealerFields,
     },
     create: {
       title: input.title,
@@ -81,6 +89,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
       tags: tagsJson,
       source: 'user',
       dealershipId: input.dealershipId,
+      ...dealerFields,
     },
   });
   }
@@ -92,8 +101,38 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
   };
 }
 
-export function templatesForDealershipWhere(dealershipId: string) {
+/** Global seeds + dealership user saves; optional dealerId scopes user rows only. */
+export function templatesForDealershipWhere(
+  dealershipId: string,
+  dealerId?: string | null
+) {
   return {
-    OR: [{ dealershipId: GLOBAL_DEALERSHIP_ID }, { dealershipId, source: 'user' }],
+    OR: [
+      { dealershipId: GLOBAL_DEALERSHIP_ID },
+      withOptionalDealerId({ dealershipId, source: 'user' as const }, dealerId),
+    ],
+  };
+}
+
+export function knowledgeBaseForDealershipWhere(
+  dealershipId: string,
+  dealerId?: string | null
+) {
+  return {
+    OR: [
+      { dealershipId: GLOBAL_DEALERSHIP_ID },
+      withOptionalDealerId({ dealershipId, source: 'user' as const }, dealerId),
+    ],
+  };
+}
+
+export function templateAccessWhere(
+  dealershipId: string,
+  templateId: string,
+  dealerId?: string | null
+) {
+  return {
+    id: templateId,
+    ...templatesForDealershipWhere(dealershipId, dealerId),
   };
 }

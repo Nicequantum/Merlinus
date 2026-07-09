@@ -1,8 +1,9 @@
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
-import { GLOBAL_DEALERSHIP_ID, recordTemplateUsage } from '@/lib/templateLibrary';
+import { templateAccessWhere } from '@/lib/saveTemplateFromStory';
+import { recordTemplateUsage } from '@/lib/templateLibrary';
 import { prisma } from '@/lib/db';
 import { parseRouteParams, routeIdParamsSchema } from '@/lib/validation';
 
@@ -15,10 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     request,
     async (session) => {
       const template = await prisma.template.findFirst({
-        where: {
-          id,
-          OR: [{ dealershipId: session.dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }],
-        },
+        where: templateAccessWhere(session.dealershipId, id, session.dealerId),
       });
 
       if (!template) {
@@ -30,6 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await writeAuditLog({
         action: 'template.use',
         dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'template',
         entityId: id,

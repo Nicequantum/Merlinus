@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
 import { apiError, handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     await writeAuditLog({
       action: 'auth.login',
       dealershipId: session.dealershipId,
+      dealerId: auditDealerIdFromSession(session),
       technicianId: session.technicianId,
       entityType: 'technician',
       entityId: session.technicianId,
