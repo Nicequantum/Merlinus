@@ -29,7 +29,8 @@ describe('security headers and CORS', () => {
     const middleware = readSrc('src/middleware.ts');
     const nextConfig = readSrc('next.config.mjs');
 
-    assert.ok(policy.includes("frame-src 'none'"));
+    assert.ok(policy.includes('frame-src https://*.clerk.accounts.dev'));
+    assert.ok(policy.includes('https://challenges.cloudflare.com'));
     assert.ok(policy.includes("media-src 'self' blob:"));
     assert.equal(policy.includes('unsafe-eval'), false);
     assert.ok(middleware.includes("from '../security-policy.mjs'"));

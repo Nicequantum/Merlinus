@@ -98,6 +98,20 @@ if ((authMode === 'dual' || authMode === 'clerk') && !clerkKeysConfigured) {
   );
 }
 
+const publicAuthModeRaw = process.env.NEXT_PUBLIC_AUTH_MODE?.trim().toLowerCase();
+const publicAuthMode = publicAuthModeRaw || authMode;
+if (publicAuthModeRaw && !AUTH_MODES.includes(publicAuthMode)) {
+  console.error(
+    `[merlin:build] Invalid NEXT_PUBLIC_AUTH_MODE="${process.env.NEXT_PUBLIC_AUTH_MODE}" — expected legacy, dual, or clerk`
+  );
+  process.exit(1);
+}
+if (publicAuthModeRaw && publicAuthMode !== authMode) {
+  console.warn(
+    `[merlin:build] NEXT_PUBLIC_AUTH_MODE (${publicAuthMode}) differs from AUTH_MODE (${authMode}) — client login UI may not match server auth.`
+  );
+}
+
 if (isProduction) {
   const missingScanning = PRODUCTION_SCANNING_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingScanning.length > 0) {

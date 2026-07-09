@@ -2,6 +2,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useEffect, type ReactNode } from 'react';
+import { ClerkAppProvider } from '@/components/ClerkAppProvider';
 import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { clientLog } from '@/lib/clientLog';
@@ -31,9 +32,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
   useUnhandledRejectionLogging();
 
   return (
-    <GlobalErrorBoundary>
-      <OfflineBanner />
-      {children}
-    </GlobalErrorBoundary>
+    <ClerkAppProvider>
+      <GlobalErrorBoundary>
+        <OfflineBanner />
+        {children}
+      </GlobalErrorBoundary>
+    </ClerkAppProvider>
   );
 }

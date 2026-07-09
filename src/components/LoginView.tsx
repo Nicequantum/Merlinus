@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
+import { isClerkSignInAvailable } from '@/lib/authModeClient';
 import { toast } from 'sonner';
 
 interface LoginViewProps {
@@ -13,6 +15,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
   const [d7Number, setD7Number] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const showClerkOption = isClerkSignInAvailable();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +72,17 @@ export function LoginView({ onLogin }: LoginViewProps) {
           <button type="submit" disabled={loading} className="primary-btn login-submit-btn w-full touch-target">
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
+
+          {showClerkOption ? (
+            <div className="login-alt-auth">
+              <div className="login-alt-divider" aria-hidden="true">
+                <span>or</span>
+              </div>
+              <Link href="/sign-in" className="secondary-btn login-clerk-btn w-full touch-target">
+                Sign in with Clerk
+              </Link>
+            </div>
+          ) : null}
         </form>
 
         <p className="login-footer">Authorized dealership personnel only.</p>

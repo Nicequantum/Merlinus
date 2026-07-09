@@ -14,6 +14,7 @@ import { applySecurityHeaders, isCrossOriginRequest } from './lib/securityHeader
 /** Routes that must stay public (no session) — login page, auth bootstrap, PWA manifest. */
 const PUBLIC_PATHS = new Set([
   '/',
+  '/sign-in',
   '/manifest.json',
   '/manifest.webmanifest',
   '/api/auth/login',
@@ -22,7 +23,8 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.has(pathname);
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  return pathname.startsWith('/sign-in/');
 }
 
 function denyCrossOriginApi(request: NextRequest): NextResponse | null {

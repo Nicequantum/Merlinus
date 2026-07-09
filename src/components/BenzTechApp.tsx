@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConsentModal } from '@/components/ConsentModal';
@@ -14,6 +15,7 @@ import {
   loginWithCredentials,
   logoutSession,
 } from '@/lib/loginSession';
+import { shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
 import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
@@ -36,6 +38,7 @@ const BenzTechAuthenticatedApp = dynamic(
 type SessionPhase = 'checking' | 'anonymous' | 'authenticated';
 
 export function BenzTechApp() {
+  const router = useRouter();
   const [session, setSession] = useState<TechnicianSession | null>(null);
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking');
   const [consentLoading, setConsentLoading] = useState(false);
@@ -64,6 +67,12 @@ export function BenzTechApp() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (sessionPhase === 'anonymous' && shouldUseClerkOnlyLogin()) {
+      router.replace('/sign-in');
+    }
+  }, [sessionPhase, router]);
 
   const refreshSession = useCallback(async () => {
     try {
@@ -107,6 +116,14 @@ export function BenzTechApp() {
   }
 
   if (sessionPhase !== 'authenticated' || !session) {
+    if (shouldUseClerkOnlyLogin()) {
+      return (
+        <LoadingScreen
+          label="Redirecting to sign-in"
+          sublabel="Opening secure dealership authentication…"
+        />
+      );
+    }
     return <LoginView onLogin={login} />;
   }
 
