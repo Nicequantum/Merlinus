@@ -45,6 +45,6 @@ export async function POST(
 
       return { ok: true, isCustomerPay: false };
     },
-    { rateLimitKey: 'ros.update' }
+    { rateLimitKey: 'ros.update', requireDealershipContext: true }
   );
 }

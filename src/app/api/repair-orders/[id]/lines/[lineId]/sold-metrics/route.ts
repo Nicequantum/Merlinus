@@ -90,6 +90,6 @@ export async function PATCH(
         soldMetrics: mapSoldMetricsFromDb(updated),
       };
     },
-    { rateLimitKey: 'ros.sold-metrics' }
+    { rateLimitKey: 'ros.sold-metrics', requireDealershipContext: true }
   );
 }

@@ -64,6 +64,6 @@ export async function POST(
         throw error;
       }
     },
-    { rateLimitKey: 'repair-orders.apply-customer-pay-template' }
+    { rateLimitKey: 'repair-orders.apply-customer-pay-template', requireDealershipContext: true }
   );
 }

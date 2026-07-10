@@ -66,7 +66,7 @@ export async function GET(request: Request) {
         todayStart: getTodayStartIso(),
       };
     },
-    { rateLimitKey: 'ros.list' }
+    { rateLimitKey: 'ros.list', requireDealershipContext: true }
   );
 }
 
@@ -279,6 +279,6 @@ export async function POST(request: Request) {
         return handleRouteError(error, 'ros.create');
       }
     },
-    { rateLimitKey: 'ros.create' }
+    { rateLimitKey: 'ros.create', requireDealershipContext: true }
   );
 }

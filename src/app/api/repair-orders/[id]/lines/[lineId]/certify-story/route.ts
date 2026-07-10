@@ -225,6 +225,7 @@ export async function POST(
       rateLimit: RATE_LIMITS.generate,
       blockInMaintenance: true,
       perfEvent: 'route.story.certify',
+      requireDealershipContext: true,
     }
   );
 }

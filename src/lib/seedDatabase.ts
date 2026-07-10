@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { CONSENT_VERSION } from '@/types';
+import { runApexOwnerSeedIfConfigured } from '@/lib/apex/seedOwnerAccounts';
+import { upsertTechnicianDealershipMembership } from '@/lib/apex/membershipGuard';
 import { internalEmailForD7, normalizeD7Number } from './d7Number';
 import { prisma } from './db';
 import { seedTemplateLibraryIfEmpty } from './templateLibrary';
@@ -50,7 +52,7 @@ async function retireTechnician(id: string): Promise<void> {
 }
 
 function pickPrimaryCandidate(
-  candidates: Array<{ id: string; d7Number: string; email: string; createdAt: Date }>,
+  candidates: Array<{ id: string; d7Number: string | null; email: string; createdAt: Date }>,
   d7: string,
   canonicalEmail: string,
   legacyEmail: string
@@ -114,6 +116,16 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
 
   const primary = pickPrimaryCandidate(candidates, d7, canonicalEmail, legacyEmail);
 
+  const syncMembership = async (technicianId: string) => {
+    await upsertTechnicianDealershipMembership({
+      technicianId,
+      dealershipId: input.dealershipId,
+      role: input.role,
+      isPrimary: true,
+      isActive: true,
+    });
+  };
+
   if (primary) {
     const d7Holder = await prisma.technician.findUnique({ where: { d7Number: d7 } });
     if (d7Holder && d7Holder.id !== primary.id) {
@@ -124,6 +136,7 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
       where: { id: primary.id },
       data: accountData,
     });
+    await syncMembership(primary.id);
 
     for (const duplicate of candidates) {
       if (duplicate.id !== primary.id) {
@@ -138,6 +151,7 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
     update: accountData,
     create: accountData,
   });
+  await syncMembership(created.id);
 
   for (const duplicate of candidates) {
     if (duplicate.id !== created.id) {
@@ -151,6 +165,8 @@ export interface SeedResult {
   techD7: string;
   templates: number;
   knowledgeBase: number;
+  ownerEmail?: string;
+  multiRooftopUsername?: string;
 }
 
 export async function runDatabaseSeed(): Promise<SeedResult> {
@@ -191,11 +207,14 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
   });
 
   const library = await seedTemplateLibraryIfEmpty();
+  const apexOwner = await runApexOwnerSeedIfConfigured();
 
   return {
     managerD7,
     techD7,
     templates: library.templates,
     knowledgeBase: library.knowledgeBase,
+    ownerEmail: apexOwner?.ownerEmail,
+    multiRooftopUsername: apexOwner?.multiRooftopUsername,
   };
 }

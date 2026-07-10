@@ -32,11 +32,13 @@ datasource db {
 // Rollback: restore pre-Phase-5 database backup. Do not rotate ENCRYPTION_KEY without
 // a planned key-migration procedure. See docs/Reencryption-Runbook.md.
 
-/** M11: enforce technician/manager at the database layer. */
+/** M11: enforce technician/manager/owner at the database layer. */
 enum TechnicianRole {
   technician
   manager
   service_advisor
+  /** APEX NATIONAL PLATFORM — national operators; least-privilege, audited dealership context. */
+  owner
 }
 
 // APEX NATIONAL PLATFORM — top-level franchise tenant for multi-dealer deployments.
@@ -78,6 +80,7 @@ model Dealership {
   usageLogs       UsageLog[]
   serviceAdvisors ServiceAdvisor[]
   advisorObservations AdvisorComplaintObservation[]
+  technicianMemberships TechnicianDealership[]
 
   @@index([dealerId])
 }
@@ -86,7 +89,10 @@ model Dealership {
 model Technician {
   id             String        @id @default(cuid())
   email          String        @unique
-  d7Number       String        @unique
+  /** Nullable for owner accounts — partial unique index in DB (WHERE d7Number IS NOT NULL). */
+  d7Number       String?       @unique
+  /** APEX NATIONAL PLATFORM — multi-brand username (brand.firstname.lastname); lowercase at rest. */
+  apexUsername   String?       @unique
   name           String
   passwordHash   String
   /** Phase 4 Clerk — linked Clerk user id; null for legacy D7-only accounts. */
@@ -118,12 +124,33 @@ model Technician {
   usageLogs            UsageLog[]
   technicianActivityLogs TechnicianActivityLog[]
   certifiedStories       TechnicianCertifiedStory[]
+  sessionRefreshTokens SessionRefreshToken[]
+  dealershipMemberships TechnicianDealership[]
 
   @@index([dealerId])
   @@index([dealershipId])
   @@index([isActive])
   @@index([deletedAt])
   @@index([serviceAdvisorId])
+  @@index([apexUsername])
+}
+
+/** APEX Phase 5.2 — multi-rooftop membership; source of truth for dealership access scoping. */
+model TechnicianDealership {
+  id           String         @id @default(cuid())
+  technicianId String
+  technician   Technician     @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  dealershipId String
+  dealership   Dealership     @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  role         TechnicianRole
+  isPrimary    Boolean        @default(false)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+
+  @@unique([technicianId, dealershipId])
+  @@index([technicianId])
+  @@index([dealershipId])
+  @@index([technicianId, isActive])
 }
 
 model RepairOrder {
@@ -165,6 +192,8 @@ model RepairOrder {
   @@index([roNumberSearchTokens], type: Gin)
   @@index([serviceAdvisorId])
   @@index([dealerId, dealershipId])
+  /** RLS prep — composite tenant + recency for national platform list queries. */
+  @@index([dealershipId, dealerId, updatedAt])
 }
 
 // ─── Advisor Intelligence (Phase 1) ─────────────────────────────────────────
@@ -199,6 +228,8 @@ model ServiceAdvisor {
   @@index([dealerId])
   @@index([dealershipId, lastSeenAt])
   @@index([dealershipId, status])
+  /** RLS prep — composite tenant + status for advisor scoping. */
+  @@index([dealershipId, dealerId, status])
   @@index([dealershipId, deletedAt])
 }
 
@@ -357,6 +388,10 @@ model AuditLog {
   promptVersion  String      @default("legacy")
   previousHash   String      @default("GENESIS")
   entryHash      String      @default("")
+  /** APEX Phase 5 — identity provider for this event: legacy | clerk | refresh. */
+  authSource     String?     @map("auth_source")
+  /** APEX Phase 5 — session scope at time of event: national | dealership. */
+  scopeMode      String?     @map("scope_mode")
   createdAt      DateTime    @default(now())
 
   @@index([dealerId])
@@ -366,6 +401,25 @@ model AuditLog {
   @@index([createdAt])
   @@index([dealershipId, createdAt])
   @@index([dealerId, createdAt])
+  @@index([dealershipId, dealerId, action, createdAt])
+}
+
+/** APEX Phase 5 — rotating refresh tokens for fortress session model (apex PLATFORM_MODE). */
+model SessionRefreshToken {
+  id            String     @id @default(cuid())
+  technicianId  String
+  technician    Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  tokenHash     String     @unique
+  familyId      String
+  ipHash        String?
+  userAgentHash String?
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([technicianId])
+  @@index([familyId])
+  @@index([expiresAt])
 }
 
 /** Operational technician activity — isolated from compliance AuditLog and advisor intelligence. */

@@ -17,6 +17,11 @@ import { logger } from './logger';
 export type AuditAction =
   | 'auth.login'
   | 'auth.logout'
+  | 'auth.refresh'
+  | 'auth.select_dealership'
+  | 'owner.dealership_enter'
+  | 'owner.dealership_exit'
+  | 'owner.national_access'
   | 'auth.password_change'
   | 'auth.clerk_link'
   | 'consent.accept'
@@ -70,6 +75,11 @@ export const UPLOAD_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set(['image.up
 export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.login',
   'auth.logout',
+  'auth.refresh',
+  'auth.select_dealership',
+  'owner.dealership_enter',
+  'owner.dealership_exit',
+  'owner.national_access',
   'auth.password_change',
   'consent.accept',
   'legalDisclaimer.accept',
@@ -108,6 +118,10 @@ export interface AuditLogInput {
   entityId?: string;
   metadata?: Record<string, unknown>;
   ipAddress?: string;
+  /** APEX Phase 5 — identity provider: legacy | clerk | refresh. */
+  authSource?: string | null;
+  /** APEX Phase 5 — session scope at event time: national | dealership. */
+  scopeMode?: string | null;
   /**
    * Merlin prompt version stamped on this audit entry.
    * Required on every write — auto-filled for story actions when omitted.
@@ -229,6 +243,8 @@ export async function appendAuditLogInTransaction(
       entityId: input.entityId,
       metadata,
       ipAddress: input.ipAddress,
+      authSource: input.authSource?.trim() || null,
+      scopeMode: input.scopeMode?.trim() || null,
       promptVersion,
       previousHash,
       entryHash,

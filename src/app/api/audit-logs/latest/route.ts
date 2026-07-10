@@ -1,4 +1,4 @@
-import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
+import { scopedPiiWhere } from '@/lib/apex/tenantScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       const line = await prisma.repairLine.findFirst({
         where: {
           id: repairLineId,
-          repairOrder: { dealershipId: session.dealershipId },
+          repairOrder: scopedPiiWhere(session),
         },
         select: { id: true, isCustomerPay: true, repairOrderId: true },
       });
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
       const latestLog = await prisma.auditLog.findFirst({
         where: {
-          ...scopedDealershipWhere(session.dealershipId, session.dealerId),
+          ...scopedPiiWhere(session),
           entityType: 'repairLine',
           entityId: repairLineId,
           action: { in: actions },
@@ -64,6 +64,6 @@ export async function GET(request: Request) {
         promptVersion: latestLog?.promptVersion ?? null,
       };
     },
-    { rateLimitKey: 'audit-logs.latest' }
+    { rateLimitKey: 'audit-logs.latest', requireDealershipContext: true }
   );
 }

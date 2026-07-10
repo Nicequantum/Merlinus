@@ -151,6 +151,7 @@ export async function POST(
       trackUsage: true,
       blockInMaintenance: true,
       perfEvent: 'route.story.review',
+      requireDealershipContext: true,
     }
   );
 }

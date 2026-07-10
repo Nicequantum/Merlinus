@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 import { withOptionalDealerId } from '@/lib/apex/dealerScope';
+import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
 import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
 import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
 import { repairOrderListQuerySchema } from '@/lib/validation';
@@ -22,24 +23,23 @@ export function parseRepairOrderListParams(url: URL): RepairOrderListParams {
 }
 
 export function buildRepairOrderListWhere(
-  session: {
-    role: string;
-    dealershipId: string;
+  session: TenantScopedSession & {
     technicianId: string;
     serviceAdvisorId?: string | null;
-    /** APEX NATIONAL PLATFORM — optional defense-in-depth tenant filter. */
-    dealerId?: string | null;
   },
   params: RepairOrderListParams
 ): Prisma.RepairOrderWhereInput {
-  // MERLINUS SINGLE-DEALER: dealershipId remains the primary scope; dealerId is additive when present.
+  const piiScope = scopedPiiWhere(session);
   const roleWhere: Prisma.RepairOrderWhereInput = withOptionalDealerId(
     session.role === 'manager'
-      ? { dealershipId: session.dealershipId }
+      ? { dealershipId: piiScope.dealershipId }
       : session.role === 'service_advisor' && session.serviceAdvisorId
-        ? { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId }
-        : { dealershipId: session.dealershipId, technicianId: session.technicianId },
-    session.dealerId
+        ? {
+            dealershipId: piiScope.dealershipId,
+            serviceAdvisorId: session.serviceAdvisorId,
+          }
+        : { dealershipId: piiScope.dealershipId, technicianId: session.technicianId },
+    piiScope.dealerId
   );
 
   if (params.q) {

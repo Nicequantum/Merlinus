@@ -2,6 +2,12 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 import {
+  applyApexAccessCookie,
+  createApexAccessToken,
+  type ApexAccessClaims,
+} from '@/lib/apex/apexSession';
+import { isApexPlatformMode } from '@/lib/platformMode';
+import {
   applySessionCookieToResponse,
   createSessionToken,
   type SessionPayload,
@@ -40,18 +46,44 @@ export function toTechnicianSession(payload: SessionPayload): TechnicianSession 
     consentVersion: payload.consentVersion,
     legalDisclaimerAt: payload.legalDisclaimerAt,
     legalDisclaimerVersion: payload.legalDisclaimerVersion,
+    scopeMode: payload.scopeMode,
+    isOwner: payload.isOwner,
+    activeDealershipId: payload.activeDealershipId,
   };
+}
+
+async function applyRefreshedSessionCookie(
+  response: NextResponse,
+  session: SessionPayload,
+  jwtPayload: SessionPayload | ApexAccessClaims | null
+): Promise<void> {
+  if (isApexPlatformMode()) {
+    const accessToken = await createApexAccessToken(session, {
+      authSource: jwtPayload && 'authSource' in jwtPayload ? jwtPayload.authSource : 'legacy',
+      scopeMode:
+        jwtPayload && 'scopeMode' in jwtPayload
+          ? jwtPayload.scopeMode
+          : session.role === 'owner'
+            ? 'national'
+            : 'dealership',
+      ipHash: jwtPayload && 'ipHash' in jwtPayload ? jwtPayload.ipHash ?? null : null,
+    });
+    applyApexAccessCookie(response, accessToken);
+    return;
+  }
+
+  const token = await createSessionToken(session);
+  applySessionCookieToResponse(response, token);
 }
 
 /** Re-issue the session cookie when JWT compliance claims lag the authoritative DB session. */
 export async function attachRefreshedSessionCookie(
   response: NextResponse,
   session: SessionPayload,
-  jwtPayload: SessionPayload | null
+  jwtPayload: SessionPayload | ApexAccessClaims | null
 ): Promise<NextResponse> {
   if (!jwtPayload || complianceFieldsDiffer(jwtPayload, session)) {
-    const token = await createSessionToken(session);
-    applySessionCookieToResponse(response, token);
+    await applyRefreshedSessionCookie(response, session, jwtPayload);
   }
   return response;
 }
@@ -59,7 +91,7 @@ export async function attachRefreshedSessionCookie(
 export async function jsonWithSessionCookie(
   body: Record<string, unknown>,
   session: SessionPayload,
-  jwtPayload: SessionPayload | null = null
+  jwtPayload: SessionPayload | ApexAccessClaims | null = null
 ): Promise<NextResponse> {
   const response = NextResponse.json(body);
   return attachRefreshedSessionCookie(response, session, jwtPayload);
@@ -71,7 +103,6 @@ export async function jsonWithFreshSessionCookie(
   session: SessionPayload
 ): Promise<NextResponse> {
   const response = NextResponse.json(body);
-  const token = await createSessionToken(session);
-  applySessionCookieToResponse(response, token);
+  await applyRefreshedSessionCookie(response, session, null);
   return response;
 }

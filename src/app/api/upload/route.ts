@@ -98,6 +98,6 @@ export async function POST(request: Request) {
 
       return { pathname: uploaded.pathname, url: uploaded.url, name: file.name };
     },
-    { rateLimitKey: 'upload', rateLimit: RATE_LIMITS.upload }
+    { rateLimitKey: 'upload', rateLimit: RATE_LIMITS.upload, requireDealershipContext: true }
   );
 }

@@ -157,6 +157,7 @@ export async function POST(
       trackUsage: true,
       blockInMaintenance: true,
       perfEvent: 'route.story.generate',
+      requireDealershipContext: true,
     }
   );
 }

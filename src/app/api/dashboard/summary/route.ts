@@ -1,29 +1,33 @@
 import type { Prisma } from '@prisma/client';
-import { scopedDealershipWhere, withOptionalDealerId } from '@/lib/apex/dealerScope';
+import { withOptionalDealerId } from '@/lib/apex/dealerScope';
+import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
 import { prisma } from '@/lib/db';
 import { readRoNumberFromDb } from '@/lib/piiFieldRead';
 
-function buildRoleScopedRoWhere(session: {
-  role: string;
-  dealershipId: string;
-  technicianId: string;
-  serviceAdvisorId: string | null;
-  dealerId?: string | null;
-}): Prisma.RepairOrderWhereInput {
+function buildRoleScopedRoWhere(
+  session: TenantScopedSession & {
+    technicianId: string;
+    serviceAdvisorId: string | null;
+  }
+): Prisma.RepairOrderWhereInput {
+  const piiScope = scopedPiiWhere(session);
   if (session.role === 'manager') {
-    return withOptionalDealerId({ dealershipId: session.dealershipId }, session.dealerId);
+    return withOptionalDealerId({ dealershipId: piiScope.dealershipId }, piiScope.dealerId);
   }
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
     return withOptionalDealerId(
-      { dealershipId: session.dealershipId, serviceAdvisorId: session.serviceAdvisorId },
-      session.dealerId
+      {
+        dealershipId: piiScope.dealershipId,
+        serviceAdvisorId: session.serviceAdvisorId,
+      },
+      piiScope.dealerId
     );
   }
   return withOptionalDealerId(
-    { dealershipId: session.dealershipId, technicianId: session.technicianId },
-    session.dealerId
+    { dealershipId: piiScope.dealershipId, technicianId: session.technicianId },
+    piiScope.dealerId
   );
 }
 
@@ -31,7 +35,7 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const dealershipId = session.dealershipId;
+      const { dealershipId } = scopedPiiWhere(session);
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const isManager = session.role === 'manager';
       const roWhere = buildRoleScopedRoWhere(session);
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
           : null,
       ]);
 
-      const auditScope = scopedDealershipWhere(dealershipId, session.dealerId);
+      const auditScope = scopedPiiWhere(session);
       const activityThisWeek = await prisma.auditLog.count({
         where: isManager
           ? { ...auditScope, createdAt: { gte: weekAgo } }
@@ -91,6 +95,6 @@ export async function GET(request: Request) {
         audit: auditSummary,
       };
     },
-    { rateLimitKey: 'dashboard.summary' }
+    { rateLimitKey: 'dashboard.summary', requireDealershipContext: true }
   );
 }

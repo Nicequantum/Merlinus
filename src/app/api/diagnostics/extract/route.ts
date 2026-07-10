@@ -98,6 +98,7 @@ export async function POST(request: Request) {
       trackUsage: true,
       blockInMaintenance: true,
       perfEvent: 'route.diagnostics.extract',
+      requireDealershipContext: true,
     }
   );
 }

@@ -1,4 +1,10 @@
 import { NextResponse } from 'next/server';
+import {
+  DealershipScopeRequiredError,
+  enrichSessionWithTenantScope,
+  requireDealershipScope,
+} from '@/lib/apex/tenantScope';
+import { isApexPlatformMode } from '@/lib/platformMode';
 import { resolveAppSession, type AuthSource } from './authBridge';
 import { isMaintenanceModeEnabled } from './env';
 import {
@@ -35,6 +41,10 @@ interface RouteOptions {
   skipLegalDisclaimer?: boolean;
   /** Block when MERLIN_MAINTENANCE_MODE is enabled (AI and heavy write paths). */
   blockInMaintenance?: boolean;
+  /** APEX Phase 5.5 — owner-only routes (enter/exit dealership, national console). */
+  requireOwner?: boolean;
+  /** APEX Phase 5.5 — PII routes; blocks owners in national scope until enter-dealership. */
+  requireDealershipContext?: boolean;
   /** Emit structured perf log for the route handler duration. */
   perfEvent?: string;
   /** Manager health and similar probes — skip rate limiting so monitoring is not blocked by KV. */
@@ -61,9 +71,31 @@ export async function withAuth<T>(
     if (rateLimited) return rateLimited;
   }
 
-  const session = await resolveAppSession(request);
-  if (!session) {
+  const rawSession = await resolveAppSession(request);
+  if (!rawSession) {
     return apiError(UNAUTHORIZED_ERROR, 401);
+  }
+
+  const session = enrichSessionWithTenantScope(rawSession);
+
+  if (options.requireOwner) {
+    if (!isApexPlatformMode() || !session.isOwner) {
+      return apiError(FORBIDDEN_ERROR, 403);
+    }
+  }
+
+  if (options.requireDealershipContext) {
+    try {
+      requireDealershipScope(session);
+    } catch (error) {
+      if (error instanceof DealershipScopeRequiredError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: 403 }
+        );
+      }
+      throw error;
+    }
   }
 
   if (options.requireManager && session.role !== 'manager') {

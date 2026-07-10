@@ -168,6 +168,7 @@ export async function POST(
       trackUsage: true,
       blockInMaintenance: true,
       perfEvent: 'route.story.score',
+      requireDealershipContext: true,
     }
   );
 }

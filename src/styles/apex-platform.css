@@ -1,0 +1,777 @@
+/**
+ * APEX NATIONAL PLATFORM — design tokens and UI surfaces.
+ * Scoped to [data-platform="apex"] so Merlinus (:root benz tokens) stays unchanged.
+ */
+
+[data-platform='apex'] {
+  --apex-bg: #040408;
+  --apex-bg-elevated: #08080f;
+  --apex-surface: #0e0e16;
+  --apex-surface-2: #14141f;
+  --apex-surface-3: #1a1a28;
+  --apex-surface-input: #12121c;
+  --apex-border: rgba(148, 163, 184, 0.12);
+  --apex-border-strong: rgba(148, 163, 184, 0.22);
+  --apex-border-glow: rgba(34, 211, 238, 0.35);
+  --apex-text: #f1f5f9;
+  --apex-text-secondary: #94a3b8;
+  --apex-text-muted: #64748b;
+  --apex-silver: #d4d8e0;
+  --apex-silver-bright: #eef1f6;
+  --apex-silver-dim: #8b93a3;
+  --apex-cyan: #22d3ee;
+  --apex-cyan-bright: #67e8f9;
+  --apex-cyan-dim: #0891b2;
+  --apex-cyan-glow: rgba(34, 211, 238, 0.22);
+  --apex-cyan-glow-strong: rgba(34, 211, 238, 0.38);
+  --apex-violet: #6366f1;
+  --apex-violet-dim: rgba(99, 102, 241, 0.14);
+  --apex-radius-sm: 10px;
+  --apex-radius: 14px;
+  --apex-radius-lg: 18px;
+  --apex-radius-xl: 24px;
+  --apex-shadow: 0 4px 28px rgba(0, 0, 0, 0.55);
+  --apex-shadow-glow: 0 0 40px rgba(34, 211, 238, 0.12);
+  --apex-font-display: var(--font-inter), system-ui, sans-serif;
+  --apex-font-mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+}
+
+@layer components {
+  [data-platform='apex'] .apex-app-root {
+    min-height: 100dvh;
+    color: var(--apex-text);
+    background:
+      radial-gradient(ellipse 120% 80% at 50% -15%, rgba(34, 211, 238, 0.09), transparent 55%),
+      radial-gradient(ellipse 45% 35% at 8% 92%, rgba(99, 102, 241, 0.06), transparent 50%),
+      radial-gradient(ellipse 40% 30% at 92% 88%, rgba(34, 211, 238, 0.05), transparent 48%),
+      linear-gradient(180deg, var(--apex-bg-elevated) 0%, var(--apex-bg) 48%);
+  }
+
+  [data-platform='apex'] .apex-login-shell {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1.5rem, 5vw, 2.75rem) clamp(1.25rem, 4vw, 2rem);
+    position: relative;
+    overflow: hidden;
+  }
+
+  [data-platform='apex'] .apex-login-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 20%, transparent 75%);
+    pointer-events: none;
+  }
+
+  [data-platform='apex'] .apex-login-panel {
+    width: 100%;
+    max-width: 24rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  [data-platform='apex'] .apex-brand-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  [data-platform='apex'] .apex-wordmark {
+    margin-top: 1.125rem;
+    font-size: 1.375rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    color: var(--apex-silver-bright);
+  }
+
+  [data-platform='apex'] .apex-wordmark-accent {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--apex-cyan);
+  }
+
+  [data-platform='apex'] .apex-brand-divider {
+    width: 3.5rem;
+    height: 1px;
+    margin: 1.375rem auto 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--apex-cyan-glow-strong) 35%,
+      var(--apex-cyan) 50%,
+      var(--apex-cyan-glow-strong) 65%,
+      transparent
+    );
+    opacity: 0.85;
+  }
+
+  [data-platform='apex'] .apex-brand-tagline {
+    margin-top: 0.875rem;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--apex-text-secondary);
+    max-width: 18rem;
+  }
+
+  [data-platform='apex'] .apex-card {
+    background: linear-gradient(165deg, rgba(20, 20, 31, 0.92) 0%, rgba(12, 12, 20, 0.96) 100%);
+    border: 1px solid var(--apex-border);
+    border-radius: var(--apex-radius-lg);
+    box-shadow: var(--apex-shadow), var(--apex-shadow-glow);
+    backdrop-filter: blur(12px);
+  }
+
+  [data-platform='apex'] .apex-card-accent {
+    border-color: var(--apex-border-glow);
+    box-shadow:
+      var(--apex-shadow),
+      0 0 0 1px rgba(34, 211, 238, 0.06),
+      0 12px 48px rgba(34, 211, 238, 0.08);
+  }
+
+  [data-platform='apex'] .apex-login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.625rem 1.5rem 1.75rem;
+  }
+
+  [data-platform='apex'] .apex-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  [data-platform='apex'] .apex-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--apex-text-secondary);
+  }
+
+  [data-platform='apex'] .apex-input {
+    width: 100%;
+    height: 2.875rem;
+    padding: 0 0.875rem;
+    font-size: 0.9375rem;
+    color: var(--apex-text);
+    background: var(--apex-surface-input);
+    border: 1px solid var(--apex-border);
+    border-radius: var(--apex-radius-sm);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  [data-platform='apex'] .apex-input::placeholder {
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-input:focus {
+    border-color: var(--apex-border-glow);
+    box-shadow: 0 0 0 3px var(--apex-cyan-glow);
+  }
+
+  [data-platform='apex'] .apex-input-mono {
+    font-family: var(--apex-font-mono);
+    letter-spacing: 0.04em;
+  }
+
+  [data-platform='apex'] .apex-hint {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-btn-primary {
+    height: 3rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: calc(var(--apex-radius) + 2px);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #041016;
+    background: linear-gradient(180deg, var(--apex-cyan-bright) 0%, var(--apex-cyan) 48%, var(--apex-cyan-dim) 100%);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.25),
+      0 8px 28px var(--apex-cyan-glow-strong),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+  }
+
+  [data-platform='apex'] .apex-btn-primary:hover:not(:disabled) {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.25),
+      0 14px 36px var(--apex-cyan-glow-strong),
+      inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  }
+
+  [data-platform='apex'] .apex-btn-primary:active:not(:disabled) {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  [data-platform='apex'] .apex-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  [data-platform='apex'] .apex-btn-secondary {
+    height: 2.75rem;
+    border: 1px solid var(--apex-border-strong);
+    border-radius: var(--apex-radius-sm);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--apex-text);
+    background: var(--apex-surface-2);
+    transition: border-color 0.15s ease, background 0.15s ease;
+    cursor: pointer;
+  }
+
+  [data-platform='apex'] .apex-btn-secondary:hover:not(:disabled) {
+    border-color: var(--apex-border-glow);
+    background: var(--apex-surface-3);
+  }
+
+  [data-platform='apex'] .apex-login-footer {
+    margin-top: 1.625rem;
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1.65;
+    color: var(--apex-text-muted);
+    letter-spacing: 0.02em;
+  }
+
+  [data-platform='apex'] .apex-dealership-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  [data-platform='apex'] .apex-dealership-selector-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  [data-platform='apex'] .apex-dealership-search-wrap {
+    position: relative;
+  }
+
+  [data-platform='apex'] .apex-dealership-search {
+    padding-right: 2.25rem;
+  }
+
+  [data-platform='apex'] .apex-dealership-search-icon {
+    position: absolute;
+    right: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    color: var(--apex-text-muted);
+    pointer-events: none;
+  }
+
+  [data-platform='apex'] .apex-remember-default {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--apex-text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  [data-platform='apex'] .apex-remember-default input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--apex-cyan);
+    cursor: pointer;
+  }
+
+  [data-platform='apex'] .apex-dealership-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-height: 16rem;
+    overflow-y: auto;
+    padding-right: 0.125rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(34, 211, 238, 0.35) transparent;
+  }
+
+  [data-platform='apex'] .apex-dealership-empty {
+    padding: 1.25rem 0.75rem;
+    text-align: center;
+    font-size: 0.8125rem;
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-dealership-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+    width: 100%;
+    padding: 0.875rem 1rem;
+    text-align: left;
+    border: 1px solid var(--apex-border);
+    border-radius: var(--apex-radius-sm);
+    background: linear-gradient(165deg, rgba(22, 22, 34, 0.9) 0%, rgba(14, 14, 22, 0.95) 100%);
+    color: var(--apex-text);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+    cursor: pointer;
+  }
+
+  [data-platform='apex'] .apex-dealership-option-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  [data-platform='apex'] .apex-dealership-option:hover:not(:disabled) {
+    border-color: var(--apex-border-glow);
+    box-shadow: 0 0 22px var(--apex-cyan-glow);
+    transform: translateY(-1px);
+  }
+
+  [data-platform='apex'] .apex-dealership-option--active {
+    border-color: var(--apex-cyan);
+    box-shadow: 0 0 24px var(--apex-cyan-glow-strong);
+  }
+
+  [data-platform='apex'] .apex-dealership-option:disabled {
+    opacity: 0.55;
+    cursor: wait;
+  }
+
+  [data-platform='apex'] .apex-dealership-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--apex-silver-bright);
+  }
+
+  [data-platform='apex'] .apex-dealership-primary-badge {
+    flex-shrink: 0;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--apex-cyan-bright);
+    background: rgba(34, 211, 238, 0.12);
+    border: 1px solid rgba(34, 211, 238, 0.28);
+    border-radius: 999px;
+  }
+
+  [data-platform='apex'] .apex-dealership-meta {
+    font-size: 0.75rem;
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-enter-dealership-card {
+    max-width: 30rem;
+    text-align: left;
+  }
+
+  [data-platform='apex'] .apex-national-title--compact {
+    margin-top: 1rem;
+    font-size: 1.25rem;
+    text-align: left;
+  }
+
+  [data-platform='apex'] .apex-enter-dealership-card .apex-national-subtitle {
+    text-align: left;
+    margin-bottom: 0.25rem;
+  }
+
+  [data-platform='apex'] .apex-enter-loading {
+    padding: 1.5rem 0;
+    text-align: center;
+  }
+
+  [data-platform='apex'] .apex-logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.12), transparent 45%),
+      linear-gradient(145deg, rgba(20, 20, 32, 0.95) 0%, rgba(8, 8, 14, 0.98) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow:
+      0 0 0 1px rgba(34, 211, 238, 0.08),
+      0 8px 32px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  [data-platform='apex'] .apex-logo-mark > svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  [data-platform='apex'] .apex-logo-mark--sm {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0.35rem;
+  }
+
+  [data-platform='apex'] .apex-logo-mark--md {
+    width: 3.25rem;
+    height: 3.25rem;
+    padding: 0.5rem;
+  }
+
+  [data-platform='apex'] .apex-logo-mark--lg {
+    width: 4.5rem;
+    height: 4.5rem;
+    padding: 0.65rem;
+  }
+
+  [data-platform='apex'] .apex-logo-mark--xl {
+    width: 5.75rem;
+    height: 5.75rem;
+    padding: 0.8rem;
+  }
+
+  [data-platform='apex'] .apex-logo-animated {
+    animation: apex-logo-pulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes apex-logo-pulse {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.25));
+    }
+    50% {
+      filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.45));
+    }
+  }
+
+  [data-platform='apex'] .apex-national-shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.5rem 3rem;
+    text-align: center;
+  }
+
+  [data-platform='apex'] .apex-national-card {
+    width: 100%;
+    max-width: 28rem;
+    padding: 2rem 1.75rem 2.25rem;
+  }
+
+  [data-platform='apex'] .apex-national-title {
+    margin-top: 1.25rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--apex-silver-bright);
+  }
+
+  [data-platform='apex'] .apex-national-subtitle {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--apex-text-secondary);
+  }
+
+  [data-platform='apex'] .apex-scope-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 1.25rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--apex-cyan);
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid rgba(34, 211, 238, 0.22);
+    border-radius: 999px;
+  }
+
+  [data-platform='apex'] .apex-national-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.75rem;
+  }
+
+  [data-platform='apex'] .apex-national-dashboard {
+    min-height: 100dvh;
+    padding-bottom: 2.5rem;
+  }
+
+  [data-platform='apex'] .apex-national-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--apex-border);
+    background: rgba(8, 8, 15, 0.92);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  [data-platform='apex'] .apex-national-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  [data-platform='apex'] .apex-national-header-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--apex-cyan);
+  }
+
+  [data-platform='apex'] .apex-national-header-user {
+    font-size: 0.8125rem;
+    color: var(--apex-text-secondary);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  [data-platform='apex'] .apex-national-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex-shrink: 0;
+  }
+
+  [data-platform='apex'] .apex-national-signout {
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  [data-platform='apex'] .apex-national-main {
+    width: 100%;
+    max-width: 56rem;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  [data-platform='apex'] .apex-national-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.375rem 1.25rem;
+  }
+
+  @media (min-width: 640px) {
+    [data-platform='apex'] .apex-national-hero {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+  }
+
+  [data-platform='apex'] .apex-national-hero-title {
+    font-size: 1.375rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--apex-silver-bright);
+  }
+
+  [data-platform='apex'] .apex-national-hero-subtitle {
+    margin-top: 0.4rem;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--apex-text-secondary);
+    max-width: 34rem;
+  }
+
+  [data-platform='apex'] .apex-national-enter-btn {
+    flex-shrink: 0;
+    min-width: 11rem;
+    padding: 0 1.25rem;
+  }
+
+  [data-platform='apex'] .apex-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    [data-platform='apex'] .apex-stat-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  [data-platform='apex'] .apex-stat-card {
+    padding: 1rem 1.125rem;
+    border-radius: var(--apex-radius);
+    border: 1px solid var(--apex-border);
+    background: linear-gradient(165deg, rgba(18, 18, 28, 0.95) 0%, rgba(10, 10, 16, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  [data-platform='apex'] .apex-stat-value {
+    font-size: 1.625rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--apex-silver-bright);
+    line-height: 1.1;
+  }
+
+  [data-platform='apex'] .apex-stat-label {
+    margin-top: 0.35rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-national-panel {
+    padding: 1.25rem 1.125rem 1.375rem;
+  }
+
+  [data-platform='apex'] .apex-national-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  [data-platform='apex'] .apex-national-panel-title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--apex-silver-bright);
+    letter-spacing: -0.01em;
+  }
+
+  [data-platform='apex'] .apex-national-loading {
+    text-align: center;
+    padding: 2rem 0;
+  }
+
+  [data-platform='apex'] .apex-activity-feed {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-height: 22rem;
+    overflow-y: auto;
+  }
+
+  [data-platform='apex'] .apex-activity-item {
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--apex-border);
+    border-radius: var(--apex-radius-sm);
+    background: var(--apex-surface-2);
+  }
+
+  [data-platform='apex'] .apex-activity-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  [data-platform='apex'] .apex-activity-action {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--apex-text);
+  }
+
+  [data-platform='apex'] .apex-activity-time {
+    font-size: 0.6875rem;
+    color: var(--apex-text-muted);
+    white-space: nowrap;
+  }
+
+  [data-platform='apex'] .apex-activity-meta {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--apex-text-muted);
+  }
+
+  [data-platform='apex'] .apex-owner-scope-bar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    border-bottom: 1px solid rgba(34, 211, 238, 0.22);
+    background: linear-gradient(180deg, rgba(8, 18, 24, 0.98) 0%, rgba(6, 12, 18, 0.95) 100%);
+    box-shadow: 0 8px 24px rgba(34, 211, 238, 0.08);
+  }
+
+  [data-platform='apex'] .apex-owner-scope-bar-inner {
+    max-width: 56rem;
+    margin: 0 auto;
+    padding: 0.625rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  [data-platform='apex'] .apex-owner-scope-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  [data-platform='apex'] .apex-owner-scope-label {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--apex-cyan);
+  }
+
+  [data-platform='apex'] .apex-owner-scope-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--apex-silver-bright);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-platform='apex'] .apex-owner-exit-btn {
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    font-size: 0.8125rem;
+    flex-shrink: 0;
+  }
+}

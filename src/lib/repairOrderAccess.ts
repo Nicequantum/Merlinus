@@ -5,16 +5,13 @@ import {
   withOptionalDealerId,
   withOptionalDealerIdOnRepairOrderScope,
 } from '@/lib/apex/dealerScope';
+import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
 import { prisma } from '@/lib/db';
 import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
 
-export interface RepairOrderAccessSession {
+export interface RepairOrderAccessSession extends TenantScopedSession {
   technicianId: string;
-  role: string;
-  dealershipId: string;
   serviceAdvisorId?: string | null;
-  /** APEX NATIONAL PLATFORM — optional defense-in-depth; sourced from authenticated session only. */
-  dealerId?: string | null;
 }
 
 export function isServiceAdvisorUser(session: { role: string }): boolean {
@@ -27,12 +24,13 @@ export async function canAccessRepairOrder(
   roId: string,
   include: Prisma.RepairOrderInclude = { repairLines: true }
 ) {
-  // MERLINUS SINGLE-DEALER: dealershipId remains primary; dealerId is additive when present in session.
+  const piiScope = scopedPiiWhere(session);
+
   if (session.role === 'manager') {
     return prisma.repairOrder.findFirst({
       where: withOptionalDealerId(
-        { id: roId, dealershipId: session.dealershipId },
-        session.dealerId
+        { id: roId, dealershipId: piiScope.dealershipId },
+        piiScope.dealerId
       ),
       include,
     });
@@ -43,10 +41,10 @@ export async function canAccessRepairOrder(
       where: withOptionalDealerId(
         {
           id: session.serviceAdvisorId,
-          dealershipId: session.dealershipId,
+          dealershipId: piiScope.dealershipId,
           deletedAt: null,
         },
-        session.dealerId
+        piiScope.dealerId
       ),
     });
     if (!advisor || !isServiceAdvisorActive(advisor)) return null;
@@ -55,10 +53,10 @@ export async function canAccessRepairOrder(
       where: withOptionalDealerId(
         {
           id: roId,
-          dealershipId: session.dealershipId,
+          dealershipId: piiScope.dealershipId,
           serviceAdvisorId: session.serviceAdvisorId,
         },
-        session.dealerId
+        piiScope.dealerId
       ),
       include,
     });
@@ -68,10 +66,10 @@ export async function canAccessRepairOrder(
     where: withOptionalDealerId(
       {
         id: roId,
-        dealershipId: session.dealershipId,
+        dealershipId: piiScope.dealershipId,
         technicianId: session.technicianId,
       },
-      session.dealerId
+      piiScope.dealerId
     ),
     include,
   });
@@ -116,9 +114,10 @@ export function scopedRepairOrderWhere(
  */
 export function scopedRepairOrderWhereForSession(
   repairOrderId: string,
-  session: Pick<RepairOrderAccessSession, 'dealershipId' | 'dealerId'>
+  session: TenantScopedSession
 ): Prisma.RepairOrderWhereInput {
-  return scopedRepairOrderWhere(repairOrderId, session.dealershipId, session.dealerId);
+  const piiScope = scopedPiiWhere(session);
+  return scopedRepairOrderWhere(repairOrderId, piiScope.dealershipId, piiScope.dealerId);
 }
 
 /**
@@ -128,7 +127,13 @@ export function scopedRepairOrderWhereForSession(
 export function scopedRepairLineWhereForSession(
   lineId: string,
   repairOrderId: string,
-  session: Pick<RepairOrderAccessSession, 'dealershipId' | 'dealerId'>
+  session: TenantScopedSession
 ): Prisma.RepairLineWhereInput {
-  return scopedRepairLineWhere(lineId, repairOrderId, session.dealershipId, session.dealerId);
+  const piiScope = scopedPiiWhere(session);
+  return scopedRepairLineWhere(
+    lineId,
+    repairOrderId,
+    piiScope.dealershipId,
+    piiScope.dealerId
+  );
 }

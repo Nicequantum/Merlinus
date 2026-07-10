@@ -1,4 +1,4 @@
-import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
+import { scopedPiiWhere } from '@/lib/apex/tenantScope';
 import { withAuth } from '@/lib/apiRoute';
 import { prisma } from '@/lib/db';
 import { auditLogQuerySchema, parseQueryParams } from '@/lib/validation';
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         technicianId?: string;
         action?: string;
         createdAt?: { gte?: Date; lte?: Date };
-      } = scopedDealershipWhere(session.dealershipId, session.dealerId);
+      } = scopedPiiWhere(session);
 
       if (technicianId) where.technicianId = technicianId;
       if (action) where.action = action;
@@ -101,6 +101,6 @@ export async function GET(request: Request) {
 
       return { logs: entries, count: entries.length };
     },
-    { rateLimitKey: 'audit-logs.list', requireManager: true }
+    { rateLimitKey: 'audit-logs.list', requireManager: true, requireDealershipContext: true }
   );
 }

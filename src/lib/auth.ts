@@ -34,7 +34,8 @@ export const JWT_AUDIENCE = 'benz-tech-session';
 
 export interface SessionPayload {
   technicianId: string;
-  d7Number: string;
+  /** Null for owner accounts (Phase 5). */
+  d7Number: string | null;
   name: string;
   role: string;
   isAdmin: boolean;
@@ -48,6 +49,11 @@ export interface SessionPayload {
   legalDisclaimerAt: string | null;
   legalDisclaimerVersion: string | null;
   sessionVersion: number;
+  /** APEX Phase 5.5 — national vs dealership context (owners only in apex mode). */
+  scopeMode?: 'national' | 'dealership';
+  isOwner?: boolean;
+  /** Active rooftop when scopeMode is dealership (may differ from sentinel FK). */
+  activeDealershipId?: string;
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
@@ -60,7 +66,7 @@ export function resolveDealerIdFromTechnician(tech: {
 
 export type TechnicianForSession = {
   id: string;
-  d7Number: string;
+  d7Number: string | null;
   name: string;
   role: string;
   isAdmin: boolean;

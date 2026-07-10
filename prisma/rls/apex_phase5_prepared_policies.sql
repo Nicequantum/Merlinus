@@ -1,0 +1,113 @@
+-- =============================================================================
+-- APEX NATIONAL PLATFORM — Phase 5 RLS Policy Templates (PREPARED, NOT ENABLED)
+-- =============================================================================
+--
+-- DO NOT execute this file in production until Phase 6 RLS enablement.
+-- App-layer scoping (tenantScope.ts + membershipGuard) must be validated first.
+--
+-- Enablement checklist (Phase 6):
+--   1. Set RLS_ENABLED=true in application env
+--   2. Implement setRlsContext() per-request via SET LOCAL app.* session vars
+--   3. Run integration tests with RLS_ENABLED=true
+--   4. Uncomment and apply policies below in a dedicated migration
+--   5. Verify Merlinus single-dealer regression with default dealer context
+--
+-- Session variables set by application before queries:
+--   app.active_dealership_id  — required for PII tables in dealership scope
+--   app.dealer_id             — optional defense-in-depth franchise filter
+--   app.technician_id         — for row-level creator checks (technician role)
+--   app.scope_mode            — 'national' | 'dealership' (national = deny PII)
+--
+-- =============================================================================
+
+-- ─── RepairOrder ─────────────────────────────────────────────────────────────
+-- ALTER TABLE "RepairOrder" ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "RepairOrder" FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY repair_order_select_tenant ON "RepairOrder"
+--   FOR SELECT
+--   USING (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND "dealershipId" = current_setting('app.active_dealership_id', true)
+--     AND (
+--       current_setting('app.dealer_id', true) IS NULL
+--       OR current_setting('app.dealer_id', true) = ''
+--       OR "dealer_id" = current_setting('app.dealer_id', true)
+--     )
+--   );
+--
+-- CREATE POLICY repair_order_insert_tenant ON "RepairOrder"
+--   FOR INSERT
+--   WITH CHECK (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND "dealershipId" = current_setting('app.active_dealership_id', true)
+--   );
+--
+-- CREATE POLICY repair_order_update_tenant ON "RepairOrder"
+--   FOR UPDATE
+--   USING (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND "dealershipId" = current_setting('app.active_dealership_id', true)
+--   );
+
+-- ─── RepairLine (via repair order tenancy) ───────────────────────────────────
+-- ALTER TABLE "RepairLine" ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "RepairLine" FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY repair_line_select_tenant ON "RepairLine"
+--   FOR SELECT
+--   USING (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND EXISTS (
+--       SELECT 1 FROM "RepairOrder" ro
+--       WHERE ro."id" = "RepairLine"."repairOrderId"
+--         AND ro."dealershipId" = current_setting('app.active_dealership_id', true)
+--     )
+--   );
+
+-- ─── ServiceAdvisor ──────────────────────────────────────────────────────────
+-- ALTER TABLE "ServiceAdvisor" ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "ServiceAdvisor" FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY service_advisor_select_tenant ON "ServiceAdvisor"
+--   FOR SELECT
+--   USING (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND "dealershipId" = current_setting('app.active_dealership_id', true)
+--   );
+
+-- ─── AuditLog ────────────────────────────────────────────────────────────────
+-- ALTER TABLE "AuditLog" ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE "AuditLog" FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY audit_log_select_tenant ON "AuditLog"
+--   FOR SELECT
+--   USING (
+--     current_setting('app.scope_mode', true) = 'dealership'
+--     AND "dealershipId" = current_setting('app.active_dealership_id', true)
+--   );
+--
+-- -- National owners: read-only platform audit via separate policy (no PII metadata)
+-- CREATE POLICY audit_log_select_national ON "AuditLog"
+--   FOR SELECT
+--   USING (
+--     current_setting('app.scope_mode', true) = 'national'
+--     AND "action" LIKE 'owner.%'
+--   );
+
+-- ─── TechnicianDealership (Phase 5.2) ────────────────────────────────────────
+-- ALTER TABLE "TechnicianDealership" ENABLE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY tech_dealership_membership ON "TechnicianDealership"
+--   FOR SELECT
+--   USING (
+--     "technicianId" = current_setting('app.technician_id', true)
+--     OR current_setting('app.scope_mode', true) = 'national'
+--   );
+
+-- ─── SessionRefreshToken ─────────────────────────────────────────────────────
+-- ALTER TABLE "SessionRefreshToken" ENABLE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY refresh_token_owner ON "SessionRefreshToken"
+--   FOR ALL
+--   USING ("technicianId" = current_setting('app.technician_id', true));

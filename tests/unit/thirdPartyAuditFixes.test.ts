@@ -254,8 +254,8 @@ describe('Third-party audit hardening', () => {
     );
     const changePassword = readSrc('src/app/api/auth/change-password/route.ts');
 
-    assert.ok(roListQuery.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
-    assert.ok(dashboardSummary.includes('dealershipId: session.dealershipId, technicianId: session.technicianId'));
+    assert.ok(roListQuery.includes('dealershipId: piiScope.dealershipId, technicianId: session.technicianId'));
+    assert.ok(dashboardSummary.includes('dealershipId: piiScope.dealershipId, technicianId: session.technicianId'));
     assert.ok(repairOrderAccess.includes('scopedRepairLineWhere'));
     assert.ok(repairOrderAccess.includes('scopedRepairOrderWhere'));
     assert.ok(roRoute.includes('scopedRepairOrderWhere'));

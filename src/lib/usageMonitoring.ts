@@ -95,7 +95,7 @@ export async function logApiUsage(input: {
 export interface TechnicianUsageSummary {
   technicianId: string;
   name: string;
-  d7Number: string;
+  d7Number: string | null;
   role: string;
   dailyCount: number;
   weeklyCount: number;

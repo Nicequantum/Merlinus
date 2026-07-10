@@ -10,6 +10,14 @@ async function main() {
   console.log(`  Primary login: ${result.managerD7} (service manager)`);
   console.log(`  Technician login: ${result.techD7}`);
   console.log('  First-login password rotation enforced — use ADMIN_SEED_PASSWORD / TECH_SEED_PASSWORD from .env.local');
+  if (result.ownerEmail) {
+    console.log(`  Owner login: ${result.ownerEmail} — password from OWNER_SEED_PASSWORD`);
+  }
+  if (result.multiRooftopUsername) {
+    console.log(
+      `  Multi-rooftop login: ${result.multiRooftopUsername} — password from MULTI_ROOFTOP_SEED_PASSWORD`
+    );
+  }
 }
 
 main()

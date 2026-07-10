@@ -362,7 +362,8 @@ export interface StructuredROExtraction {
 
 export interface TechnicianSession {
   technicianId: string;
-  d7Number: string;
+  /** Null for owner accounts (Phase 5 apex mode). */
+  d7Number: string | null;
   name: string;
   role: string;
   isAdmin: boolean;
@@ -373,12 +374,16 @@ export interface TechnicianSession {
   consentVersion: string | null;
   legalDisclaimerAt: string | null;
   legalDisclaimerVersion: string | null;
+  /** APEX Phase 5.5 — national vs dealership context (owners only). */
+  scopeMode?: 'national' | 'dealership';
+  isOwner?: boolean;
+  activeDealershipId?: string;
 }
 
 export interface TechnicianUsageSummary {
   technicianId: string;
   name: string;
-  d7Number: string;
+  d7Number: string | null;
   role: string;
   dailyCount: number;
   weeklyCount: number;
@@ -464,6 +469,11 @@ export const WARRANTY_STORY_WARN_CHARS = 100_000;
 export const AUDIT_ACTIONS = [
   'auth.login',
   'auth.logout',
+  'auth.refresh',
+  'auth.select_dealership',
+  'owner.dealership_enter',
+  'owner.dealership_exit',
+  'owner.national_access',
   'auth.password_change',
   'auth.clerk_link',
   'consent.accept',

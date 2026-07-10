@@ -12,9 +12,13 @@ function readSrc(relativePath: string): string {
 describe('critical path HTTP route coverage', () => {
   it('login route validates input, rate-limits, sets session cookie, and audits success', () => {
     const src = readSrc('src/app/api/auth/login/route.ts');
-    assert.match(src, /parseRequestBody\(request, loginSchema/);
+    assert.match(src, /parseRequestBody\(request, loginRequestSchema/);
     assert.match(src, /checkRateLimit\(request, 'auth\.login'/);
     assert.match(src, /loginTechnician/);
+    assert.match(src, /resolveUnifiedLogin/);
+    assert.match(src, /isApexPlatformMode/);
+    assert.match(src, /createPendingSelectionToken/);
+    assert.match(src, /issueApexSessionCookies/);
     assert.match(src, /applySessionCookieToResponse/);
     assert.match(src, /action: 'auth\.login'/);
     assert.match(src, /entityId: session\.technicianId/);
@@ -59,6 +63,15 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /story\.generate/);
     assert.match(src, /criticalPathMocks/);
     assert.match(src, /runWithNextRouteContext/);
+  });
+
+  it('apex integration suite exercises owner national scope and multi-rooftop selector', () => {
+    const src = readSrc('tests/integration/apex-owner-flows.test.ts');
+    assert.match(src, /getOwnerSummary/);
+    assert.match(src, /postEnterDealership/);
+    assert.match(src, /postExitDealership/);
+    assert.match(src, /requiresDealershipSelection/);
+    assert.match(src, /enableApexPlatformModeForTests/);
   });
 
   it('cookies intercept test guards the traced auth.ts next/headers import path', () => {

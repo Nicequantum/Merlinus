@@ -1374,7 +1374,9 @@ async function checkSecurityAndConfig(): Promise<void> {
     const hasWithAuth = content.includes('withAuth(');
     const hasSvixWebhookVerification =
       content.includes('verifyWebhook(') && content.includes('@clerk/nextjs/webhooks');
-    if (!isPublic && !hasWithAuth && !hasSvixWebhookVerification) {
+    const hasApexPreAuth =
+      content.includes('verifyPendingSelectionToken') || content.includes('rotateApexRefreshToken');
+    if (!isPublic && !hasWithAuth && !hasSvixWebhookVerification && !hasApexPreAuth) {
       unauthenticated.push(rel);
     }
   }
@@ -1569,6 +1571,410 @@ function checkProductionReadiness(): void {
   }
 }
 
+function checkApexPhase51Schema(): void {
+  section('APEX Phase 5.1 — Fortress Schema');
+
+  const schema = readFileSync(resolve(process.cwd(), 'prisma/schema.prisma'), 'utf8');
+  const schemaOk =
+    schema.includes('owner') &&
+    schema.includes('apexUsername') &&
+    schema.includes('model SessionRefreshToken') &&
+    schema.includes('authSource') &&
+    schema.includes('scopeMode') &&
+    /d7Number\s+String\?\s+@unique/.test(schema);
+
+  if (schemaOk) {
+    record(
+      'APEX 5.1',
+      'Prisma schema',
+      'pass',
+      'owner role, apexUsername, nullable d7, audit extensions, SessionRefreshToken'
+    );
+  } else {
+    record('APEX 5.1', 'Prisma schema', 'fail', 'Phase 5.1 fortress schema incomplete');
+  }
+
+  const migrationPath = resolve(
+    process.cwd(),
+    'prisma/migrations/20250711120000_apex_phase5_1_fortress_schema/migration.sql'
+  );
+  if (existsSync(migrationPath)) {
+    const sql = readFileSync(migrationPath, 'utf8');
+    const migrationOk =
+      sql.includes('__apex_national__') &&
+      sql.includes('SessionRefreshToken') &&
+      sql.includes('auth_source');
+    if (migrationOk) {
+      record('APEX 5.1', 'Migration SQL', 'pass', 'Sentinel dealership, refresh tokens, audit columns');
+    } else {
+      record('APEX 5.1', 'Migration SQL', 'fail', 'Phase 5.1 migration SQL incomplete');
+    }
+  } else {
+    record('APEX 5.1', 'Migration SQL', 'fail', 'Missing 20250711120000_apex_phase5_1_fortress_schema');
+  }
+
+  const rlsPath = resolve(process.cwd(), 'prisma/rls/apex_phase5_prepared_policies.sql');
+  if (existsSync(rlsPath) && readFileSync(rlsPath, 'utf8').includes('ENABLE ROW LEVEL SECURITY')) {
+    record('APEX 5.1', 'RLS prepared policies', 'pass', 'Commented policy templates for Phase 6');
+  } else {
+    record('APEX 5.1', 'RLS prepared policies', 'fail', 'Missing prisma/rls/apex_phase5_prepared_policies.sql');
+  }
+}
+
+function checkApexPhase52Membership(): void {
+  section('APEX Phase 5.2 — TechnicianDealership');
+
+  const schema = readFileSync(resolve(process.cwd(), 'prisma/schema.prisma'), 'utf8');
+  const schemaOk =
+    schema.includes('model TechnicianDealership') &&
+    schema.includes('isPrimary') &&
+    schema.includes('isActive') &&
+    /@@unique\(\[technicianId, dealershipId\]\)/.test(schema);
+
+  if (schemaOk) {
+    record('APEX 5.2', 'Prisma schema', 'pass', 'TechnicianDealership join model');
+  } else {
+    record('APEX 5.2', 'Prisma schema', 'fail', 'TechnicianDealership model incomplete');
+  }
+
+  const migrationPath = resolve(
+    process.cwd(),
+    'prisma/migrations/20250711130000_apex_phase5_2_technician_dealership/migration.sql'
+  );
+  if (existsSync(migrationPath)) {
+    const sql = readFileSync(migrationPath, 'utf8');
+    const migrationOk =
+      sql.includes('TechnicianDealership') &&
+      sql.includes('FROM "Technician" t') &&
+      sql.includes('ON CONFLICT');
+    if (migrationOk) {
+      record('APEX 5.2', 'Backfill migration', 'pass', 'One membership row per technician');
+    } else {
+      record('APEX 5.2', 'Backfill migration', 'fail', 'TechnicianDealership backfill SQL incomplete');
+    }
+  } else {
+    record('APEX 5.2', 'Backfill migration', 'fail', 'Missing 20250711130000_apex_phase5_2_technician_dealership');
+  }
+
+  const guardPath = resolve(process.cwd(), 'src/lib/apex/membershipGuard.ts');
+  if (existsSync(guardPath)) {
+    const src = readFileSync(guardPath, 'utf8');
+    const guardOk =
+      src.includes('assertDealershipMembership') &&
+      src.includes('DealershipMembershipError') &&
+      src.includes('upsertTechnicianDealershipMembership');
+    if (guardOk) {
+      record('APEX 5.2', 'membershipGuard.ts', 'pass', 'assertDealershipMembership helper present');
+    } else {
+      record('APEX 5.2', 'membershipGuard.ts', 'fail', 'membershipGuard.ts incomplete');
+    }
+  } else {
+    record('APEX 5.2', 'membershipGuard.ts', 'fail', 'Missing src/lib/apex/membershipGuard.ts');
+  }
+}
+
+function checkApexPhase53UnifiedLogin(): void {
+  section('APEX Phase 5.3 — Unified Login');
+
+  const credentialPath = resolve(process.cwd(), 'src/lib/apex/credentialType.ts');
+  const resolverPath = resolve(process.cwd(), 'src/lib/apex/loginResolver.ts');
+  const loginRoutePath = resolve(process.cwd(), 'src/app/api/auth/login/route.ts');
+
+  if (existsSync(credentialPath)) {
+    const src = readFileSync(credentialPath, 'utf8');
+    const ok =
+      src.includes('detectCredentialType') &&
+      src.includes('normalizeApexUsername') &&
+      src.includes('isCredentialRoleAllowed');
+    if (ok) {
+      record('APEX 5.3', 'credentialType.ts', 'pass', 'Email / D7 / username detection');
+    } else {
+      record('APEX 5.3', 'credentialType.ts', 'fail', 'credentialType.ts incomplete');
+    }
+  } else {
+    record('APEX 5.3', 'credentialType.ts', 'fail', 'Missing credentialType.ts');
+  }
+
+  if (existsSync(resolverPath)) {
+    const src = readFileSync(resolverPath, 'utf8');
+    const ok = src.includes('resolveUnifiedLogin') && src.includes('validateTechnicianForLogin');
+    if (ok) {
+      record('APEX 5.3', 'loginResolver.ts', 'pass', 'Unified login resolver');
+    } else {
+      record('APEX 5.3', 'loginResolver.ts', 'fail', 'loginResolver.ts incomplete');
+    }
+  } else {
+    record('APEX 5.3', 'loginResolver.ts', 'fail', 'Missing loginResolver.ts');
+  }
+
+  if (existsSync(loginRoutePath)) {
+    const src = readFileSync(loginRoutePath, 'utf8');
+    const ok =
+      src.includes('loginRequestSchema') &&
+      src.includes('isApexPlatformMode') &&
+      src.includes('resolveUnifiedLogin');
+    if (ok) {
+      record('APEX 5.3', 'auth/login route', 'pass', 'Merlinus + apex login branches');
+    } else {
+      record('APEX 5.3', 'auth/login route', 'fail', 'Login route missing unified handler');
+    }
+  } else {
+    record('APEX 5.3', 'auth/login route', 'fail', 'Missing auth login route');
+  }
+}
+
+function checkApexPhase55OwnerScope(): void {
+  section('APEX Phase 5.5 — Owner Least-Privilege Scoping');
+
+  const tenantScopePath = resolve(process.cwd(), 'src/lib/apex/tenantScope.ts');
+  const ownerContextPath = resolve(process.cwd(), 'src/lib/apex/ownerDealershipContext.ts');
+  const apiRoutePath = resolve(process.cwd(), 'src/lib/apiRoute.ts');
+  const enterPath = resolve(process.cwd(), 'src/app/api/auth/enter-dealership/route.ts');
+  const exitPath = resolve(process.cwd(), 'src/app/api/auth/exit-dealership/route.ts');
+
+  if (existsSync(tenantScopePath) && existsSync(ownerContextPath)) {
+    const tenantSrc = readFileSync(tenantScopePath, 'utf8');
+    const ownerSrc = readFileSync(ownerContextPath, 'utf8');
+    const ok =
+      tenantSrc.includes('scopedPiiWhere') &&
+      tenantSrc.includes('requireDealershipScope') &&
+      tenantSrc.includes('enrichSessionWithTenantScope') &&
+      ownerSrc.includes('buildOwnerNationalSession') &&
+      ownerSrc.includes('buildOwnerDealershipSession');
+    if (ok) {
+      record('APEX 5.5', 'tenantScope + owner context', 'pass', 'PII scoping helpers present');
+    } else {
+      record('APEX 5.5', 'tenantScope + owner context', 'fail', 'Scoping helpers incomplete');
+    }
+  } else {
+    record('APEX 5.5', 'tenantScope + owner context', 'fail', 'Missing tenantScope or ownerDealershipContext');
+  }
+
+  if (existsSync(apiRoutePath)) {
+    const apiSrc = readFileSync(apiRoutePath, 'utf8');
+    if (apiSrc.includes('requireDealershipContext') && apiSrc.includes('requireOwner')) {
+      record('APEX 5.5', 'withAuth guards', 'pass', 'requireOwner + requireDealershipContext');
+    } else {
+      record('APEX 5.5', 'withAuth guards', 'fail', 'withAuth missing owner/dealership guards');
+    }
+  }
+
+  if (existsSync(enterPath) && existsSync(exitPath)) {
+    const enterSrc = readFileSync(enterPath, 'utf8');
+    const exitSrc = readFileSync(exitPath, 'utf8');
+    const ok =
+      enterSrc.includes('owner.dealership_enter') &&
+      exitSrc.includes('owner.dealership_exit') &&
+      enterSrc.includes('buildOwnerDealershipSession') &&
+      exitSrc.includes('buildOwnerNationalSession');
+    if (ok) {
+      record('APEX 5.5', 'Enter/exit routes', 'pass', 'Owner dealership context flows + audit');
+    } else {
+      record('APEX 5.5', 'Enter/exit routes', 'fail', 'Enter/exit routes incomplete');
+    }
+  } else {
+    record('APEX 5.5', 'Enter/exit routes', 'fail', 'Missing enter-dealership or exit-dealership route');
+  }
+}
+
+function checkApexPhase510Finalize(): void {
+  section('APEX Phase 5.10 — Finalize Phase 5');
+
+  const seedPath = resolve(process.cwd(), 'src/lib/apex/seedOwnerAccounts.ts');
+  const integrationPath = resolve(process.cwd(), 'tests/integration/apex-owner-flows.test.ts');
+  const docsPath = resolve(process.cwd(), 'docs/Apex-National-Platform.md');
+  const envExamplePath = resolve(process.cwd(), '.env.example');
+
+  if (existsSync(seedPath)) {
+    const src = readFileSync(seedPath, 'utf8');
+    const ok =
+      src.includes('OWNER_SEED_EMAIL') &&
+      src.includes('seedApexOwnerAccounts') &&
+      src.includes('APEX_NATIONAL_DEALERSHIP_ID');
+    if (ok) {
+      record('APEX 5.10', 'Owner seed accounts', 'pass', 'Env-driven owner + multi-rooftop seed');
+    } else {
+      record('APEX 5.10', 'Owner seed accounts', 'fail', 'seedOwnerAccounts.ts incomplete');
+    }
+  } else {
+    record('APEX 5.10', 'Owner seed accounts', 'fail', 'Missing seedOwnerAccounts.ts');
+  }
+
+  if (existsSync(integrationPath)) {
+    const src = readFileSync(integrationPath, 'utf8');
+    const ok =
+      src.includes('postEnterDealership') &&
+      src.includes('postExitDealership') &&
+      src.includes('requiresDealershipSelection') &&
+      src.includes('getOwnerSummary');
+    if (ok) {
+      record('APEX 5.10', 'Owner integration tests', 'pass', 'apex-owner-flows.test.ts');
+    } else {
+      record('APEX 5.10', 'Owner integration tests', 'fail', 'Integration suite incomplete');
+    }
+  } else {
+    record('APEX 5.10', 'Owner integration tests', 'fail', 'Missing apex-owner-flows integration test');
+  }
+
+  if (existsSync(docsPath)) {
+    record('APEX 5.10', 'Apex documentation', 'pass', 'docs/Apex-National-Platform.md');
+  } else {
+    record('APEX 5.10', 'Apex documentation', 'fail', 'Missing Apex-National-Platform.md');
+  }
+
+  if (existsSync(envExamplePath)) {
+    const env = readFileSync(envExamplePath, 'utf8');
+    if (env.includes('OWNER_SEED_EMAIL') && env.includes('OWNER_SEED_PASSWORD')) {
+      record('APEX 5.10', 'Env example', 'pass', 'OWNER_SEED_* documented in .env.example');
+    } else {
+      record('APEX 5.10', 'Env example', 'fail', '.env.example missing owner seed vars');
+    }
+  }
+}
+
+function checkApexPhase59OwnerNationalConsole(): void {
+  section('APEX Phase 5.9 — Owner National Console');
+
+  const summaryLib = resolve(process.cwd(), 'src/lib/apex/ownerNationalSummary.ts');
+  const summaryRoute = resolve(process.cwd(), 'src/app/api/owner/summary/route.ts');
+  const shellPath = resolve(process.cwd(), 'src/components/apex/ApexOwnerNationalShell.tsx');
+  const workspacePath = resolve(process.cwd(), 'src/components/apex/ApexOwnerDealershipWorkspace.tsx');
+
+  if (existsSync(summaryLib) && existsSync(summaryRoute)) {
+    const lib = readFileSync(summaryLib, 'utf8');
+    const route = readFileSync(summaryRoute, 'utf8');
+    const ok =
+      lib.includes('repairOrdersLast7Days') &&
+      lib.includes('recentActivity') &&
+      route.includes('owner.national_access');
+    if (ok) {
+      record('APEX 5.9', 'Owner summary', 'pass', 'Aggregate national metrics + audit');
+    } else {
+      record('APEX 5.9', 'Owner summary', 'fail', 'Owner summary incomplete');
+    }
+  } else {
+    record('APEX 5.9', 'Owner summary', 'fail', 'Missing owner summary lib or route');
+  }
+
+  if (existsSync(shellPath)) {
+    const src = readFileSync(shellPath, 'utf8');
+    if (src.includes('apex-stat-grid') && src.includes('Enter dealership')) {
+      record('APEX 5.9', 'National dashboard', 'pass', 'ApexOwnerNationalShell dashboard');
+    } else {
+      record('APEX 5.9', 'National dashboard', 'fail', 'National shell incomplete');
+    }
+  }
+
+  if (existsSync(workspacePath)) {
+    record('APEX 5.9', 'Exit dealership UX', 'pass', 'Owner dealership workspace + exit bar');
+  } else {
+    record('APEX 5.9', 'Exit dealership UX', 'fail', 'Missing owner dealership workspace');
+  }
+}
+
+function checkApexPhase58DealershipSelector(): void {
+  section('APEX Phase 5.8 — Dealership Selector UX');
+
+  const selectorPath = resolve(process.cwd(), 'src/components/apex/ApexDealershipSelector.tsx');
+  const ownerShellPath = resolve(process.cwd(), 'src/components/apex/ApexOwnerNationalShell.tsx');
+  const ownerApiPath = resolve(process.cwd(), 'src/app/api/owner/dealerships/route.ts');
+
+  if (existsSync(selectorPath)) {
+    const src = readFileSync(selectorPath, 'utf8');
+    const ok =
+      src.includes('apex-dealership-search') &&
+      src.includes('apex-dealership-primary-badge') &&
+      src.includes('rememberAsDefault');
+    if (ok) {
+      record('APEX 5.8', 'ApexDealershipSelector', 'pass', 'Search, primary badge, remember default');
+    } else {
+      record('APEX 5.8', 'ApexDealershipSelector', 'fail', 'Selector component incomplete');
+    }
+  } else {
+    record('APEX 5.8', 'ApexDealershipSelector', 'fail', 'Missing ApexDealershipSelector');
+  }
+
+  if (existsSync(ownerShellPath)) {
+    const src = readFileSync(ownerShellPath, 'utf8');
+    if (src.includes('Enter dealership') && src.includes('enterOwnerDealership')) {
+      record('APEX 5.8', 'Owner enter flow', 'pass', 'National console enter-dealership CTA');
+    } else {
+      record('APEX 5.8', 'Owner enter flow', 'fail', 'Owner national shell missing enter flow');
+    }
+  }
+
+  if (existsSync(ownerApiPath)) {
+    record('APEX 5.8', 'Owner dealerships API', 'pass', 'GET /api/owner/dealerships');
+  } else {
+    record('APEX 5.8', 'Owner dealerships API', 'fail', 'Missing owner dealerships route');
+  }
+}
+
+function checkApexPhase56UiFoundation(): void {
+  section('APEX Phase 5.6 — UI Foundation');
+
+  const tokensPath = resolve(process.cwd(), 'src/styles/apex-platform.css');
+  const logoPath = resolve(process.cwd(), 'src/components/apex/ApexLogoMark.tsx');
+  const loginPath = resolve(process.cwd(), 'src/components/apex/ApexLoginShell.tsx');
+  const appPath = resolve(process.cwd(), 'src/components/apex/ApexPlatformApp.tsx');
+  const homePath = resolve(process.cwd(), 'src/components/HomePageClient.tsx');
+
+  if (existsSync(tokensPath)) {
+    const css = readFileSync(tokensPath, 'utf8');
+    if (css.includes('--apex-cyan') && css.includes("[data-platform='apex']")) {
+      record('APEX 5.6', 'Design tokens', 'pass', 'Scoped apex CSS variables');
+    } else {
+      record('APEX 5.6', 'Design tokens', 'fail', 'apex-platform.css incomplete');
+    }
+  } else {
+    record('APEX 5.6', 'Design tokens', 'fail', 'Missing apex-platform.css');
+  }
+
+  if (existsSync(logoPath) && existsSync(loginPath) && existsSync(appPath)) {
+    record('APEX 5.6', 'Apex components', 'pass', 'Logo, login shell, platform app');
+  } else {
+    record('APEX 5.6', 'Apex components', 'fail', 'Missing Apex UI components');
+  }
+
+  if (existsSync(homePath)) {
+    const src = readFileSync(homePath, 'utf8');
+    if (src.includes("platformMode === 'apex'") && src.includes('BenzTechApp')) {
+      record('APEX 5.6', 'Entry router', 'pass', 'HomePageClient branches Merlinus vs Apex');
+    } else {
+      record('APEX 5.6', 'Entry router', 'fail', 'HomePageClient routing incomplete');
+    }
+  }
+}
+
+function checkApexPhase54SessionFortress(): void {
+  section('APEX Phase 5.4 — Session Fortress');
+
+  const apexSessionPath = resolve(process.cwd(), 'src/lib/apex/apexSession.ts');
+  if (existsSync(apexSessionPath)) {
+    const src = readFileSync(apexSessionPath, 'utf8');
+    const ok =
+      src.includes('sessionRefreshToken') &&
+      src.includes('createPendingSelectionToken') &&
+      src.includes('rotateApexRefreshToken') &&
+      src.includes('APEX_ACCESS_COOKIE');
+    if (ok) {
+      record('APEX 5.4', 'apexSession.ts', 'pass', 'Dual-token + pending selection tokens');
+    } else {
+      record('APEX 5.4', 'apexSession.ts', 'fail', 'apexSession.ts incomplete');
+    }
+  } else {
+    record('APEX 5.4', 'apexSession.ts', 'fail', 'Missing apexSession.ts');
+  }
+
+  const selectPath = resolve(process.cwd(), 'src/app/api/auth/select-dealership/route.ts');
+  const refreshPath = resolve(process.cwd(), 'src/app/api/auth/refresh/route.ts');
+  if (existsSync(selectPath) && existsSync(refreshPath)) {
+    record('APEX 5.4', 'Auth routes', 'pass', 'select-dealership + refresh endpoints');
+  } else {
+    record('APEX 5.4', 'Auth routes', 'fail', 'Missing select-dealership or refresh route');
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`\n${c.bold}${c.cyan}Merlin Pre-Rollout Validation${c.reset}`);
   console.log(`${c.dim}Validating deployment readiness for dealership IT…${c.reset}`);
@@ -1594,6 +2000,15 @@ async function main(): Promise<void> {
   await checkCriticalAuditFixes();
   await checkHighPriorityAuditFixes();
   checkMediumAuditFixes();
+  checkApexPhase51Schema();
+  checkApexPhase52Membership();
+  checkApexPhase53UnifiedLogin();
+  checkApexPhase54SessionFortress();
+  checkApexPhase55OwnerScope();
+  checkApexPhase56UiFoundation();
+  checkApexPhase58DealershipSelector();
+  checkApexPhase59OwnerNationalConsole();
+  checkApexPhase510Finalize();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

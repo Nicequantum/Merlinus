@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const repairOrder = await enrichRepairOrderCertification(mapped, session.dealershipId);
       return { repairOrder };
     },
-    { rateLimitKey: 'ros.get' }
+    { rateLimitKey: 'ros.get', requireDealershipContext: true }
   );
 }
 
@@ -355,7 +355,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
       return { repairOrder: dbToRepairOrder(updated) };
     },
-    { rateLimitKey: 'ros.update' }
+    { rateLimitKey: 'ros.update', requireDealershipContext: true }
   );
 }
 
@@ -391,6 +391,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
       return { ok: true };
     },
-    { rateLimitKey: 'ros.delete' }
+    { rateLimitKey: 'ros.delete', requireDealershipContext: true }
   );
 }

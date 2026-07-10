@@ -1,10 +1,9 @@
 import 'server-only';
 
 import { auth } from '@clerk/nextjs/server';
-import {
-  getSessionContext,
-  type SessionPayload,
-} from '@/lib/auth';
+import type { SessionPayload } from '@/lib/auth';
+import { enrichSessionWithTenantScope } from '@/lib/apex/tenantScope';
+import { resolvePlatformSessionContext } from '@/lib/apex/platformSession';
 import { attemptClerkEmailLinkOnSignIn, loadLinkedTechnicianSession } from '@/lib/clerkIdentity';
 import { isClerkAuthPathEnabled, isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { logger } from '@/lib/logger';
@@ -52,22 +51,22 @@ export async function resolveAppSessionContext(request?: Request): Promise<AppSe
     return { session: null, source: null, jwtPayload: null };
   }
 
-  const legacy = await getSessionContext(request);
+  const legacy = await resolvePlatformSessionContext(request);
   return {
     session: legacy.session,
     source: legacy.session ? 'legacy' : null,
-    jwtPayload: legacy.jwtPayload,
+    jwtPayload: legacy.jwtPayload as SessionPayload | null,
   };
 }
 
 export async function resolveAppSession(request?: Request): Promise<SessionPayload | null> {
   const { session } = await resolveAppSessionContext(request);
-  return session;
+  return session ? enrichSessionWithTenantScope(session) : null;
 }
 
 /** Legacy JWT session only — used for Clerk manual-link flows alongside Clerk auth(). */
 export async function resolveLegacySessionContext(request?: Request) {
-  return getSessionContext(request);
+  return resolvePlatformSessionContext(request);
 }
 
 export async function requireAppSession(request?: Request): Promise<SessionPayload> {

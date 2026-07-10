@@ -24,6 +24,52 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+export type LoginRequestBody = {
+  identifier: string;
+  password: string;
+};
+
+/** Phase 5 — accepts unified identifier or legacy d7Number (Merlinus backward compatible). */
+export const loginRequestSchema = z
+  .object({
+    identifier: z.string().trim().min(1).max(256).optional(),
+    d7Number: z.string().trim().min(1).max(16).optional(),
+    password: z.string().min(1).max(128),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.identifier?.trim() && !data.d7Number?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'identifier or d7Number is required',
+        path: ['identifier'],
+      });
+    }
+  })
+  .transform((data) => ({
+    identifier: (data.identifier?.trim() || data.d7Number?.trim() || '').trim(),
+    password: data.password,
+  })) as z.ZodSchema<LoginRequestBody>;
+
+export type SelectDealershipBody = {
+  pendingToken: string;
+  dealershipId: string;
+  rememberAsDefault?: boolean;
+};
+
+export const selectDealershipSchema = z.object({
+  pendingToken: z.string().trim().min(1).max(4096),
+  dealershipId: safeId(64),
+  rememberAsDefault: z.boolean().optional(),
+}) as z.ZodSchema<SelectDealershipBody>;
+
+export type EnterDealershipBody = {
+  dealershipId: string;
+};
+
+export const enterDealershipSchema = z.object({
+  dealershipId: safeId(64),
+}) as z.ZodSchema<EnterDealershipBody>;
+
 export const vinSchema = z.object({
   vin: z.string().trim().min(11).max(17).transform(sanitizeVin),
 });

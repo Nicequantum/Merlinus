@@ -42,7 +42,9 @@ export async function checkSeedPasswordSecurity(): Promise<SeedSecurityStatus> {
     const matchesCanonicalSeed = await verifyPassword(canonicalSeedPassword, account.passwordHash);
     if (!matchesCanonicalSeed) continue;
 
-    accountsUsingDefaults.push(account.d7Number);
+    if (account.d7Number) {
+      accountsUsingDefaults.push(account.d7Number);
+    }
     if (account.d7Number === managerD7) {
       warnings.push(
         'Manager account password still matches the canonical seed password — change it before production use.'

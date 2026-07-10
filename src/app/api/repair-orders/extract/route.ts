@@ -112,6 +112,7 @@ export async function POST(request: Request) {
       trackUsage: true,
       blockInMaintenance: true,
       perfEvent: 'route.ro.extract',
+      requireDealershipContext: true,
     }
   );
 }

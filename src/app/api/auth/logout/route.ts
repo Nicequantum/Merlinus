@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { resolveAppSessionContext } from '@/lib/authBridge';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { clearApexSessionCookies, destroyApexSession } from '@/lib/apex/apexSession';
+import { isApexPlatformMode } from '@/lib/platformMode';
 import {
   buildSessionClearCookieHeader,
   clearSessionCookie,
@@ -16,7 +18,12 @@ async function performLogout(request: Request) {
   const { session, source } = await resolveAppSessionContext(request);
 
   if (session) {
-    await destroySession(session.technicianId);
+    if (isApexPlatformMode()) {
+      await destroyApexSession(session.technicianId);
+      await destroySession(session.technicianId);
+    } else {
+      await destroySession(session.technicianId);
+    }
     await writeAuditLog({
       action: 'auth.logout',
       dealershipId: session.dealershipId,
@@ -55,6 +62,10 @@ async function performLogout(request: Request) {
     expires: new Date(0),
     path: '/',
   });
+
+  if (isApexPlatformMode()) {
+    clearApexSessionCookies(response);
+  }
 
   return response;
 }
