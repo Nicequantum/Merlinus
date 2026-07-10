@@ -59,6 +59,9 @@ describe('apex database config (Phase 1.5)', () => {
   test('shouldUseApexSupabaseDatabase respects APEX_USE_SUPABASE_DB locally', () => {
     const saved = {
       APEX_USE_SUPABASE_DB: process.env.APEX_USE_SUPABASE_DB,
+      APEX_ENV: process.env.APEX_ENV,
+      PLATFORM_MODE: process.env.PLATFORM_MODE,
+      NEXT_PUBLIC_PLATFORM_MODE: process.env.NEXT_PUBLIC_PLATFORM_MODE,
       SUPABASE_DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD,
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -70,6 +73,9 @@ describe('apex database config (Phase 1.5)', () => {
     process.env.SUPABASE_DB_PASSWORD = 'db-password';
     process.env.NODE_ENV = 'development';
     delete process.env.APEX_USE_SUPABASE_DB;
+    delete process.env.APEX_ENV;
+    delete process.env.PLATFORM_MODE;
+    delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
 
     assert.equal(shouldUseApexSupabaseDatabase(), false);
 
@@ -77,6 +83,9 @@ describe('apex database config (Phase 1.5)', () => {
     assert.equal(shouldUseApexSupabaseDatabase(), true);
 
     process.env.APEX_USE_SUPABASE_DB = saved.APEX_USE_SUPABASE_DB;
+    process.env.APEX_ENV = saved.APEX_ENV;
+    process.env.PLATFORM_MODE = saved.PLATFORM_MODE;
+    process.env.NEXT_PUBLIC_PLATFORM_MODE = saved.NEXT_PUBLIC_PLATFORM_MODE;
     process.env.SUPABASE_DB_PASSWORD = saved.SUPABASE_DB_PASSWORD;
     process.env.NEXT_PUBLIC_SUPABASE_URL = saved.NEXT_PUBLIC_SUPABASE_URL;
     process.env.SUPABASE_SERVICE_ROLE_KEY = saved.SUPABASE_SERVICE_ROLE_KEY;
@@ -118,12 +127,22 @@ describe('apex database config (Phase 1.5)', () => {
     const saved = {
       DATABASE_URL: process.env.DATABASE_URL,
       APEX_USE_SUPABASE_DB: process.env.APEX_USE_SUPABASE_DB,
+      APEX_ENV: process.env.APEX_ENV,
+      PLATFORM_MODE: process.env.PLATFORM_MODE,
+      NEXT_PUBLIC_PLATFORM_MODE: process.env.NEXT_PUBLIC_PLATFORM_MODE,
       SUPABASE_DATABASE_URL: process.env.SUPABASE_DATABASE_URL,
+      SUPABASE_DB_PASSWORD: process.env.SUPABASE_DB_PASSWORD,
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     };
 
     process.env.DATABASE_URL = 'postgresql://legacy:5432/merlinus';
     delete process.env.APEX_USE_SUPABASE_DB;
+    delete process.env.APEX_ENV;
+    delete process.env.PLATFORM_MODE;
+    delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
     delete process.env.SUPABASE_DATABASE_URL;
+    delete process.env.SUPABASE_DB_PASSWORD;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
 
     const config = resolveDatabaseConfig();
     assert.equal(config.backend, 'merlinus_legacy');
@@ -131,6 +150,11 @@ describe('apex database config (Phase 1.5)', () => {
 
     process.env.DATABASE_URL = saved.DATABASE_URL;
     process.env.APEX_USE_SUPABASE_DB = saved.APEX_USE_SUPABASE_DB;
+    process.env.APEX_ENV = saved.APEX_ENV;
+    process.env.PLATFORM_MODE = saved.PLATFORM_MODE;
+    process.env.NEXT_PUBLIC_PLATFORM_MODE = saved.NEXT_PUBLIC_PLATFORM_MODE;
     process.env.SUPABASE_DATABASE_URL = saved.SUPABASE_DATABASE_URL;
+    process.env.SUPABASE_DB_PASSWORD = saved.SUPABASE_DB_PASSWORD;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = saved.NEXT_PUBLIC_SUPABASE_URL;
   });
 });

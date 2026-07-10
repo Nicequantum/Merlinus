@@ -1,6 +1,6 @@
 /**
- * APEX NATIONAL PLATFORM — load .env.apex.local when APEX_ENV=1 (Phase 1.5).
- * MERLINUS SINGLE-DEALER: no-op when APEX_ENV is unset; Next.js uses .env.local only.
+ * APEX NATIONAL PLATFORM — load .env.apex.local when Apex is active.
+ * MERLINUS SINGLE-DEALER: no-op when neither APEX_ENV nor PLATFORM_MODE=apex.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,6 +13,15 @@ export function isApexEnvEnabled(): boolean {
   return value === '1' || value === 'true' || value === 'yes';
 }
 
+/** True when national Apex platform is selected (env flag or platform mode). */
+export function isApexPlatformEnvActive(): boolean {
+  if (isApexEnvEnabled()) return true;
+  const mode = process.env.PLATFORM_MODE?.trim().toLowerCase();
+  if (mode === 'apex') return true;
+  const publicMode = process.env.NEXT_PUBLIC_PLATFORM_MODE?.trim().toLowerCase();
+  return publicMode === 'apex';
+}
+
 function parseEnvLine(line: string): { key: string; value: string } | null {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith('#')) return null;
@@ -20,18 +29,21 @@ function parseEnvLine(line: string): { key: string; value: string } | null {
   if (eq <= 0) return null;
   const key = trimmed.slice(0, eq).trim();
   let value = trimmed.slice(eq + 1).trim();
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
     value = value.slice(1, -1);
   }
   return { key, value };
 }
 
 /**
- * Load .env.apex.local when APEX_ENV=1.
+ * Load .env.apex.local when Apex is active (APEX_ENV or PLATFORM_MODE=apex).
  * Existing process.env values win unless override=true.
  */
 export function loadApexEnvFile(options: { override?: boolean } = {}): boolean {
-  if (!isApexEnvEnabled()) return false;
+  if (!isApexPlatformEnvActive()) return false;
   if (apexEnvLoaded && !options.override) return true;
 
   const path = resolve(process.cwd(), '.env.apex.local');

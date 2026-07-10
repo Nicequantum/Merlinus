@@ -4,8 +4,12 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config');
 
-    const { loadApexEnvFile } = await import('./lib/apex/loadApexEnv');
+    const { loadApexEnvFile, isApexPlatformEnvActive } = await import('./lib/apex/loadApexEnv');
     loadApexEnvFile({ override: true });
+
+    // Force Supabase DATABASE_URL when Apex is active (before any Prisma use).
+    const { applyResolvedDatabaseEnv } = await import('./lib/apex/databaseConfig');
+    const dbConfig = applyResolvedDatabaseEnv();
 
     const { getRuntimeConfig, validateEnvironment } = await import('./lib/env');
     const { PROMPT_VERSION } = await import('./prompts/version');
@@ -22,6 +26,8 @@ export async function register() {
       promptVersion: config.promptVersion,
       commit: config.buildCommit,
       maintenance: config.maintenanceMode,
+      platformMode: process.env.PLATFORM_MODE || process.env.NEXT_PUBLIC_PLATFORM_MODE || 'merlinus',
+      dbBackend: dbConfig.backend,
     });
     if (!result.valid) {
       logger.error('merlin.startup.env_invalid');
@@ -32,6 +38,17 @@ export async function register() {
 
     const { warmDatabaseConnectionInBackground } = await import('./lib/db');
     warmDatabaseConnectionInBackground();
+
+    // Ensure national owners exist with current passwords on Apex startup.
+    if (isApexPlatformEnvActive()) {
+      void import('./lib/apex/seedOwnerAccounts')
+        .then(({ ensureApexPlatformOwners }) => ensureApexPlatformOwners())
+        .catch((error: unknown) => {
+          logger.warn('apex.owner_seed_startup_failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
   }
 
   if (process.env.NEXT_RUNTIME === 'edge') {

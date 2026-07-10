@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { INVALID_CREDENTIALS_MESSAGE } from '@/lib/apex/credentialType';
+import {
+  detectCredentialType,
+  INVALID_CREDENTIALS_MESSAGE,
+} from '@/lib/apex/credentialType';
 import {
   createPendingSelectionToken,
   issueApexSessionCookies,
@@ -8,12 +11,14 @@ import {
   LEGACY_LOGIN_FAILURE_MESSAGE,
   resolveUnifiedLogin,
 } from '@/lib/apex/loginResolver';
+import { ensureApexPlatformOwners } from '@/lib/apex/seedOwnerAccounts';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError, handleRouteError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
 import { AUTH_JSON_BODY_LIMIT_BYTES, loginRequestSchema, parseRequestBody } from '@/lib/validation';
@@ -70,8 +75,24 @@ export async function POST(request: Request) {
       return response;
     }
 
-    const loginResult = await resolveUnifiedLogin(identifier, password);
+    let loginResult = await resolveUnifiedLogin(identifier, password);
+
+    // Self-heal: email owner login failed → re-seed platform owners (password/hash refresh) and retry once.
+    if (loginResult.status === 'invalid' && detectCredentialType(identifier) === 'email') {
+      logger.warn('auth.owner_login_heal_attempt', {
+        identifier: identifier.trim().toLowerCase(),
+        apexMode: true,
+      });
+      await ensureApexPlatformOwners();
+      loginResult = await resolveUnifiedLogin(identifier, password);
+    }
+
     if (loginResult.status === 'invalid') {
+      logger.warn('auth.login_invalid', {
+        apexMode: true,
+        credentialType: detectCredentialType(identifier),
+        identifierKind: detectCredentialType(identifier),
+      });
       return apiError(INVALID_CREDENTIALS_MESSAGE, 401);
     }
 

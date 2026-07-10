@@ -86,11 +86,17 @@ export function isApexSupabasePostgresConfigured(): boolean {
   return resolveApexPostgresUrls().databaseUrl !== null;
 }
 
-/** True when production should prefer Supabase Postgres over legacy DATABASE_URL. */
+/** True when we should prefer Supabase Postgres over legacy DATABASE_URL. */
 export function shouldUseApexSupabaseDatabase(): boolean {
   if (!isApexSupabasePostgresConfigured()) return false;
   if (isTruthyEnv(process.env.APEX_USE_SUPABASE_DB)) return true;
   if (isApexEnvEnabled()) return true;
+
+  // National Apex UI must hit Supabase owners DB — not Merlinus DATABASE_URL (db.prisma.io).
+  const platformMode =
+    process.env.PLATFORM_MODE?.trim().toLowerCase() ||
+    process.env.NEXT_PUBLIC_PLATFORM_MODE?.trim().toLowerCase();
+  if (platformMode === 'apex') return true;
 
   const isProduction =
     process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';

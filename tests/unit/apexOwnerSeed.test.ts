@@ -20,12 +20,15 @@ describe('Apex owner seed (Phase 5.10)', () => {
     assert.match(src, /OWNER_SEED_PASSWORD/);
     assert.match(src, /OWNER_SEED_EMAIL_2/);
     assert.match(src, /OWNER_SEED_PASSWORD_2/);
+    assert.match(src, /hombre3536@gmail\.com/);
+    assert.match(src, /scollier@getfused\.com/);
     assert.match(src, /MULTI_ROOFTOP_SEED_USERNAME/);
     assert.match(src, /APEX_NATIONAL_DEALERSHIP_ID/);
     assert.match(src, /role: 'owner'/);
     assert.match(src, /d7Number: null/);
     assert.match(src, /upsertNationalOwnerAccount/);
     assert.match(src, /config\.owners/);
+    assert.match(src, /ensureApexPlatformOwners/);
     assert.match(src, /where: \{ email: multiEmail \}/);
     assert.doesNotMatch(src, /where: \{ apexUsername:/);
   });
@@ -53,26 +56,28 @@ describe('Apex owner seed (Phase 5.10)', () => {
     assert.match(src, /DEALERSHIP_CONTEXT_REQUIRED/);
   });
 
-  test('readApexOwnerSeedConfig returns null when owner env is unset', () => {
-    const savedEmail = process.env.OWNER_SEED_EMAIL;
+  test('readApexOwnerSeedConfig always includes platform operators in non-production', () => {
     const savedPassword = process.env.OWNER_SEED_PASSWORD;
-    const savedEmail2 = process.env.OWNER_SEED_EMAIL_2;
     const savedPassword2 = process.env.OWNER_SEED_PASSWORD_2;
-    delete process.env.OWNER_SEED_EMAIL;
     delete process.env.OWNER_SEED_PASSWORD;
-    delete process.env.OWNER_SEED_EMAIL_2;
     delete process.env.OWNER_SEED_PASSWORD_2;
     try {
-      assert.equal(readApexOwnerSeedConfig(), null);
+      const config = readApexOwnerSeedConfig();
+      assert.ok(config);
+      const emails = config!.owners.map((o) => o.email);
+      assert.ok(emails.includes('hombre3536@gmail.com'));
+      assert.ok(emails.includes('scollier@getfused.com'));
+      const hombre = config!.owners.find((o) => o.email === 'hombre3536@gmail.com');
+      assert.equal(hombre?.password, 'Bressette1735');
     } finally {
-      if (savedEmail) process.env.OWNER_SEED_EMAIL = savedEmail;
       if (savedPassword) process.env.OWNER_SEED_PASSWORD = savedPassword;
-      if (savedEmail2) process.env.OWNER_SEED_EMAIL_2 = savedEmail2;
+      else delete process.env.OWNER_SEED_PASSWORD;
       if (savedPassword2) process.env.OWNER_SEED_PASSWORD_2 = savedPassword2;
+      else delete process.env.OWNER_SEED_PASSWORD_2;
     }
   });
 
-  test('readApexOwnerSeedConfig supports two national owners', () => {
+  test('readApexOwnerSeedConfig supports additional national owners via env', () => {
     const saved = {
       e1: process.env.OWNER_SEED_EMAIL,
       p1: process.env.OWNER_SEED_PASSWORD,
@@ -90,10 +95,12 @@ describe('Apex owner seed (Phase 5.10)', () => {
     try {
       const config = readApexOwnerSeedConfig();
       assert.ok(config);
-      assert.equal(config!.owners.length, 2);
-      assert.equal(config!.owners[0].email, 'owner.one@example.com');
-      assert.equal(config!.owners[1].email, 'owner.two@example.com');
-      assert.equal(config!.owners[1].name, 'Owner Two');
+      const emails = config!.owners.map((o) => o.email);
+      // Platform operators + extra env owners
+      assert.ok(emails.includes('hombre3536@gmail.com'));
+      assert.ok(emails.includes('scollier@getfused.com'));
+      assert.ok(emails.includes('owner.one@example.com'));
+      assert.ok(emails.includes('owner.two@example.com'));
     } finally {
       for (const [key, value] of Object.entries({
         OWNER_SEED_EMAIL: saved.e1,

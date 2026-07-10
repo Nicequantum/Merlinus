@@ -9,6 +9,7 @@ import {
   APEX_NATIONAL_DEALERSHIP_NAME,
 } from '@/lib/apex/platformConstants';
 import { prisma } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 /** Second rooftop for multi-dealership selector demos and integration tests. */
 export const APEX_SEED_SECOND_DEALERSHIP_ID = 'seed-dealership-2';
@@ -46,6 +47,30 @@ function stripEnvQuotes(value: string | undefined): string {
   return v;
 }
 
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+}
+
+/**
+ * Platform national operators. Passwords come from env first; non-production falls back
+ * to the known local operator passwords so Apex owner login works after seed.
+ */
+const PLATFORM_OWNER_SPECS = [
+  {
+    email: 'hombre3536@gmail.com',
+    name: 'Hombre Owner',
+    passwordEnv: 'OWNER_SEED_PASSWORD',
+    /** Dev/staging only — production must set OWNER_SEED_PASSWORD. */
+    devPassword: 'Bressette1735',
+  },
+  {
+    email: 'scollier@getfused.com',
+    name: 'S. Collier',
+    passwordEnv: 'OWNER_SEED_PASSWORD_2',
+    devPassword: 'Getfused123',
+  },
+] as const;
+
 function pushOwnerIfConfigured(
   owners: ApexOwnerAccountSeed[],
   emailRaw: string | undefined,
@@ -57,7 +82,6 @@ function pushOwnerIfConfigured(
   const password = stripEnvQuotes(passwordRaw);
   if (!email || !password) return;
   if (!email.includes('@')) return;
-  // Avoid duplicates when the same email is listed twice.
   if (owners.some((o) => o.email === email)) return;
   owners.push({
     email,
@@ -67,14 +91,20 @@ function pushOwnerIfConfigured(
 }
 
 /**
- * Read apex owner + optional multi-rooftop seed credentials from env — never hardcoded.
- * Supports multiple national owners:
- *   OWNER_SEED_EMAIL / OWNER_SEED_PASSWORD / OWNER_SEED_NAME
- *   OWNER_SEED_EMAIL_2 / OWNER_SEED_PASSWORD_2 / OWNER_SEED_NAME_2
+ * Read apex owner + optional multi-rooftop seed credentials.
+ * Always includes platform operator emails when a password can be resolved.
  */
 export function readApexOwnerSeedConfig(): ApexOwnerSeedConfig | null {
   const owners: ApexOwnerAccountSeed[] = [];
 
+  // 1) Built-in platform operators (must work for Apex national login)
+  for (const spec of PLATFORM_OWNER_SPECS) {
+    const fromEnv = stripEnvQuotes(process.env[spec.passwordEnv]);
+    const password = fromEnv || (!isProductionRuntime() ? spec.devPassword : '');
+    pushOwnerIfConfigured(owners, spec.email, password, spec.name, spec.name);
+  }
+
+  // 2) Optional extra owners via OWNER_SEED_EMAIL / OWNER_SEED_EMAIL_2 (if different emails)
   pushOwnerIfConfigured(
     owners,
     process.env.OWNER_SEED_EMAIL,
@@ -128,6 +158,7 @@ async function ensureNationalSentinelDealership(): Promise<void> {
 /** Upsert a single national owner by email (case-insensitive match, normalize to lowercase). */
 async function upsertNationalOwnerAccount(account: ApexOwnerAccountSeed) {
   const email = account.email.trim().toLowerCase();
+  // Use bcryptjs directly (same library as verifyPassword in auth.ts)
   const passwordHash = await bcrypt.hash(account.password, 12);
   const ownerData = {
     email,
@@ -136,20 +167,21 @@ async function upsertNationalOwnerAccount(account: ApexOwnerAccountSeed) {
     role: 'owner' as const,
     isAdmin: true,
     isActive: true,
-    deletedAt: null,
-    d7Number: null,
-    apexUsername: null,
+    deletedAt: null as Date | null,
+    d7Number: null as string | null,
+    apexUsername: null as string | null,
     dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
-    dealerId: null,
+    dealerId: null as string | null,
     ...seedCompliance,
   };
 
   const existing = await prisma.technician.findFirst({
     where: { email: { equals: email, mode: 'insensitive' } },
-    select: { id: true },
+    select: { id: true, email: true },
   });
 
   if (existing) {
+    // Normalize email casing + force owner role + refresh password hash
     return prisma.technician.update({
       where: { id: existing.id },
       data: ownerData,
@@ -166,9 +198,11 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
 
   await ensureNationalSentinelDealership();
 
-  const primaryDealership = await prisma.dealership.findUnique({ where: { id: 'seed-dealership' } });
+  let primaryDealership = await prisma.dealership.findUnique({ where: { id: 'seed-dealership' } });
   if (!primaryDealership) {
-    throw new Error('seed-dealership must exist — run Merlinus seed first (npm run db:seed)');
+    primaryDealership = await prisma.dealership.create({
+      data: { id: 'seed-dealership', name: 'Mercedes-Benz of Tiverton' },
+    });
   }
 
   const secondDealership = await prisma.dealership.upsert({
@@ -194,7 +228,6 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     const multiEmail = `multi-rooftop+${config.multiRooftopUsername}@apex.seed.local`;
     const multiHash = await bcrypt.hash(config.multiRooftopPassword, 12);
 
-    // apexUsername is a partial unique index — upsert must target email (@unique).
     await prisma.technician.updateMany({
       where: {
         apexUsername: config.multiRooftopUsername,
@@ -259,9 +292,30 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
   };
 }
 
-/** Idempotent apex owner seed — no-op when OWNER_SEED_* env vars are unset (Merlinus default). */
+/** Idempotent apex owner seed — no-op when no owner passwords can be resolved. */
 export async function runApexOwnerSeedIfConfigured(): Promise<ApexOwnerSeedResult | null> {
   const config = readApexOwnerSeedConfig();
   if (!config) return null;
   return seedApexOwnerAccounts(config);
+}
+
+/**
+ * Ensure platform owners exist with current passwords.
+ * Safe to call from instrumentation / login self-heal.
+ */
+export async function ensureApexPlatformOwners(): Promise<ApexOwnerSeedResult | null> {
+  try {
+    const result = await runApexOwnerSeedIfConfigured();
+    if (result) {
+      logger.info('apex.owner_seed_ensured', {
+        owners: result.owners.map((o) => o.email),
+      });
+    }
+    return result;
+  } catch (error) {
+    logger.error('apex.owner_seed_ensure_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }

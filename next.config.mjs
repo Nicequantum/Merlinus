@@ -4,9 +4,16 @@ import { fileURLToPath } from 'url';
 import { withSentryConfig } from '@sentry/nextjs';
 import { BASE_SECURITY_HEADERS } from './security-policy.mjs';
 
-// APEX NATIONAL PLATFORM — load .env.apex.local early when APEX_ENV=1 (before Next env merge).
-const apexEnvEnabled = ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase());
-if (apexEnvEnabled) {
+// APEX NATIONAL PLATFORM — load .env.apex.local early when Apex is active (before Next env merge).
+// Triggers on APEX_ENV=1 OR PLATFORM_MODE=apex so owner seed DB (Supabase) is always used with Apex UI.
+const apexEnvFlag = ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase());
+const apexPlatformFlag =
+  process.env.PLATFORM_MODE?.trim().toLowerCase() === 'apex' ||
+  process.env.NEXT_PUBLIC_PLATFORM_MODE?.trim().toLowerCase() === 'apex';
+if (apexEnvFlag || apexPlatformFlag) {
+  process.env.APEX_ENV = process.env.APEX_ENV || '1';
+  process.env.PLATFORM_MODE = process.env.PLATFORM_MODE || 'apex';
+  process.env.NEXT_PUBLIC_PLATFORM_MODE = process.env.NEXT_PUBLIC_PLATFORM_MODE || 'apex';
   const apexEnvPath = path.join(process.cwd(), '.env.apex.local');
   if (existsSync(apexEnvPath)) {
     for (const line of readFileSync(apexEnvPath, 'utf8').split('\n')) {
@@ -19,6 +26,7 @@ if (apexEnvEnabled) {
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
+      // Apex Supabase keys always win over Merlinus DATABASE_URL when Apex is active.
       process.env[key] = value;
     }
   }
