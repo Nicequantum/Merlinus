@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withSessionRls } from '@/lib/apex/rlsContext';
 import {
   DealershipScopeRequiredError,
   enrichSessionWithTenantScope,
@@ -47,10 +48,15 @@ interface RouteOptions {
   /** APEX Phase 5.5 — PII routes; blocks owners in national scope until enter-dealership. */
   requireDealershipContext?: boolean;
   /**
-   * Phase 6.1 — sensitive PII path. Enforces dealership context and documents that
-   * handlers must call writeAuditedAccess() (fail-closed) for durable compliance.
+   * Phase 6.1+ — sensitive PII path. Enforces dealership context; handlers must use
+   * writeAuditedAccess() (fail-closed) for durable compliance on writes/sensitive reads.
    */
   requireAuditedAccess?: boolean;
+  /**
+   * Phase 6.2 — wrap handler in withSessionRls (enforced tenant RLS + getRlsDb()).
+   * Defaults to true when requireDealershipContext or requireAuditedAccess is set.
+   */
+  useRls?: boolean;
   /** Emit structured perf log for the route handler duration. */
   perfEvent?: string;
   /** Manager health and similar probes — skip rate limiting so monitoring is not blocked by KV. */
@@ -90,7 +96,7 @@ export async function withAuth<T>(
     }
   }
 
-  // Phase 6.1: audited-access routes always require dealership PII context.
+  // Phase 6.1/6.2: audited-access and PII routes require dealership context.
   const needsDealershipContext =
     options.requireDealershipContext || options.requireAuditedAccess;
 
@@ -107,6 +113,16 @@ export async function withAuth<T>(
       throw error;
     }
   }
+
+  // Phase 6.2: PII-heavy routes default to withSessionRls so getRlsDb() is bound.
+  // Skip auto-wrap for long AI/maintenance paths (trackUsage / blockInMaintenance) —
+  // those routes call rlsTransaction() only around DB work (Grok must not sit in a tx).
+  const useRls =
+    options.useRls === true ||
+    (options.useRls !== false &&
+      (options.requireDealershipContext === true || options.requireAuditedAccess === true) &&
+      !options.trackUsage &&
+      !options.blockInMaintenance);
 
   if (options.requireManager) {
     if (session.role !== 'manager') {
@@ -169,7 +185,9 @@ export async function withAuth<T>(
   const startedAt = Date.now();
   const method = request.method;
   try {
-    const result = await handler(session);
+    const result = useRls
+      ? await withSessionRls(session, async () => handler(session))
+      : await handler(session);
     const status = result instanceof NextResponse || result instanceof Response ? result.status : 200;
     const isSuccessResponse = status >= 200 && status < 300;
     if (options.trackUsage && isSuccessResponse) {

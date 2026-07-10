@@ -10,6 +10,7 @@ import { apiError, handleRouteError } from '@/lib/errors';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
+import { revokeApexRefreshForScopeSwitch } from '@/lib/sessionRevocation';
 import { toTechnicianSession } from '@/lib/sessionRefresh';
 
 export async function POST(request: Request) {
@@ -57,6 +58,9 @@ export async function POST(request: Request) {
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
         );
+
+        // Phase 6.2 — drop dealership-scope refresh families before national re-issue
+        await revokeApexRefreshForScopeSwitch(session.technicianId);
 
         const response = NextResponse.json({
           session: toTechnicianSession(ownerSession),

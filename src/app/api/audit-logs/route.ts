@@ -1,6 +1,9 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { scopedPiiWhere } from '@/lib/apex/tenantScope';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
+import { getRequestIp } from '@/lib/rate-limit';
 import { auditLogQuerySchema, parseQueryParams } from '@/lib/validation';
 
 function parseMetadata(raw: string): Record<string, unknown> {
@@ -40,7 +43,8 @@ export async function GET(request: Request) {
         if (to) where.createdAt.lte = new Date(to);
       }
 
-      const logs = await prisma.auditLog.findMany({
+      const db = getRlsDb();
+      const logs = await db.auditLog.findMany({
         where,
         include: { technician: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
@@ -60,6 +64,22 @@ export async function GET(request: Request) {
         entryHash: log.entryHash || null,
         promptVersion: log.promptVersion,
       }));
+
+      // Phase 6.2 — fail-closed audit of compliance log access
+      await writeAuditedAccess({
+        action: 'audit.access',
+        dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
+        technicianId: session.technicianId,
+        entityType: 'auditLog',
+        entityId: session.dealershipId,
+        metadata: {
+          format: format || 'json',
+          resultCount: entries.length,
+          filters: { technicianId: technicianId || null, action: action || null },
+        },
+        ipAddress: getRequestIp(request),
+      });
 
       if (format === 'csv') {
         const header = [
@@ -101,6 +121,11 @@ export async function GET(request: Request) {
 
       return { logs: entries, count: entries.length };
     },
-    { rateLimitKey: 'audit-logs.list', requireManager: true, requireDealershipContext: true }
+    {
+      rateLimitKey: 'audit-logs.list',
+      requireManager: true,
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

@@ -12,6 +12,7 @@ import { apiError, handleRouteError } from '@/lib/errors';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
+import { revokeApexRefreshForScopeSwitch } from '@/lib/sessionRevocation';
 import { toTechnicianSession } from '@/lib/sessionRefresh';
 import {
   AUTH_JSON_BODY_LIMIT_BYTES,
@@ -77,6 +78,9 @@ export async function POST(request: Request) {
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
         );
+
+        // Phase 6.2 — drop prior refresh families so national-scope tokens cannot rotate
+        await revokeApexRefreshForScopeSwitch(session.technicianId);
 
         const response = NextResponse.json({
           session: toTechnicianSession(ownerSession),

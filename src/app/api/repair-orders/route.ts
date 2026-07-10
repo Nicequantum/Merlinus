@@ -1,13 +1,12 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
-import { rlsContextFromSession } from '@/lib/apex/rlsContext';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb, rlsTransaction } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import {
   captureAdvisorIntelligence,
   type AdvisorExtractionSource,
 } from '@/lib/advisorIntelligence';
-import { prisma } from '@/lib/db';
 import {
   dbToRepairOrder,
   dbToRepairOrderSummary,
@@ -38,7 +37,8 @@ export async function GET(request: Request) {
       const params = query.data;
       const where = buildRepairOrderListWhere(session, params);
 
-      const orders = await prisma.repairOrder.findMany({
+      const db = getRlsDb();
+      const orders = await db.repairOrder.findMany({
         where,
         include: {
           repairLines: true,
@@ -184,7 +184,8 @@ export async function POST(request: Request) {
       let created;
       let advisorCapture;
       try {
-        const result = await prisma.$transaction(async (tx) => {
+        // Phase 6.2 — join ambient withSessionRls transaction (no nested non-RLS connection)
+        const result = await rlsTransaction(async (tx) => {
           const ro = await tx.repairOrder.create({
             data: {
               ...repairOrderToDbFields(input),
@@ -220,6 +221,41 @@ export async function POST(request: Request) {
               )
             : null;
 
+          if (capture?.serviceAdvisor) {
+            await writeAuditedAccess(
+              {
+                action: 'advisor.capture',
+                dealershipId: session.dealershipId,
+                dealerId: auditDealerIdFromSession(session),
+                technicianId: session.technicianId,
+                entityType: 'serviceAdvisor',
+                entityId: capture.serviceAdvisor.id,
+                metadata: {
+                  repairOrderId: ro.id,
+                  roNumber: readRoNumberFromDb(ro),
+                  observationCount: input.complaints.length,
+                  isNewAdvisor: capture.serviceAdvisor.isNew,
+                },
+                ipAddress: getRequestIp(request),
+              },
+              { tx }
+            );
+          }
+
+          await writeAuditedAccess(
+            {
+              action: 'ro.create',
+              dealershipId: session.dealershipId,
+              dealerId: auditDealerIdFromSession(session),
+              technicianId: session.technicianId,
+              entityType: 'repairOrder',
+              entityId: ro.id,
+              metadata: { roNumber: readRoNumberFromDb(ro) },
+              ipAddress: getRequestIp(request),
+            },
+            { tx }
+          );
+
           const createdRo = await tx.repairOrder.findUniqueOrThrow({
             where: { id: ro.id },
             include: { repairLines: true, serviceAdvisor: { select: { id: true, displayNameEncrypted: true } } },
@@ -239,51 +275,7 @@ export async function POST(request: Request) {
         return handleRouteError(error, 'ros.create');
       }
 
-      try {
-        if (advisorCapture?.serviceAdvisor) {
-          await writeAuditLog({
-            action: 'advisor.capture',
-            dealershipId: session.dealershipId,
-            dealerId: auditDealerIdFromSession(session),
-            technicianId: session.technicianId,
-            entityType: 'serviceAdvisor',
-            entityId: advisorCapture.serviceAdvisor.id,
-            metadata: {
-              repairOrderId: created.id,
-              roNumber: readRoNumberFromDb(created),
-              observationCount: input.complaints.length,
-              isNewAdvisor: advisorCapture.serviceAdvisor.isNew,
-            },
-            ipAddress: getRequestIp(request),
-          });
-        }
-
-        // Phase 6.1 — fail-closed create audit (RO must not exist without durable trail)
-        await writeAuditedAccess(
-          {
-            action: 'ro.create',
-            dealershipId: session.dealershipId,
-            dealerId: auditDealerIdFromSession(session),
-            technicianId: session.technicianId,
-            entityType: 'repairOrder',
-            entityId: created.id,
-            // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-            metadata: { roNumber: readRoNumberFromDb(created) },
-            ipAddress: getRequestIp(request),
-          },
-          { rls: { ...rlsContextFromSession(session), enforced: true } }
-        );
-
-        return { repairOrder: dbToRepairOrder(created) };
-      } catch (error) {
-        logger.error('ros.create.post_create_failed', {
-          technicianId: session.technicianId,
-          dealershipId: session.dealershipId,
-          repairOrderId: created.id,
-          error: error instanceof Error ? error.message : 'unknown',
-        });
-        return handleRouteError(error, 'ros.create');
-      }
+      return { repairOrder: dbToRepairOrder(created) };
     },
     {
       rateLimitKey: 'ros.create',

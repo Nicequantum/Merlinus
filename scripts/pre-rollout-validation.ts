@@ -1777,6 +1777,59 @@ function checkApexPhase55OwnerScope(): void {
   }
 }
 
+function checkApexPhase62RlsEnforcement(): void {
+  section('APEX Phase 6.2 — RLS enforcement + auditing expansion');
+
+  const rlsPath = resolve(process.cwd(), 'src/lib/apex/rlsContext.ts');
+  if (existsSync(rlsPath)) {
+    const src = readFileSync(rlsPath, 'utf8');
+    const ok =
+      src.includes('withSessionRls') &&
+      src.includes('getRlsDb') &&
+      src.includes('rlsTransaction') &&
+      src.includes('AsyncLocalStorage');
+    if (ok) {
+      record('APEX 6.2', 'withSessionRls default', 'pass', 'ALS-bound getRlsDb for PII routes');
+    } else {
+      record('APEX 6.2', 'withSessionRls default', 'fail', 'rlsContext missing withSessionRls/getRlsDb');
+    }
+  } else {
+    record('APEX 6.2', 'withSessionRls default', 'fail', 'Missing rlsContext.ts');
+  }
+
+  const apiRoute = resolve(process.cwd(), 'src/lib/apiRoute.ts');
+  if (existsSync(apiRoute)) {
+    const src = readFileSync(apiRoute, 'utf8');
+    if (src.includes('withSessionRls') && src.includes('useRls')) {
+      record('APEX 6.2', 'withAuth RLS wrap', 'pass', 'PII routes auto-wrap withSessionRls');
+    } else {
+      record('APEX 6.2', 'withAuth RLS wrap', 'fail', 'apiRoute missing useRls/withSessionRls');
+    }
+  }
+
+  const revokePath = resolve(process.cwd(), 'src/lib/sessionRevocation.ts');
+  if (existsSync(revokePath)) {
+    const src = readFileSync(revokePath, 'utf8');
+    if (src.includes('revokeAllSessionsForTechnician') && src.includes('revokeApexRefreshForScopeSwitch')) {
+      record('APEX 6.2', 'Session revocation', 'pass', 'Full fortress revoke + scope-switch refresh drop');
+    } else {
+      record('APEX 6.2', 'Session revocation', 'fail', 'sessionRevocation incomplete');
+    }
+  } else {
+    record('APEX 6.2', 'Session revocation', 'fail', 'Missing sessionRevocation.ts');
+  }
+
+  const roGet = resolve(process.cwd(), 'src/app/api/repair-orders/[id]/route.ts');
+  if (existsSync(roGet)) {
+    const src = readFileSync(roGet, 'utf8');
+    if (src.includes("action: 'ro.read'") && src.includes('writeAuditedAccess')) {
+      record('APEX 6.2', 'RO read audit', 'pass', 'ro.read fail-closed on entity GET');
+    } else {
+      record('APEX 6.2', 'RO read audit', 'fail', 'RO GET missing writeAuditedAccess ro.read');
+    }
+  }
+}
+
 function checkApexPhase61RlsFoundation(): void {
   section('APEX Phase 6.1 — RLS foundation + mandatory auditing');
 
@@ -2084,6 +2137,7 @@ async function main(): Promise<void> {
   checkApexPhase59OwnerNationalConsole();
   checkApexPhase510Finalize();
   checkApexPhase61RlsFoundation();
+  checkApexPhase62RlsEnforcement();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

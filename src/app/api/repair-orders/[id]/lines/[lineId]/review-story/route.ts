@@ -2,7 +2,7 @@ import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
+import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { reviewWarrantyStory } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
@@ -85,38 +85,41 @@ export async function POST(
       const storyHash = hashWarrantyStory(warrantyStory);
 
       try {
-        await prisma.$transaction(async (tx) => {
-          await persistRepairLineStoryInTransaction(
-            tx,
-            {
-              action: 'story.review',
-              dealershipId: session.dealershipId,
-              dealerId: auditDealerIdFromSession(session),
-              technicianId: session.technicianId,
-              entityType: 'repairLine',
-              entityId: lineId,
-              promptVersion: PROMPT_VERSION,
-              metadata: {
-                repairOrderId: id,
-                lineNumber: line.lineNumber,
+        await rlsTransaction(
+          async (tx) => {
+            await persistRepairLineStoryInTransaction(
+              tx,
+              {
+                action: 'story.review',
+                dealershipId: session.dealershipId,
+                dealerId: auditDealerIdFromSession(session),
+                technicianId: session.technicianId,
+                entityType: 'repairLine',
+                entityId: lineId,
                 promptVersion: PROMPT_VERSION,
-                qualityScore: quality.score,
-                qualityGrade: quality.grade,
-                storyHash,
-                reviewMode: 'coaching',
+                metadata: {
+                  repairOrderId: id,
+                  lineNumber: line.lineNumber,
+                  promptVersion: PROMPT_VERSION,
+                  qualityScore: quality.score,
+                  qualityGrade: quality.grade,
+                  storyHash,
+                  reviewMode: 'coaching',
+                },
+                ipAddress: getRequestIp(request),
               },
-              ipAddress: getRequestIp(request),
-            },
-            {
-              where: scopedRepairLineWhereForSession(lineId, id, session),
-              data: {
-                storyQualityAuditEncrypted: encryptJsonObject(quality),
-                // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
-                ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
-              },
-            }
-          );
-        });
+              {
+                where: scopedRepairLineWhereForSession(lineId, id, session),
+                data: {
+                  storyQualityAuditEncrypted: encryptJsonObject(quality),
+                  // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+                  ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+                },
+              }
+            );
+          },
+          { ...rlsContextFromSession(session), enforced: true }
+        );
       } catch (error) {
         if (error instanceof Error && error.message === 'Repair line not found for story persist') {
           return apiError(NOT_FOUND_ERROR, 404);

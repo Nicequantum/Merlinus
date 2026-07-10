@@ -1,7 +1,12 @@
 import 'server-only';
 
 import type { Prisma } from '@prisma/client';
-import { setRlsContext, isRlsEnabled, type RlsContext } from '@/lib/apex/rlsContext';
+import {
+  getRlsTransaction,
+  setRlsContext,
+  isRlsEnabled,
+  type RlsContext,
+} from '@/lib/apex/rlsContext';
 import {
   appendAuditLogInTransaction,
   type AuditLogInput,
@@ -23,16 +28,21 @@ export interface WriteAuditedAccessOptions {
   rls?: RlsContext;
   /** Existing interactive transaction — audit joins parent atomic unit. */
   tx?: Prisma.TransactionClient;
+  /** Skip joining the ambient withSessionRls transaction (rare). */
+  forceNewTransaction?: boolean;
 }
 
 /**
  * Fail-closed access audit for sensitive / PII routes.
  *
  * Always throws when the audit row cannot be persisted — the parent operation
- * must not succeed without a durable compliance entry (Phase 6.1 fortress).
+ * must not succeed without a durable compliance entry (Phase 6.x fortress).
  *
- * Prefer this over writeAuditLog for owner context switches, RO create, and
- * other paths where silent audit failure is unacceptable regardless of action tier.
+ * Prefer this over writeAuditLog for owner context switches, RO mutations, story
+ * pipeline events, and other paths where silent audit failure is unacceptable.
+ *
+ * When called inside withSessionRls / withRlsContext, the audit joins that
+ * transaction automatically (unless forceNewTransaction is set).
  */
 export async function writeAuditedAccess(
   input: AuditLogInput,
@@ -41,7 +51,7 @@ export async function writeAuditedAccess(
   const run = async (tx: Prisma.TransactionClient): Promise<string> => {
     if (options.rls) {
       await setRlsContext(tx, options.rls);
-    } else if (isRlsEnabled()) {
+    } else if (isRlsEnabled() || getRlsTransaction()) {
       await setRlsContext(tx, {
         technicianId: input.technicianId?.trim() || '',
         activeDealershipId: input.dealershipId?.trim() || null,
@@ -61,6 +71,10 @@ export async function writeAuditedAccess(
   try {
     if (options.tx) {
       return await run(options.tx);
+    }
+    const ambient = options.forceNewTransaction ? undefined : getRlsTransaction();
+    if (ambient) {
+      return await run(ambient);
     }
     return await prisma.$transaction(async (tx) => run(tx));
   } catch (error) {

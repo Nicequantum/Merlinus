@@ -1,12 +1,12 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { revokeTechnicianSessions } from '@/lib/auth';
-import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
 import { prisma } from '@/lib/db';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
+import { revokeAllSessionsForTechnician } from '@/lib/sessionRevocation';
 import { parseRequestBody, parseRouteParams, routeIdParamsSchema, updateUserSchema } from '@/lib/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -48,17 +48,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
 
       if (!parsed.data.isActive) {
-        await revokeTechnicianAuthSessions(updated.id, () => revokeTechnicianSessions(updated.id));
+        await revokeAllSessionsForTechnician(updated.id);
       }
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: parsed.data.isActive ? 'user.reactivate' : 'user.deactivate',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: updated.id,
-        metadata: { d7Number: updated.d7Number },
+        metadata: {
+          d7Number: updated.d7Number,
+          sessionRevoked: !parsed.data.isActive,
+        },
         ipAddress: getRequestIp(request),
       });
 
@@ -111,9 +114,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         where: { id },
         data: { deletedAt: removedAt, isActive: false, ...dealerFields },
       });
-      await revokeTechnicianAuthSessions(id, () => revokeTechnicianSessions(id));
+      await revokeAllSessionsForTechnician(id);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'user.delete',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),

@@ -1,7 +1,7 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
@@ -77,41 +77,45 @@ export async function POST(
       }
 
       try {
-        await prisma.$transaction(async (tx) => {
-          await persistRepairLineStoryInTransaction(
-            tx,
-            {
-              action: 'story.generate',
-              dealershipId: session.dealershipId,
-              dealerId: auditDealerIdFromSession(session),
-              technicianId: session.technicianId,
-              entityType: 'repairLine',
-              entityId: lineId,
-              metadata: buildStoryGenerateAuditMetadata({
-                repairOrderId: id,
-                lineNumber: line.lineNumber,
-                advisorIntelligenceUsed: false,
-                advisorContextHash: null,
-                knowledgeBaseEntryIds: [],
-                historyContextLineCount: 0,
-                qualityScore: null,
-                qualityGrade: null,
-                serviceAdvisorId: null,
-              }),
-              ipAddress: getRequestIp(request),
-            },
-            {
-              where: scopedRepairLineWhereForSession(lineId, id, session),
-              data: {
-                warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
-                storyQualityAuditEncrypted: '',
-                ...CLEAR_STORY_CERTIFICATION_DB,
-                // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
-                ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+        // Phase 6.2 — persist under enforced RLS (outside AI call; no ambient wrap)
+        await rlsTransaction(
+          async (tx) => {
+            await persistRepairLineStoryInTransaction(
+              tx,
+              {
+                action: 'story.generate',
+                dealershipId: session.dealershipId,
+                dealerId: auditDealerIdFromSession(session),
+                technicianId: session.technicianId,
+                entityType: 'repairLine',
+                entityId: lineId,
+                metadata: buildStoryGenerateAuditMetadata({
+                  repairOrderId: id,
+                  lineNumber: line.lineNumber,
+                  advisorIntelligenceUsed: false,
+                  advisorContextHash: null,
+                  knowledgeBaseEntryIds: [],
+                  historyContextLineCount: 0,
+                  qualityScore: null,
+                  qualityGrade: null,
+                  serviceAdvisorId: null,
+                }),
+                ipAddress: getRequestIp(request),
               },
-            }
-          );
-        });
+              {
+                where: scopedRepairLineWhereForSession(lineId, id, session),
+                data: {
+                  warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
+                  storyQualityAuditEncrypted: '',
+                  ...CLEAR_STORY_CERTIFICATION_DB,
+                  // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+                  ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+                },
+              }
+            );
+          },
+          { ...rlsContextFromSession(session), enforced: true }
+        );
       } catch (error) {
         if (error instanceof Error && error.message === 'Repair line not found for story persist') {
           return apiError(NOT_FOUND_ERROR, 404);
@@ -158,6 +162,7 @@ export async function POST(
       blockInMaintenance: true,
       perfEvent: 'route.story.generate',
       requireDealershipContext: true,
+      requireAuditedAccess: true,
     }
   );
 }

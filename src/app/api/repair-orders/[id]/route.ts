@@ -1,6 +1,8 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { appendAuditLogInTransaction, auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb, rlsTransaction } from '@/lib/apex/rlsContext';
+import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
@@ -8,7 +10,6 @@ import {
   captureAdvisorIntelligence,
   type AdvisorExtractionSource,
 } from '@/lib/advisorIntelligence';
-import { prisma } from '@/lib/db';
 import { collectRepairOrderImagePathnames, findForbiddenImagePathname } from '@/lib/imageAccess';
 import { dbToRepairOrder, normalizeImageAttachments, repairLineToDbFields, repairOrderToDbFields } from '@/lib/roMapper';
 import { readRoNumberFromDb } from '@/lib/piiFieldRead';
@@ -38,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       const ro = await canAccessRepairOrder(session, id);
       if (!ro) return apiError(NOT_FOUND_ERROR, 404);
 
-      const full = await prisma.repairOrder.findFirst({
+      const full = await getRlsDb().repairOrder.findFirst({
         where: scopedRepairOrderWhereForSession(id, session),
         include: {
           repairLines: true,
@@ -49,9 +50,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
       const mapped = dbToRepairOrder(full);
       const repairOrder = await enrichRepairOrderCertification(mapped, session.dealershipId);
+
+      // Phase 6.2 — fail-closed PII read audit (entity-level RO access)
+      await writeAuditedAccess({
+        action: 'ro.read',
+        dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
+        technicianId: session.technicianId,
+        entityType: 'repairOrder',
+        entityId: id,
+        metadata: { roNumber: readRoNumberFromDb(full) },
+        ipAddress: getRequestIp(request),
+      });
+
       return { repairOrder };
     },
-    { rateLimitKey: 'ros.get', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.get',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }
 
@@ -163,7 +181,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       // APEX NATIONAL PLATFORM — stamp dealerId on writes from authenticated session when present.
       const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
 
-      const advisorCapture = await prisma.$transaction(async (tx) => {
+      const advisorCapture = await rlsTransaction(async (tx) => {
         const roUpdated = await tx.repairOrder.updateMany({
           where: scopedRepairOrderWhereForSession(id, session),
           data: {
@@ -296,7 +314,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       });
 
       if (advisorCapture?.serviceAdvisor) {
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: 'advisor.capture',
           dealershipId: session.dealershipId,
           dealerId: dealerFields.dealerId,
@@ -313,7 +331,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         });
       }
 
-      const updated = await prisma.repairOrder.findFirst({
+      const updated = await getRlsDb().repairOrder.findFirst({
         where: scopedRepairOrderWhereForSession(id, session),
         include: {
           repairLines: true,
@@ -322,7 +340,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       });
       if (!updated) return apiError(NOT_FOUND_ERROR, 404);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'ro.update',
         dealershipId: session.dealershipId,
         dealerId: dealerFields.dealerId,
@@ -335,7 +353,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       });
 
       for (const edit of customerPayStoryEdits) {
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: 'customerPayStory.edit',
           dealershipId: session.dealershipId,
           dealerId: dealerFields.dealerId,
@@ -355,7 +373,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
       return { repairOrder: dbToRepairOrder(updated) };
     },
-    { rateLimitKey: 'ros.update', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.update',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }
 
@@ -373,11 +395,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       const existing = await canAccessRepairOrder(session, id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
 
-      await prisma.repairOrder.deleteMany({
+      await getRlsDb().repairOrder.deleteMany({
         where: scopedRepairOrderWhereForSession(id, session),
       });
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'ro.delete',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -391,6 +413,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
       return { ok: true };
     },
-    { rateLimitKey: 'ros.delete', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.delete',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

@@ -114,3 +114,14 @@ RLS_ENABLED="true"
 ```
 
 Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess` — audit failure aborts the operation.
+
+### Phase 6.2 — enforcement expansion
+
+| Piece | Behavior |
+|-------|----------|
+| `withSessionRls` | Default wrap for `requireDealershipContext` / `requireAuditedAccess` routes |
+| `getRlsDb()` | ALS-bound transaction client for RepairOrder / AuditLog queries |
+| `rlsTransaction()` | Reuses ambient RLS tx (no nested non-RLS connections) |
+| `writeAuditedAccess` | RO read/update/delete, audit log access, password change, logout, user deactivate/delete |
+| `revokeAllSessionsForTechnician` | sessionVersion + apex refresh + Clerk |
+| Scope switch | Enter/exit dealership revokes prior apex refresh families |

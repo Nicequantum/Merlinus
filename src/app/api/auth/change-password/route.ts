@@ -1,12 +1,13 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { clearSessionCookie, hashPassword, revokeTechnicianSessions, verifyPassword } from '@/lib/auth';
-import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
+import { clearSessionCookie, hashPassword, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
+import { revokeAllSessionsForTechnician } from '@/lib/sessionRevocation';
 import { changePasswordSchema, parseRequestBody } from '@/lib/validation';
 
 export async function POST(request: Request) {
@@ -36,11 +37,10 @@ export async function POST(request: Request) {
         data: { passwordHash, ...dealerFields },
       });
 
-      await revokeTechnicianAuthSessions(session.technicianId, () =>
-        revokeTechnicianSessions(session.technicianId)
-      );
+      // Phase 6.2 — full fortress revocation (JWT version + apex refresh + Clerk)
+      await revokeAllSessionsForTechnician(session.technicianId);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'auth.password_change',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
         entityType: 'technician',
         entityId: session.technicianId,
         ipAddress: getRequestIp(request),
+        metadata: { sessionRevoked: true },
       });
 
       await clearSessionCookie();

@@ -27,9 +27,12 @@ export type AuditAction =
   | 'consent.accept'
   | 'legalDisclaimer.accept'
   | 'ro.create'
+  | 'ro.read'
   | 'ro.update'
   | 'ro.delete'
   | 'ro.extract'
+  | 'audit.access'
+  | 'auth.session_revoke'
   | 'diagnostics.extract'
   | 'story.generate'
   | 'story.score'
@@ -83,9 +86,14 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.password_change',
   'consent.accept',
   'legalDisclaimer.accept',
-  /** Phase 6.1 — RO create is fail-closed via writeAuditedAccess; keep critical for writeAuditLog callers. */
+  /** Phase 6.x — fail-closed via writeAuditedAccess on sensitive paths. */
   'ro.create',
+  'ro.read',
+  'ro.update',
+  'ro.delete',
   'ro.extract',
+  'audit.access',
+  'auth.session_revoke',
   'diagnostics.extract',
   'story.generate',
   'story.score',
@@ -93,6 +101,11 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'story.edit',
   'story.certify',
   'customerPayTemplateApplied',
+  'customerPayStory.edit',
+  'user.deactivate',
+  'user.delete',
+  'user.password_reset',
+  'user.reactivate',
 ]);
 
 /** AI warranty story actions must record the active Merlin PROMPT_VERSION for audit defensibility. */

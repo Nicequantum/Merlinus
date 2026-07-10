@@ -5,8 +5,8 @@ import {
   withOptionalDealerId,
   withOptionalDealerIdOnRepairOrderScope,
 } from '@/lib/apex/dealerScope';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
-import { prisma } from '@/lib/db';
 import { isServiceAdvisorActive } from '@/lib/serviceAdvisorAccounts';
 
 export interface RepairOrderAccessSession extends TenantScopedSession {
@@ -24,10 +24,11 @@ export async function canAccessRepairOrder(
   roId: string,
   include: Prisma.RepairOrderInclude = { repairLines: true }
 ) {
+  const db = getRlsDb();
   const piiScope = scopedPiiWhere(session);
 
-  if (session.role === 'manager') {
-    return prisma.repairOrder.findFirst({
+  if (session.role === 'manager' || session.role === 'owner') {
+    return db.repairOrder.findFirst({
       where: withOptionalDealerId(
         { id: roId, dealershipId: piiScope.dealershipId },
         piiScope.dealerId
@@ -37,7 +38,7 @@ export async function canAccessRepairOrder(
   }
 
   if (session.role === 'service_advisor' && session.serviceAdvisorId) {
-    const advisor = await prisma.serviceAdvisor.findFirst({
+    const advisor = await db.serviceAdvisor.findFirst({
       where: withOptionalDealerId(
         {
           id: session.serviceAdvisorId,
@@ -49,7 +50,7 @@ export async function canAccessRepairOrder(
     });
     if (!advisor || !isServiceAdvisorActive(advisor)) return null;
 
-    return prisma.repairOrder.findFirst({
+    return db.repairOrder.findFirst({
       where: withOptionalDealerId(
         {
           id: roId,
@@ -62,7 +63,7 @@ export async function canAccessRepairOrder(
     });
   }
 
-  return prisma.repairOrder.findFirst({
+  return db.repairOrder.findFirst({
     where: withOptionalDealerId(
       {
         id: roId,

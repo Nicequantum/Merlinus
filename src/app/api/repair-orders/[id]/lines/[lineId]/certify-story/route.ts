@@ -2,7 +2,7 @@ import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
+import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
@@ -87,7 +87,8 @@ export async function POST(
       let storyHash: string;
 
       try {
-        auditLogId = await prisma.$transaction(async (tx) => {
+        auditLogId = await rlsTransaction(
+          async (tx) => {
           const lockedLine = await lockRepairLineForCertification(tx, {
             repairLineId: lineId,
             dealershipId: session.dealershipId,
@@ -147,7 +148,9 @@ export async function POST(
           }
 
           return newAuditLogId;
-        });
+        },
+          { ...rlsContextFromSession(session), enforced: true }
+        );
       } catch (error) {
         if (error instanceof StoryCertificationGateError) {
           logger.warn('story.certify.gate_rejected', {

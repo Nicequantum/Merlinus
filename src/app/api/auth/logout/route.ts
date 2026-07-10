@@ -1,36 +1,33 @@
 import { NextResponse } from 'next/server';
 import { resolveAppSessionContext } from '@/lib/authBridge';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
-import { clearApexSessionCookies, destroyApexSession } from '@/lib/apex/apexSession';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
+import { clearApexSessionCookies } from '@/lib/apex/apexSession';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import {
   buildSessionClearCookieHeader,
   clearSessionCookie,
-  destroySession,
   SESSION_COOKIE,
 } from '@/lib/auth';
 import { revokeActiveClerkSession } from '@/lib/clerkSession';
 import { handleRouteError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { revokeAllSessionsForTechnician } from '@/lib/sessionRevocation';
 
 async function performLogout(request: Request) {
   const { session, source } = await resolveAppSessionContext(request);
 
   if (session) {
-    if (isApexPlatformMode()) {
-      await destroyApexSession(session.technicianId);
-      await destroySession(session.technicianId);
-    } else {
-      await destroySession(session.technicianId);
-    }
-    await writeAuditLog({
+    // Phase 6.2 — full fortress revocation on logout
+    await revokeAllSessionsForTechnician(session.technicianId);
+    await writeAuditedAccess({
       action: 'auth.logout',
       dealershipId: session.dealershipId,
       dealerId: auditDealerIdFromSession(session),
       technicianId: session.technicianId,
       ipAddress: getRequestIp(request),
-      metadata: { authSource: source ?? 'unknown' },
+      metadata: { authSource: source ?? 'unknown', sessionRevoked: true },
     });
     logger.info('auth.logout', {
       technicianId: session.technicianId,

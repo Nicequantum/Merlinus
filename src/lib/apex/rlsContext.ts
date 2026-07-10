@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Prisma } from '@prisma/client';
 import type { AuditScopeMode } from '@/lib/apex/platformConstants';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
@@ -21,12 +22,14 @@ export interface RlsContext {
   scopeMode: AuditScopeMode;
   /**
    * When true, policies enforce tenant filters (app.rls_enforced=on).
-   * Defaults to isRlsEnabled().
+   * Defaults to isRlsEnabled() for generic helpers; PII paths force true via withSessionRls.
    */
   enforced?: boolean;
   /** Service/seed path — sets app.rls_bypass=on for the transaction. */
   bypass?: boolean;
 }
+
+const rlsTxStorage = new AsyncLocalStorage<Prisma.TransactionClient>();
 
 /** True when application should set enforced RLS session vars (defense-in-depth). */
 export function isRlsEnabled(): boolean {
@@ -38,7 +41,9 @@ export function isRlsEnabled(): boolean {
  * Build RLS context from an authenticated session.
  * National owners get scope_mode=national with no active dealership (PII policies deny).
  */
-export function rlsContextFromSession(session: TenantScopedSession & Pick<SessionPayload, 'technicianId'>): RlsContext {
+export function rlsContextFromSession(
+  session: TenantScopedSession & Pick<SessionPayload, 'technicianId'>
+): RlsContext {
   const scopeMode = resolveSessionScopeMode(session);
   const rawActive =
     scopeMode === 'dealership'
@@ -54,6 +59,19 @@ export function rlsContextFromSession(session: TenantScopedSession & Pick<Sessio
     scopeMode,
     enforced: isRlsEnabled(),
   };
+}
+
+/**
+ * Prisma client for the current request when inside withSessionRls / withRlsContext.
+ * Falls back to the global singleton outside an RLS transaction.
+ */
+export function getRlsDb(): RlsDbClient {
+  return rlsTxStorage.getStore() ?? prisma;
+}
+
+/** Active RLS transaction client, if any (for joining audits into the same unit of work). */
+export function getRlsTransaction(): Prisma.TransactionClient | undefined {
+  return rlsTxStorage.getStore();
 }
 
 /**
@@ -78,16 +96,41 @@ export async function setRlsContext(client: RlsDbClient, ctx: RlsContext): Promi
 
 /**
  * Run work inside a transaction with RLS session vars applied (SET LOCAL).
- * Prefer this for PII reads/writes when RLS_ENABLED=true.
  */
 export async function withRlsContext<T>(
   ctx: RlsContext,
   fn: (tx: Prisma.TransactionClient) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    await setRlsContext(tx, ctx);
-    return fn(tx);
-  });
+  const existing = rlsTxStorage.getStore();
+  if (existing) {
+    await setRlsContext(existing, ctx);
+    return fn(existing);
+  }
+
+  return prisma.$transaction(
+    async (tx) => {
+      await setRlsContext(tx, ctx);
+      return rlsTxStorage.run(tx, () => fn(tx));
+    },
+    // PII handlers may do several DB round-trips; keep under route maxDuration.
+    { maxWait: 15_000, timeout: 30_000 }
+  );
+}
+
+/**
+ * Phase 6.2 — default PII path: enforce tenant RLS for the session and bind getRlsDb().
+ * Always sets enforced=on so policies apply even when RLS_ENABLED env is unset
+ * (soft-open policies only open when enforced is off).
+ */
+export async function withSessionRls<T>(
+  session: TenantScopedSession & Pick<SessionPayload, 'technicianId'>,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  const ctx: RlsContext = {
+    ...rlsContextFromSession(session),
+    enforced: true,
+  };
+  return withRlsContext(ctx, fn);
 }
 
 /** Seed / migrate / admin maintenance — bypass tenant filters for the transaction. */
@@ -103,4 +146,31 @@ export async function withRlsBypass<T>(fn: (tx: Prisma.TransactionClient) => Pro
     },
     fn
   );
+}
+
+/**
+ * Atomic multi-step work under RLS. Reuses the ambient withSessionRls transaction
+ * when present so nested prisma.$transaction does not open a non-RLS connection.
+ * Pass session-derived ctx when calling outside withSessionRls (e.g. after Grok).
+ */
+export async function rlsTransaction<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ctx?: RlsContext
+): Promise<T> {
+  const existing = rlsTxStorage.getStore();
+  if (existing) {
+    if (ctx) await setRlsContext(existing, { ...ctx, enforced: ctx.enforced ?? true });
+    return fn(existing);
+  }
+  const effective: RlsContext = ctx
+    ? { ...ctx, enforced: ctx.enforced ?? true }
+    : {
+        technicianId: '',
+        activeDealershipId: null,
+        dealerId: null,
+        scopeMode: 'dealership',
+        // Without a session context, stay soft-open (do not enforce empty tenant).
+        enforced: false,
+      };
+  return withRlsContext(effective, fn);
 }

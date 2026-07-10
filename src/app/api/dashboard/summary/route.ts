@@ -1,9 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
-import { prisma } from '@/lib/db';
 import { readRoNumberFromDb } from '@/lib/piiFieldRead';
 
 function buildRoleScopedRoWhere(
@@ -40,9 +40,10 @@ export async function GET(request: Request) {
       const isManager = session.role === 'manager';
       const roWhere = buildRoleScopedRoWhere(session);
 
+      const db = getRlsDb();
       const [totalRos, storiesGenerated, activeTechnicians, recentRos, auditSummary] = await Promise.all([
-        prisma.repairOrder.count({ where: roWhere }),
-        prisma.repairLine.count({
+        db.repairOrder.count({ where: roWhere }),
+        db.repairLine.count({
           where: {
             warrantyStoryEncrypted: { not: null },
             NOT: { warrantyStoryEncrypted: '' },
@@ -50,9 +51,9 @@ export async function GET(request: Request) {
           },
         }),
         isManager
-          ? prisma.technician.count({ where: { dealershipId, isActive: true, deletedAt: null } })
+          ? db.technician.count({ where: { dealershipId, isActive: true, deletedAt: null } })
           : Promise.resolve(0),
-        prisma.repairOrder.findMany({
+        db.repairOrder.findMany({
           where: roWhere,
           include: {
             technician: { select: { name: true } },
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
       ]);
 
       const auditScope = scopedPiiWhere(session);
-      const activityThisWeek = await prisma.auditLog.count({
+      const activityThisWeek = await db.auditLog.count({
         where: isManager
           ? { ...auditScope, createdAt: { gte: weekAgo } }
           : { ...auditScope, technicianId: session.technicianId, createdAt: { gte: weekAgo } },
