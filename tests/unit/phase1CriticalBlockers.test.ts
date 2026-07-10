@@ -103,7 +103,8 @@ describe('Phase 1 critical blockers', () => {
       'src/app/api/repair-orders/[id]/lines/[lineId]/review-story/route.ts',
     ]) {
       const src = readSrc(route);
-      assert.match(src, /prisma\.\$transaction/);
+      // Phase 6: rlsTransaction provides the atomic RLS-scoped transaction
+      assert.match(src, /rlsTransaction|prisma\.\$transaction/);
       assert.match(src, /persistRepairLineStoryInTransaction/);
       assert.equal(src.includes('writeAuditLog({'), false, `${route} should not call writeAuditLog directly`);
     }

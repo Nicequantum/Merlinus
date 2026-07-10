@@ -51,7 +51,8 @@ describe('Critical audit fixes (C1–C7)', () => {
     const src = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts');
     assert.ok(src.includes("action: 'story.generate'"));
     assert.ok(src.includes('persistRepairLineStoryInTransaction'));
-    assert.ok(src.includes('prisma.$transaction'));
+    // Phase 6: rlsTransaction wraps the RLS-scoped Prisma transaction
+    assert.ok(src.includes('rlsTransaction') || src.includes('prisma.$transaction'));
   });
 
   it('C4: security-status requires manager auth', () => {

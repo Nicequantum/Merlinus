@@ -48,7 +48,8 @@ describe('critical path HTTP route coverage', () => {
     assert.match(src, /warrantyStoryEncrypted/);
 
     assert.match(src, /persistRepairLineStoryInTransaction/);
-    assert.match(src, /prisma\.\$transaction/);
+    // Phase 6: rlsTransaction (RLS-scoped) replaces bare prisma.$transaction on story routes
+    assert.match(src, /rlsTransaction|prisma\.\$transaction/);
     assert.match(src, /action: 'story\.generate'/);
     assert.equal(src.includes('withDbConnectionRetry'), false);
   });

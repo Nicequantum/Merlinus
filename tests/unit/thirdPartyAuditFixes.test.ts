@@ -152,7 +152,8 @@ describe('Third-party audit hardening', () => {
     assert.ok(consent.includes('appendAuditLogInTransaction'));
     assert.ok(disclaimer.includes('prisma.$transaction'));
     assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
-    assert.ok(certify.includes('prisma.$transaction'));
+    // Phase 6: certify-story uses rlsTransaction (RLS-scoped atomic tx)
+    assert.ok(certify.includes('rlsTransaction') || certify.includes('prisma.$transaction'));
     assert.ok(certify.includes('appendAuditLogInTransaction'));
     assert.ok(roPut.includes('appendAuditLogInTransaction'));
     assert.ok(roPut.includes("action: 'story.edit'"));

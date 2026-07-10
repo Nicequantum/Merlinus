@@ -22,7 +22,8 @@ describe('Medium audit fixes (M1–M30)', () => {
 
   it('M2/M3: transactional idempotent Customer Pay apply', () => {
     const src = readSrc('src/lib/customerPayTemplate.ts');
-    assert.ok(src.includes('prisma.$transaction'));
+    // Phase 6: rlsTransaction for ambient RLS when withSessionRls is active
+    assert.ok(src.includes('rlsTransaction') || src.includes('prisma.$transaction'));
     assert.ok(src.includes('isDuplicateTemplateApply'));
   });
 

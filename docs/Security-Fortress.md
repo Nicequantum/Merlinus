@@ -46,7 +46,7 @@
 | [`src/lib/apex/rlsContext.ts`](../src/lib/apex/rlsContext.ts) | `withSessionRls`, `getRlsDb`, `rlsTransaction`, `setRlsContext` |
 | [`src/lib/auditedAccess.ts`](../src/lib/auditedAccess.ts) | Fail-closed `writeAuditedAccess` |
 | [`src/lib/apex/tenantScope.ts`](../src/lib/apex/tenantScope.ts) | Dealership / national owner guards |
-| [`src/lib/sessionRevocation.ts`](../src/lib/sessionRevocation.ts) | Full session kill + scope-switch refresh drop |
+| [`src/lib/sessionRevocation.ts`](../src/lib/sessionRevocation.ts) | `revokeAllSessionsForTechnician`, scope-switch refresh drop |
 | [`prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/`](../prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/) | ENABLE + FORCE RLS policies |
 
 ### Soft-open vs enforced

@@ -79,9 +79,11 @@ describe('auth bridge integration (Phase 4 PR-4)', () => {
     const logout = readSrc('src/app/api/auth/logout/route.ts');
     const changePassword = readSrc('src/app/api/auth/change-password/route.ts');
     const clerkSession = readSrc('src/lib/clerkSession.ts');
+    const sessionRevocation = readSrc('src/lib/sessionRevocation.ts');
 
-    assert.ok(logout.includes('revokeActiveClerkSession'));
-    assert.ok(changePassword.includes('revokeTechnicianAuthSessions'));
+    assert.ok(logout.includes('revokeActiveClerkSession') || logout.includes('revokeAllSessionsForTechnician'));
+    assert.ok(changePassword.includes('revokeAllSessionsForTechnician'));
+    assert.ok(sessionRevocation.includes('revokeTechnicianAuthSessions'));
     assert.ok(clerkSession.includes('revokeAllClerkSessionsForUser'));
   });
 });

@@ -633,7 +633,7 @@ async function checkCriticalAuditFixes(): Promise<void> {
   const auditBeforeUpdate =
     generateSrc.includes("action: 'story.generate'") &&
     generateSrc.includes('persistRepairLineStoryInTransaction') &&
-    generateSrc.includes('prisma.$transaction') &&
+    (generateSrc.includes('rlsTransaction') || generateSrc.includes('prisma.$transaction')) &&
     storyAiPersistSrc.includes('appendAuditLogInTransaction') &&
     storyAiPersistSrc.includes('repairLine.updateMany') &&
     storyAiPersistSrc.indexOf('appendAuditLogInTransaction') <
@@ -818,7 +818,10 @@ function checkMediumAuditFixes(): void {
   section('Medium Audit Fixes (M1–M30)');
 
   const cpTpl = readFileSync(resolve(process.cwd(), 'src/lib/customerPayTemplate.ts'), 'utf8');
-  if (cpTpl.includes('prisma.$transaction') && cpTpl.includes('clearCustomerPayMode')) {
+  if (
+    (cpTpl.includes('rlsTransaction') || cpTpl.includes('prisma.$transaction')) &&
+    cpTpl.includes('clearCustomerPayMode')
+  ) {
     record('Medium', 'M1–M3 Customer Pay', 'pass', 'Clear mode + transactional idempotent apply');
   } else {
     record('Medium', 'M1–M3 Customer Pay', 'fail', 'Customer Pay medium fixes incomplete');
