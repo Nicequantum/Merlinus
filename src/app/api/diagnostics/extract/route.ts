@@ -99,6 +99,7 @@ export async function POST(request: Request) {
       blockInMaintenance: true,
       perfEvent: 'route.diagnostics.extract',
       requireDealershipContext: true,
+      requireAuditedAccess: true,
     }
   );
 }

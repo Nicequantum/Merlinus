@@ -1,6 +1,7 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { hashPassword } from '@/lib/auth';
 import { internalEmailForD7 } from '@/lib/d7Number';
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
             },
           });
 
-          await writeAuditLog({
+          await writeAuditedAccess({
             action: 'user.create',
             dealershipId: session.dealershipId,
             dealerId: auditDealerIdFromSession(session),
@@ -201,7 +202,7 @@ export async function POST(request: Request) {
             return { user, advisor, reactivated };
           });
 
-          await writeAuditLog({
+          await writeAuditedAccess({
             action: result.reactivated ? 'advisor.reactivate' : 'advisor.create',
             dealershipId: session.dealershipId,
             dealerId: auditDealerIdFromSession(session),
@@ -218,7 +219,7 @@ export async function POST(request: Request) {
             ipAddress: getRequestIp(request),
           });
 
-          await writeAuditLog({
+          await writeAuditedAccess({
             action: 'user.create',
             dealershipId: session.dealershipId,
             dealerId: auditDealerIdFromSession(session),
@@ -261,7 +262,7 @@ export async function POST(request: Request) {
           },
         });
 
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: 'user.create',
           dealershipId: session.dealershipId,
           dealerId: auditDealerIdFromSession(session),

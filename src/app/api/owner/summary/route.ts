@@ -42,6 +42,6 @@ export async function GET(request: Request) {
 
       return summary;
     },
-    { requireOwner: true, rateLimitKey: 'owner.summary' }
+    { requireOwner: true, requireOwnerNational: true, rateLimitKey: 'owner.summary' }
   );
 }

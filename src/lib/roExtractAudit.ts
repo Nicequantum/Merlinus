@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createHash } from 'crypto';
-import { writeAuditLog } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { GROK_CHAT_MODEL } from '@/lib/grokModels';
 import { assessRoExtractionQuality } from '@/lib/scanPipeline';
 import type { StructuredROExtraction } from '@/types';
@@ -47,7 +47,8 @@ export function buildRoExtractAuditMetadata(input: {
 
 /** Critical audit — scan provenance is compliance-relevant; failure aborts the extract response. */
 export async function writeRoExtractAudit(input: RoExtractAuditInput): Promise<void> {
-  await writeAuditLog({
+  // Phase 6.3 — fail-closed extract provenance
+  await writeAuditedAccess({
     action: 'ro.extract',
     dealershipId: input.dealershipId,
     dealerId: input.dealerId,

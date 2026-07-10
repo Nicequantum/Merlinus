@@ -1,4 +1,5 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { uploadImageToBlob } from '@/lib/blob';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
@@ -74,7 +75,8 @@ export async function POST(request: Request) {
       }
 
       try {
-        await writeAuditLog({
+        // Phase 6.3 — fail-closed upload provenance (extract gates on this audit row)
+        await writeAuditedAccess({
           action: 'image.upload',
           dealershipId: session.dealershipId,
           dealerId: auditDealerIdFromSession(session),
@@ -98,6 +100,13 @@ export async function POST(request: Request) {
 
       return { pathname: uploaded.pathname, url: uploaded.url, name: file.name };
     },
-    { rateLimitKey: 'upload', rateLimit: RATE_LIMITS.upload, requireDealershipContext: true }
+    {
+      rateLimitKey: 'upload',
+      rateLimit: RATE_LIMITS.upload,
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+      // Blob I/O is outside the DB tx; audit uses writeAuditedAccess separately.
+      useRls: false,
+    }
   );
 }

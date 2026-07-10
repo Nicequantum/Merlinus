@@ -1,4 +1,5 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { PROMPT_VERSION } from '@/prompts/version';
 import { withAuth } from '@/lib/apiRoute';
@@ -28,8 +29,9 @@ export async function POST(request: Request) {
       }
 
       // H4: Customer Pay PDF exports use sentinel audit — not Merlin story.pdf_export.
+      // Phase 6.3 — fail-closed export audit
       if (isCustomerPayRepairLine(line)) {
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: 'customerPayStory.pdf_export',
           dealershipId: session.dealershipId,
           dealerId: auditDealerIdFromSession(session),
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
           ipAddress: getRequestIp(request),
         });
       } else {
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: 'story.pdf_export',
           dealershipId: session.dealershipId,
           dealerId: auditDealerIdFromSession(session),
@@ -70,6 +72,11 @@ export async function POST(request: Request) {
 
       return { ok: true };
     },
-    { rateLimitKey: 'audit-logs.pdf-export', perfEvent: 'route.pdf.export.audit' }
+    {
+      rateLimitKey: 'audit-logs.pdf-export',
+      perfEvent: 'route.pdf.export.audit',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

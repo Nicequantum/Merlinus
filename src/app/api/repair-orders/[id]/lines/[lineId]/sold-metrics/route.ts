@@ -1,8 +1,9 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import {
@@ -41,7 +42,8 @@ export async function PATCH(
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const lineUpdated = await prisma.repairLine.updateMany({
+      const db = getRlsDb();
+      const lineUpdated = await db.repairLine.updateMany({
         where: scopedRepairLineWhereForSession(lineId, id, session),
         data: {
           ...soldMetricsToDbUpdateFields(parsed.data),
@@ -53,7 +55,7 @@ export async function PATCH(
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const updated = await prisma.repairLine.findFirst({
+      const updated = await db.repairLine.findFirst({
         where: scopedRepairLineWhereForSession(lineId, id, session),
         select: {
           id: true,
@@ -70,7 +72,7 @@ export async function PATCH(
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'advisor.sold_metrics',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -90,6 +92,10 @@ export async function PATCH(
         soldMetrics: mapSoldMetricsFromDb(updated),
       };
     },
-    { rateLimitKey: 'ros.sold-metrics', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.sold-metrics',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

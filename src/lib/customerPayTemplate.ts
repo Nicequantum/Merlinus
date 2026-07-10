@@ -1,7 +1,9 @@
 import 'server-only';
 
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { appendAuditLogInTransaction, writeAuditLog } from '@/lib/audit';
+import { rlsTransaction } from '@/lib/apex/rlsContext';
+import { appendAuditLogInTransaction } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
 import { prisma } from '@/lib/db';
 import { GLOBAL_DEALERSHIP_ID } from '@/lib/templateLibrary';
@@ -62,7 +64,8 @@ export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Pr
     },
   });
 
-  await writeAuditLog({
+  // Phase 6.3 — fail-closed clear audit
+  await writeAuditedAccess({
     action: 'customerPay.clear',
     dealershipId: input.dealershipId,
     dealerId: input.dealerId,
@@ -160,44 +163,53 @@ export async function applyCustomerPayTemplate(
 
   const encryptedStory = encryptOptionalSensitiveText(preWrittenStory);
 
-  // M2: atomic apply — rollback line + usage + audit together on failure.
-  await prisma.$transaction(async (tx) => {
-    await tx.repairLine.updateMany({
-      where: {
-        id: input.repairLineId,
-        repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
-      },
-      data: {
-        warrantyStoryEncrypted: encryptedStory,
-        isCustomerPay: true,
-        // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
-        ...dealerIdWriteFields(input.dealerId),
-      },
-    });
+  // M2 + Phase 6.3: atomic apply under RLS when ambient withSessionRls is active
+  await rlsTransaction(
+    async (tx) => {
+      await tx.repairLine.updateMany({
+        where: {
+          id: input.repairLineId,
+          repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
+        },
+        data: {
+          warrantyStoryEncrypted: encryptedStory,
+          isCustomerPay: true,
+          // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
+          ...dealerIdWriteFields(input.dealerId),
+        },
+      });
 
-    await tx.template.updateMany({
-      where: {
-        id: input.templateId,
-        OR: [{ dealershipId: input.dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }],
-      },
-      data: { useCount: { increment: 1 }, lastUsedAt: new Date() },
-    });
+      await tx.template.updateMany({
+        where: {
+          id: input.templateId,
+          OR: [{ dealershipId: input.dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }],
+        },
+        data: { useCount: { increment: 1 }, lastUsedAt: new Date() },
+      });
 
-    await appendAuditLogInTransaction(tx, {
-      action: 'customerPayTemplateApplied',
-      dealershipId: input.dealershipId,
-      dealerId: input.dealerId,
+      await appendAuditLogInTransaction(tx, {
+        action: 'customerPayTemplateApplied',
+        dealershipId: input.dealershipId,
+        dealerId: input.dealerId,
+        technicianId: input.technicianId,
+        entityType: 'repairLine',
+        entityId: input.repairLineId,
+        metadata: {
+          templateId: template.id,
+          templateTitle: template.title,
+          repairOrderId: input.repairOrderId,
+        },
+        ipAddress: input.ipAddress,
+      });
+    },
+    {
       technicianId: input.technicianId,
-      entityType: 'repairLine',
-      entityId: input.repairLineId,
-      metadata: {
-        templateId: template.id,
-        templateTitle: template.title,
-        repairOrderId: input.repairOrderId,
-      },
-      ipAddress: input.ipAddress,
-    });
-  });
+      activeDealershipId: input.dealershipId,
+      dealerId: input.dealerId ?? null,
+      scopeMode: 'dealership',
+      enforced: true,
+    }
+  );
 
   return {
     warrantyStory: preWrittenStory,

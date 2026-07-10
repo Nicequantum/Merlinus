@@ -1,12 +1,13 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { hashPassword, revokeTechnicianSessions } from '@/lib/auth';
-import { revokeTechnicianAuthSessions } from '@/lib/clerkSession';
+import { hashPassword } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
+import { revokeSessionsAfterCredentialChange } from '@/lib/sessionRevocation';
 import { parseRequestBody, parseRouteParams, resetPasswordSchema, routeIdParamsSchema } from '@/lib/validation';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,16 +37,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data: { passwordHash, ...dealerFields },
       });
 
-      await revokeTechnicianAuthSessions(user.id, () => revokeTechnicianSessions(user.id));
+      // Phase 6.3 — full fortress revoke after admin password reset
+      await revokeSessionsAfterCredentialChange(user.id);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'user.password_reset',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
         technicianId: session.technicianId,
         entityType: 'technician',
         entityId: user.id,
-        metadata: { d7Number: user.d7Number },
+        metadata: { d7Number: user.d7Number, sessionRevoked: true },
         ipAddress: getRequestIp(request),
       });
 

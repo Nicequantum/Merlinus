@@ -5,6 +5,7 @@ import {
   enrichSessionWithTenantScope,
   ownerMayExerciseDealershipPrivilege,
   requireDealershipScope,
+  requireOwnerNationalScope,
 } from '@/lib/apex/tenantScope';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { resolveAppSession, type AuthSource } from './authBridge';
@@ -45,6 +46,11 @@ interface RouteOptions {
   blockInMaintenance?: boolean;
   /** APEX Phase 5.5 — owner-only routes (enter/exit dealership, national console). */
   requireOwner?: boolean;
+  /**
+   * Phase 6.3 — owner routes that require national scope (summary, dealership list).
+   * Implies requireOwner. Exit dealership before calling these.
+   */
+  requireOwnerNational?: boolean;
   /** APEX Phase 5.5 — PII routes; blocks owners in national scope until enter-dealership. */
   requireDealershipContext?: boolean;
   /**
@@ -90,9 +96,23 @@ export async function withAuth<T>(
 
   const session = enrichSessionWithTenantScope(rawSession);
 
-  if (options.requireOwner) {
+  if (options.requireOwner || options.requireOwnerNational) {
     if (!isApexPlatformMode() || !session.isOwner) {
       return apiError(FORBIDDEN_ERROR, 403);
+    }
+  }
+
+  if (options.requireOwnerNational) {
+    try {
+      requireOwnerNationalScope(session);
+    } catch (error) {
+      if (error instanceof DealershipScopeRequiredError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: 403 }
+        );
+      }
+      throw error;
     }
   }
 

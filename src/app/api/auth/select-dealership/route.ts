@@ -6,12 +6,14 @@ import {
   verifyPendingSelectionToken,
 } from '@/lib/apex/apexSession';
 import { resolveSelectDealershipSession } from '@/lib/apex/selectDealership';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError, handleRouteError } from '@/lib/errors';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logApiWriteRequest } from '@/lib/requestLogging';
+import { revokeApexRefreshForScopeSwitch } from '@/lib/sessionRevocation';
 import {
   AUTH_JSON_BODY_LIMIT_BYTES,
   parseRequestBody,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
       return apiError(INVALID_CREDENTIALS_MESSAGE, 401);
     }
 
-    await writeAuditLog({
+    await writeAuditedAccess({
       action: 'auth.select_dealership',
       dealershipId: session.dealershipId,
       dealerId: auditDealerIdFromSession(session),
@@ -73,6 +75,9 @@ export async function POST(request: Request) {
         rememberAsDefault: Boolean(rememberAsDefault),
       },
     });
+
+    // Phase 6.3 — drop any prior pending/other refresh families before issuing rooftop cookies
+    await revokeApexRefreshForScopeSwitch(session.technicianId);
 
     const response = NextResponse.json({
       session,

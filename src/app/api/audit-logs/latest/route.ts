@@ -1,6 +1,6 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { scopedPiiWhere } from '@/lib/apex/tenantScope';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { canAccessRepairOrder } from '@/lib/repairOrderAccess';
 import { auditLatestQuerySchema, parseQueryParams } from '@/lib/validation';
 
@@ -25,8 +25,9 @@ export async function GET(request: Request) {
     request,
     async (session) => {
       const { repairLineId } = query.data;
+      const db = getRlsDb();
 
-      const line = await prisma.repairLine.findFirst({
+      const line = await db.repairLine.findFirst({
         where: {
           id: repairLineId,
           repairOrder: scopedPiiWhere(session),
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
         ? [...CUSTOMER_PAY_STORY_ACTIONS]
         : [...WARRANTY_STORY_ACTIONS];
 
-      const latestLog = await prisma.auditLog.findFirst({
+      const latestLog = await db.auditLog.findFirst({
         where: {
           ...scopedPiiWhere(session),
           entityType: 'repairLine',

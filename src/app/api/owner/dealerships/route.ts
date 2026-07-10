@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async () => {
+      // National sentinel never appears as an enterable rooftop (Phase 6.3).
       const dealerships = await prisma.dealership.findMany({
         where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
         select: {
@@ -31,6 +32,10 @@ export async function GET(request: Request) {
         })),
       };
     },
-    { requireOwner: true, rateLimitKey: 'owner.dealerships' }
+    {
+      requireOwner: true,
+      requireOwnerNational: true,
+      rateLimitKey: 'owner.dealerships',
+    }
   );
 }

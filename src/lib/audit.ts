@@ -102,10 +102,16 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'story.certify',
   'customerPayTemplateApplied',
   'customerPayStory.edit',
+  'customerPayStory.pdf_export',
+  'customerPay.clear',
+  'story.pdf_export',
+  'image.upload',
+  'advisor.sold_metrics',
   'user.deactivate',
   'user.delete',
   'user.password_reset',
   'user.reactivate',
+  'user.create',
 ]);
 
 /** AI warranty story actions must record the active Merlin PROMPT_VERSION for audit defensibility. */

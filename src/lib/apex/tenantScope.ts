@@ -83,6 +83,21 @@ export function ownerMayExerciseDealershipPrivilege(session: TenantScopedSession
 }
 
 /**
+ * Phase 6.3 — national console routes must not be used while owner is in a rooftop.
+ * (Dealership-scoped owners should exit first.)
+ */
+export function requireOwnerNationalScope(session: TenantScopedSession): void {
+  if (!isOwnerRole(session.role) || !isApexPlatformMode()) {
+    throw new DealershipScopeRequiredError('Owner national scope required');
+  }
+  if (!canAccessNationalConsole(session)) {
+    throw new DealershipScopeRequiredError(
+      'Exit dealership context before using the national owner console'
+    );
+  }
+}
+
+/**
  * Resolve active rooftop + dealer for PII queries — throws when national owner lacks context.
  */
 export function requireDealershipScope(session: TenantScopedSession): {

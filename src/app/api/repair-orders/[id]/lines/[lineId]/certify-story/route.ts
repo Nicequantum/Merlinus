@@ -229,6 +229,7 @@ export async function POST(
       blockInMaintenance: true,
       perfEvent: 'route.story.certify',
       requireDealershipContext: true,
+      requireAuditedAccess: true,
     }
   );
 }

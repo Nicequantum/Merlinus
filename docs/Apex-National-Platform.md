@@ -125,3 +125,14 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 | `writeAuditedAccess` | RO read/update/delete, audit log access, password change, logout, user deactivate/delete |
 | `revokeAllSessionsForTechnician` | sessionVersion + apex refresh + Clerk |
 | Scope switch | Enter/exit dealership revokes prior apex refresh families |
+
+### Phase 6.3 — expanded enforcement
+
+| Piece | Behavior |
+|-------|----------|
+| `requireOwnerNational` | National console (summary, dealership list) blocked while in rooftop scope |
+| Select-dealership | `writeAuditedAccess` + refresh-family revoke before re-issue |
+| Upload / sold metrics / PDF export / extract | Fail-closed `writeAuditedAccess` |
+| Customer Pay apply/clear | RLS transaction + fail-closed clear audit |
+| Admin password reset | `revokeSessionsAfterCredentialChange` (JWT + refresh + Clerk) |
+| Integration | `tests/integration/security-fortress.test.ts` |

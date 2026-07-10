@@ -1777,6 +1777,54 @@ function checkApexPhase55OwnerScope(): void {
   }
 }
 
+function checkApexPhase63SecurityExpansion(): void {
+  section('APEX Phase 6.3 — Expanded RLS enforcement and auditing');
+
+  const tenant = resolve(process.cwd(), 'src/lib/apex/tenantScope.ts');
+  if (existsSync(tenant)) {
+    const src = readFileSync(tenant, 'utf8');
+    if (src.includes('requireOwnerNationalScope')) {
+      record('APEX 6.3', 'Owner national guard', 'pass', 'requireOwnerNationalScope helper');
+    } else {
+      record('APEX 6.3', 'Owner national guard', 'fail', 'Missing requireOwnerNationalScope');
+    }
+  }
+
+  const apiRoute = resolve(process.cwd(), 'src/lib/apiRoute.ts');
+  if (existsSync(apiRoute)) {
+    const src = readFileSync(apiRoute, 'utf8');
+    if (src.includes('requireOwnerNational')) {
+      record('APEX 6.3', 'withAuth national flag', 'pass', 'requireOwnerNational option');
+    } else {
+      record('APEX 6.3', 'withAuth national flag', 'fail', 'apiRoute missing requireOwnerNational');
+    }
+  }
+
+  const select = resolve(process.cwd(), 'src/app/api/auth/select-dealership/route.ts');
+  if (existsSync(select)) {
+    const src = readFileSync(select, 'utf8');
+    if (src.includes('writeAuditedAccess') && src.includes('revokeApexRefreshForScopeSwitch')) {
+      record('APEX 6.3', 'Select-dealership fortress', 'pass', 'Audit + refresh revoke on select');
+    } else {
+      record('APEX 6.3', 'Select-dealership fortress', 'fail', 'select-dealership incomplete');
+    }
+  }
+
+  const fortressTest = resolve(process.cwd(), 'tests/integration/security-fortress.test.ts');
+  if (existsSync(fortressTest)) {
+    record('APEX 6.3', 'Security integration tests', 'pass', 'security-fortress.test.ts');
+  } else {
+    record('APEX 6.3', 'Security integration tests', 'fail', 'Missing security-fortress integration suite');
+  }
+
+  const upload = resolve(process.cwd(), 'src/app/api/upload/route.ts');
+  if (existsSync(upload) && readFileSync(upload, 'utf8').includes('writeAuditedAccess')) {
+    record('APEX 6.3', 'Upload audited access', 'pass', 'image.upload fail-closed');
+  } else {
+    record('APEX 6.3', 'Upload audited access', 'fail', 'upload missing writeAuditedAccess');
+  }
+}
+
 function checkApexPhase62RlsEnforcement(): void {
   section('APEX Phase 6.2 — RLS enforcement + auditing expansion');
 
@@ -2138,6 +2186,7 @@ async function main(): Promise<void> {
   checkApexPhase510Finalize();
   checkApexPhase61RlsFoundation();
   checkApexPhase62RlsEnforcement();
+  checkApexPhase63SecurityExpansion();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

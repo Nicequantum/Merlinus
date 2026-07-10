@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { createHash } from 'crypto';
-import { writeAuditLog } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { GROK_CHAT_MODEL } from '@/lib/grokModels';
 import type { ExtractedData } from '@/types';
 
@@ -55,7 +55,8 @@ export async function writeDiagnosticExtractAudit(input: DiagnosticExtractAuditI
     extracted: input.extracted,
   });
 
-  await writeAuditLog({
+  // Phase 6.3 — fail-closed diagnostic extract provenance
+  await writeAuditedAccess({
     action: 'diagnostics.extract',
     dealershipId: input.dealershipId,
     dealerId: input.dealerId,

@@ -172,6 +172,7 @@ export async function POST(
       blockInMaintenance: true,
       perfEvent: 'route.story.score',
       requireDealershipContext: true,
+      requireAuditedAccess: true,
     }
   );
 }
