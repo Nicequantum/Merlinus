@@ -1,5 +1,5 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { knowledgeBaseForDealershipWhere } from '@/lib/saveTemplateFromStory';
 import { mapKnowledgeBase, seedTemplateLibraryIfEmpty } from '@/lib/templateLibrary';
 import { knowledgeBaseListQuerySchema, parseQueryParams } from '@/lib/validation';
@@ -14,8 +14,9 @@ export async function GET(request: Request) {
       await seedTemplateLibraryIfEmpty();
 
       const { category } = query.data;
+      const db = getRlsDb();
 
-      const entries = await prisma.knowledgeBase.findMany({
+      const entries = await db.knowledgeBase.findMany({
         where: {
           ...knowledgeBaseForDealershipWhere(session.dealershipId, session.dealerId),
           ...(category ? { category } : {}),
@@ -25,6 +26,6 @@ export async function GET(request: Request) {
 
       return { entries: entries.map(mapKnowledgeBase) };
     },
-    { rateLimitKey: 'knowledge.list' }
+    { rateLimitKey: 'knowledge.list', requireDealershipContext: true }
   );
 }

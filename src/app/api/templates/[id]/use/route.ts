@@ -1,10 +1,11 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { templateAccessWhere } from '@/lib/saveTemplateFromStory';
 import { recordTemplateUsage } from '@/lib/templateLibrary';
-import { prisma } from '@/lib/db';
 import { parseRouteParams, routeIdParamsSchema } from '@/lib/validation';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return withAuth(
     request,
     async (session) => {
-      const template = await prisma.template.findFirst({
+      const template = await getRlsDb().template.findFirst({
         where: templateAccessWhere(session.dealershipId, id, session.dealerId),
       });
 
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       await recordTemplateUsage(id, session.dealershipId);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'template.use',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -38,6 +39,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       return { ok: true };
     },
-    { rateLimitKey: 'templates.use' }
+    {
+      rateLimitKey: 'templates.use',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

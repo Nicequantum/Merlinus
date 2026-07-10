@@ -1,8 +1,9 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { mapAdvisorListItem, parseAdvisorProfileData } from '@/lib/advisorApiMappers';
 import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { decryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb, readRoNumberFromDb } from '@/lib/piiFieldRead';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
@@ -18,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      const advisor = await prisma.serviceAdvisor.findFirst({
+      const advisor = await getRlsDb().serviceAdvisor.findFirst({
         where: { id, dealershipId: session.dealershipId, deletedAt: null },
         include: {
           profile: true,
@@ -81,7 +82,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         },
       };
     },
-    { rateLimitKey: 'advisors.get', requireManager: true }
+    {
+      rateLimitKey: 'advisors.get',
+      requireManager: true,
+      requireDealershipContext: true,
+    }
   );
 }
 
@@ -96,7 +101,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const parsed = await parseRequestBody(request, updateAdvisorSchema);
       if ('error' in parsed) return parsed.error;
 
-      const advisor = await prisma.serviceAdvisor.findFirst({
+      const advisor = await getRlsDb().serviceAdvisor.findFirst({
         where: { id, dealershipId: session.dealershipId, deletedAt: null },
       });
 
@@ -104,7 +109,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const updated = await prisma.serviceAdvisor.update({
+      const updated = await getRlsDb().serviceAdvisor.update({
         where: { id },
         data: {
           status: parsed.data.status,
@@ -121,7 +126,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         },
       });
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: parsed.data.status === 'active' ? 'advisor.reactivate' : 'advisor.deactivate',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -146,7 +151,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         advisor: mapAdvisorListItem(updated, metricsById.get(updated.id)!),
       };
     },
-    { rateLimitKey: 'advisors.update', requireManager: true }
+    {
+      rateLimitKey: 'advisors.update',
+      requireManager: true,
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }
 
@@ -158,7 +168,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   return withAuth(
     request,
     async (session) => {
-      const advisor = await prisma.serviceAdvisor.findFirst({
+      const advisor = await getRlsDb().serviceAdvisor.findFirst({
         where: { id, dealershipId: session.dealershipId },
       });
 
@@ -171,7 +181,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
 
       const removedAt = new Date();
-      await prisma.serviceAdvisor.update({
+      await getRlsDb().serviceAdvisor.update({
         where: { id },
         data: {
           deletedAt: removedAt,
@@ -179,7 +189,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         },
       });
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'advisor.delete',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -197,6 +207,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
       return { ok: true };
     },
-    { rateLimitKey: 'advisors.delete', requireManager: true }
+    {
+      rateLimitKey: 'advisors.delete',
+      requireManager: true,
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

@@ -1777,6 +1777,77 @@ function checkApexPhase55OwnerScope(): void {
   }
 }
 
+function checkApexPhase64FortressComplete(): void {
+  section('APEX Phase 6.4 — Finalize Security Fortress Hardening');
+
+  const docs = resolve(process.cwd(), 'docs/Security-Fortress.md');
+  if (existsSync(docs)) {
+    const text = readFileSync(docs, 'utf8');
+    const ok =
+      text.includes('Phase 6.0') &&
+      text.includes('writeAuditedAccess') &&
+      text.includes('withSessionRls') &&
+      text.includes('revokeAllSessionsForTechnician');
+    if (ok) {
+      record('APEX 6.4', 'Security Fortress docs', 'pass', 'docs/Security-Fortress.md complete');
+    } else {
+      record('APEX 6.4', 'Security Fortress docs', 'fail', 'Security-Fortress.md incomplete');
+    }
+  } else {
+    record('APEX 6.4', 'Security Fortress docs', 'fail', 'Missing docs/Security-Fortress.md');
+  }
+
+  const enter = resolve(process.cwd(), 'src/app/api/auth/enter-dealership/route.ts');
+  if (existsSync(enter)) {
+    const src = readFileSync(enter, 'utf8');
+    if (src.includes('requireOwnerNational')) {
+      record('APEX 6.4', 'Enter requires national', 'pass', 'enter-dealership requires national owner scope');
+    } else {
+      record('APEX 6.4', 'Enter requires national', 'fail', 'enter-dealership missing requireOwnerNational');
+    }
+  }
+
+  const advisors = resolve(process.cwd(), 'src/app/api/advisors/route.ts');
+  if (existsSync(advisors)) {
+    const src = readFileSync(advisors, 'utf8');
+    if (src.includes('getRlsDb') && src.includes('writeAuditedAccess') && src.includes('requireDealershipContext')) {
+      record('APEX 6.4', 'Advisors fortress', 'pass', 'Advisors list/create under RLS + audit');
+    } else {
+      record('APEX 6.4', 'Advisors fortress', 'fail', 'advisors route incomplete fortress wiring');
+    }
+  }
+
+  const login = resolve(process.cwd(), 'src/app/api/auth/login/route.ts');
+  if (existsSync(login) && readFileSync(login, 'utf8').includes('writeAuditedAccess')) {
+    record('APEX 6.4', 'Login fail-closed audit', 'pass', 'auth.login uses writeAuditedAccess');
+  } else {
+    record('APEX 6.4', 'Login fail-closed audit', 'fail', 'login missing writeAuditedAccess');
+  }
+
+  const fortressTest = resolve(process.cwd(), 'tests/integration/security-fortress.test.ts');
+  if (existsSync(fortressTest)) {
+    const src = readFileSync(fortressTest, 'utf8');
+    if (src.includes('Phase 6') && src.includes('DEALERSHIP_CONTEXT_REQUIRED')) {
+      record('APEX 6.4', 'Fortress integration suite', 'pass', 'security-fortress.test.ts present');
+    } else {
+      record('APEX 6.4', 'Fortress integration suite', 'fail', 'security-fortress.test.ts incomplete');
+    }
+  }
+
+  // Aggregate gate: all Phase 6.x modules present
+  const rls = existsSync(resolve(process.cwd(), 'src/lib/apex/rlsContext.ts'));
+  const audited = existsSync(resolve(process.cwd(), 'src/lib/auditedAccess.ts'));
+  const revoke = existsSync(resolve(process.cwd(), 'src/lib/sessionRevocation.ts'));
+  const migration = existsSync(
+    resolve(process.cwd(), 'prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/migration.sql')
+  );
+  if (rls && audited && revoke && migration) {
+    record('APEX 6.4', 'Phase 6.0 complete gate', 'pass', 'RLS + audit + revoke + migration all present');
+  } else {
+    record('APEX 6.4', 'Phase 6.0 complete gate', 'fail', 'Missing one or more Phase 6 core artifacts');
+  }
+}
+
 function checkApexPhase63SecurityExpansion(): void {
   section('APEX Phase 6.3 — Expanded RLS enforcement and auditing');
 
@@ -2187,6 +2258,7 @@ async function main(): Promise<void> {
   checkApexPhase61RlsFoundation();
   checkApexPhase62RlsEnforcement();
   checkApexPhase63SecurityExpansion();
+  checkApexPhase64FortressComplete();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

@@ -3,7 +3,8 @@ import {
   applyApexSessionCookies,
   rotateApexRefreshToken,
 } from '@/lib/apex/apexSession';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError, handleRouteError, UNAUTHORIZED_ERROR } from '@/lib/errors';
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       return apiError(UNAUTHORIZED_ERROR, 401);
     }
 
-    await writeAuditLog({
+    await writeAuditedAccess({
       action: 'auth.refresh',
       dealershipId: rotation.session.dealershipId,
       dealerId: auditDealerIdFromSession(rotation.session),

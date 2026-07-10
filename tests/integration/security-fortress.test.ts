@@ -1,6 +1,6 @@
 /**
- * Phase 6.3 — security fortress integration tests.
- * Covers owner least-privilege, scope-switch revocation signals, and PII RLS context.
+ * Phase 6.x — security fortress integration tests (6.3–6.4).
+ * Covers owner least-privilege, national console lock, scope-switch, multi-rooftop select.
  */
 import '../setup/criticalPathMocks';
 
@@ -14,11 +14,13 @@ if (!globalThis.crypto) {
 
 import { PrismaClient } from '@prisma/client';
 import { POST as postEnterDealership } from '../../src/app/api/auth/enter-dealership/route';
+import { POST as postExitDealership } from '../../src/app/api/auth/exit-dealership/route';
 import { POST as postLogin } from '../../src/app/api/auth/login/route';
 import { GET as getOwnerSummary } from '../../src/app/api/owner/summary/route';
 import { GET as getOwnerDealerships } from '../../src/app/api/owner/dealerships/route';
 import { GET as getRepairOrders } from '../../src/app/api/repair-orders/route';
 import { POST as postSelectDealership } from '../../src/app/api/auth/select-dealership/route';
+import { APEX_NATIONAL_DEALERSHIP_ID } from '../../src/lib/apex/platformConstants';
 import { seedApexOwnerAccounts } from '../../src/lib/apex/seedOwnerAccounts';
 import {
   applyApexIntegrationSeedEnv,
@@ -36,7 +38,7 @@ import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/critic
 
 const prisma = new PrismaClient();
 
-describe('Security fortress (Phase 6.3)', () => {
+describe('Security fortress (Phase 6.3–6.4)', () => {
   let previousPlatformMode: string | undefined;
   let ownerAccessToken = '';
   let primaryDealershipId = 'seed-dealership';
@@ -112,7 +114,7 @@ describe('Security fortress (Phase 6.3)', () => {
     assert.ok(body.dealerships!.every((d) => d.id !== '__apex_national__'));
   });
 
-  test('owner after enter-dealership is blocked from national summary until exit', async () => {
+  test('owner after enter-dealership is blocked from national console until exit', async () => {
     const enterResponse = await runWithNextRouteContext(
       buildApexAuthenticatedRequest('http://localhost/api/auth/enter-dealership', ownerAccessToken, {
         method: 'POST',
@@ -139,6 +141,58 @@ describe('Security fortress (Phase 6.3)', () => {
     const summary = await readJsonResponse<{ code?: string; error?: string }>(summaryResponse);
     assert.equal(summary.status, 403, 'dealership-scope owner must not use national summary');
     assert.equal(summary.body.code, 'DEALERSHIP_CONTEXT_REQUIRED');
+
+    // Phase 6.4 — cannot re-enter from dealership scope (must exit first)
+    const reEnter = await runWithNextRouteContext(
+      buildApexAuthenticatedRequest('http://localhost/api/auth/enter-dealership', dealershipToken, {
+        method: 'POST',
+        body: { dealershipId: primaryDealershipId },
+      }),
+      '/api/auth/enter-dealership/route',
+      (req) => postEnterDealership(req)
+    );
+    const reEnterBody = await readJsonResponse<{ code?: string }>(reEnter);
+    assert.equal(reEnter.status, 403, 'must be national to enter dealership');
+    assert.equal(reEnterBody.body.code, 'DEALERSHIP_CONTEXT_REQUIRED');
+
+    // Exit restores national console
+    const exitResponse = await runWithNextRouteContext(
+      buildApexAuthenticatedRequest('http://localhost/api/auth/exit-dealership', dealershipToken, {
+        method: 'POST',
+        body: {},
+      }),
+      '/api/auth/exit-dealership/route',
+      (req) => postExitDealership(req)
+    );
+    const exit = await readJsonResponse<{ scopeMode?: string }>(exitResponse);
+    assert.equal(exit.status, 200, JSON.stringify(exit.body));
+    assert.equal(exit.body.scopeMode, 'national');
+    const nationalToken = extractApexAccessCookie(exitResponse) ?? '';
+    assert.ok(nationalToken);
+
+    const summaryOk = await runWithNextRouteContext(
+      buildApexAuthenticatedRequest('http://localhost/api/owner/summary', nationalToken),
+      '/api/owner/summary/route',
+      (req) => getOwnerSummary(req)
+    );
+    assert.equal(summaryOk.status, 200);
+
+    // Keep suite token national for remaining tests that reuse ownerAccessToken patterns
+    ownerAccessToken = nationalToken;
+  });
+
+  test('owner cannot enter national sentinel as rooftop', async () => {
+    const response = await runWithNextRouteContext(
+      buildApexAuthenticatedRequest('http://localhost/api/auth/enter-dealership', ownerAccessToken, {
+        method: 'POST',
+        body: { dealershipId: APEX_NATIONAL_DEALERSHIP_ID },
+      }),
+      '/api/auth/enter-dealership/route',
+      (req) => postEnterDealership(req)
+    );
+    const { status, body } = await readJsonResponse<{ error?: string }>(response);
+    assert.equal(status, 403);
+    assert.match(String(body.error || ''), /sentinel|national|dealership/i);
   });
 
   test('multi-rooftop select issues dealership scopeMode and revokes prior refresh families', async () => {

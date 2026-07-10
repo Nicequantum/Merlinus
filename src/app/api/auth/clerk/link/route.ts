@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { resolveLegacySessionContext } from '@/lib/authBridge';
 import { clerkEnvConfigured, isClerkAuthPathEnabled } from '@/lib/authMode';
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
         return apiError(result.reason, 409);
       }
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'auth.clerk_link',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),

@@ -78,8 +78,22 @@ describe('Phase 6.3 security expansion', () => {
 
   it('security fortress integration suite exists', () => {
     const src = readSrc('tests/integration/security-fortress.test.ts');
-    assert.match(src, /Security fortress \(Phase 6\.3\)/);
+    assert.match(src, /Security fortress \(Phase 6/);
     assert.match(src, /DEALERSHIP_CONTEXT_REQUIRED/);
-    assert.match(src, /requireOwnerNational|national summary/);
+    assert.match(src, /requireOwnerNational|national summary|national console/);
+    assert.match(src, /sentinel|__apex_national__/);
+  });
+
+  it('Phase 6.4 finalizes advisors, login audit, and fortress docs', () => {
+    const advisors = readSrc('src/app/api/advisors/route.ts');
+    const login = readSrc('src/app/api/auth/login/route.ts');
+    const enter = readSrc('src/app/api/auth/enter-dealership/route.ts');
+    const docs = readSrc('docs/Security-Fortress.md');
+    assert.match(advisors, /getRlsDb/);
+    assert.match(advisors, /writeAuditedAccess/);
+    assert.match(login, /writeAuditedAccess/);
+    assert.match(enter, /requireOwnerNational/);
+    assert.match(docs, /Phase 6\.0/);
+    assert.match(docs, /withSessionRls/);
   });
 });

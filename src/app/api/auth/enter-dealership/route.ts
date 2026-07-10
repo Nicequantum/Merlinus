@@ -100,7 +100,13 @@ export async function POST(request: Request) {
         });
         return response;
       },
-      { requireOwner: true, rateLimitKey: 'auth.enter_dealership', skipRateLimit: true }
+      {
+        requireOwner: true,
+        // Phase 6.4 — must be national before entering a rooftop
+        requireOwnerNational: true,
+        rateLimitKey: 'auth.enter_dealership',
+        skipRateLimit: true,
+      }
     );
   } catch (error) {
     logApiWriteRequest({

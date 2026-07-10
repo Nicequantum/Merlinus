@@ -1,7 +1,8 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
+import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { saveTemplateFromStory } from '@/lib/saveTemplateFromStory';
 import { parseRequestBody, saveTemplateFromStorySchema } from '@/lib/validation';
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
         codes: data.codes,
       });
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'template.save',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -51,6 +52,10 @@ export async function POST(request: Request) {
 
       return result;
     },
-    { rateLimitKey: 'templates.save' }
+    {
+      rateLimitKey: 'templates.save',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

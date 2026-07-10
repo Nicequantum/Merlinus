@@ -1,5 +1,5 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { templatesForDealershipWhere } from '@/lib/saveTemplateFromStory';
 import { mapTemplate, seedTemplateLibraryIfEmpty } from '@/lib/templateLibrary';
 import { parseQueryParams, templateListQuerySchema } from '@/lib/validation';
@@ -14,8 +14,9 @@ export async function GET(request: Request) {
       await seedTemplateLibraryIfEmpty();
 
       const { category } = query.data;
+      const db = getRlsDb();
 
-      const templates = await prisma.template.findMany({
+      const templates = await db.template.findMany({
         where: {
           ...templatesForDealershipWhere(session.dealershipId, session.dealerId),
           ...(category ? { category } : {}),
@@ -25,6 +26,6 @@ export async function GET(request: Request) {
 
       return { templates: templates.map(mapTemplate) };
     },
-    { rateLimitKey: 'templates.list' }
+    { rateLimitKey: 'templates.list', requireDealershipContext: true }
   );
 }

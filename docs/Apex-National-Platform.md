@@ -67,6 +67,7 @@ National summary API: `GET /api/owner/summary` (owner-gated, apex-only, no PII i
 - PII routes use `requireDealershipContext` — national owners receive `403` with `DEALERSHIP_CONTEXT_REQUIRED`
 - Owner FK uses sentinel dealership `__apex_national__`
 - All owner context switches are audited (`owner.dealership_enter`, `owner.dealership_exit`, `owner.national_access`)
+- **Phase 6 fortress (complete):** RLS + fail-closed `writeAuditedAccess` + session revocation — see [Security-Fortress.md](./Security-Fortress.md)
 
 ---
 
@@ -79,7 +80,10 @@ npm run test:integration
 npm run validate:pre-rollout
 ```
 
-Integration coverage: `tests/integration/apex-owner-flows.test.ts`
+Integration coverage:
+
+- `tests/integration/apex-owner-flows.test.ts`
+- `tests/integration/security-fortress.test.ts`
 
 ---
 
@@ -136,3 +140,14 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 | Customer Pay apply/clear | RLS transaction + fail-closed clear audit |
 | Admin password reset | `revokeSessionsAfterCredentialChange` (JWT + refresh + Clerk) |
 | Integration | `tests/integration/security-fortress.test.ts` |
+
+### Phase 6.4 — finalize Security Fortress
+
+| Piece | Behavior |
+|-------|----------|
+| Advisors / templates / technicians / knowledge-base | `getRlsDb` + dealership context; mutations fail-closed audited |
+| Login / refresh / Clerk link | `writeAuditedAccess` |
+| Enter dealership | `requireOwnerNational` (must exit rooftop before re-enter) |
+| Docs | `docs/Security-Fortress.md` + pre-rollout Phase 6 complete gate |
+
+**Phase 6.0 status: complete.**

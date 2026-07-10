@@ -1,5 +1,5 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { backfillCertifiedStoriesFromAudit } from '@/lib/technicianCertifiedStory';
 
 export async function GET(request: Request) {
@@ -8,7 +8,8 @@ export async function GET(request: Request) {
     async (session) => {
       await backfillCertifiedStoriesFromAudit(session.dealershipId);
 
-      const technicians = await prisma.technician.findMany({
+      const db = getRlsDb();
+      const technicians = await db.technician.findMany({
         where: { dealershipId: session.dealershipId, deletedAt: null },
         select: {
           id: true,
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
         orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
       });
 
-      const storyCounts = await prisma.technicianCertifiedStory.groupBy({
+      const storyCounts = await db.technicianCertifiedStory.groupBy({
         by: ['technicianId'],
         where: { dealershipId: session.dealershipId },
         _count: { _all: true },
@@ -58,6 +59,10 @@ export async function GET(request: Request) {
         }),
       };
     },
-    { rateLimitKey: 'technicians.list', requireManager: true }
+    {
+      rateLimitKey: 'technicians.list',
+      requireManager: true,
+      requireDealershipContext: true,
+    }
   );
 }

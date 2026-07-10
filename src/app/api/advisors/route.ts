@@ -1,9 +1,10 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { getRlsDb } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { mapAdvisorListItem } from '@/lib/advisorApiMappers';
 import { computeAdvisorMetricsBatch } from '@/lib/advisorMetrics';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import {
@@ -27,7 +28,8 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const advisors = await prisma.serviceAdvisor.findMany({
+      const db = getRlsDb();
+      const advisors = await db.serviceAdvisor.findMany({
         where: {
           dealershipId: session.dealershipId,
           deletedAt: null,
@@ -51,7 +53,11 @@ export async function GET(request: Request) {
         ),
       };
     },
-    { rateLimitKey: 'advisors.list', requireManager: true }
+    {
+      rateLimitKey: 'advisors.list',
+      requireManager: true,
+      requireDealershipContext: true,
+    }
   );
 }
 
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
 
         const metricsById = await computeAdvisorMetricsBatch(session.dealershipId, [advisor.id], new Map([[advisor.id, advisor.csiScore ?? null]]));
 
-        await writeAuditLog({
+        await writeAuditedAccess({
           action: reactivated ? 'advisor.reactivate' : 'advisor.create',
           dealershipId: session.dealershipId,
           dealerId: auditDealerIdFromSession(session),
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
           ipAddress: getRequestIp(request),
         });
 
-        const withProfile = await prisma.serviceAdvisor.findUniqueOrThrow({
+        const withProfile = await getRlsDb().serviceAdvisor.findUniqueOrThrow({
           where: { id: advisor.id },
           include: advisorListInclude,
         });
@@ -101,6 +107,11 @@ export async function POST(request: Request) {
         throw error;
       }
     },
-    { rateLimitKey: 'advisors.create', requireManager: true }
+    {
+      rateLimitKey: 'advisors.create',
+      requireManager: true,
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

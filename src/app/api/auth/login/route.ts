@@ -8,7 +8,8 @@ import {
   LEGACY_LOGIN_FAILURE_MESSAGE,
   resolveUnifiedLogin,
 } from '@/lib/apex/loginResolver';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { isApexPlatformMode } from '@/lib/platformMode';
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
 
       const token = await createSessionToken(session);
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'auth.login',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
 
     const { session } = loginResult;
 
-    await writeAuditLog({
+    await writeAuditedAccess({
       action: 'auth.login',
       dealershipId: session.dealershipId,
       dealerId: auditDealerIdFromSession(session),

@@ -1,4 +1,5 @@
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { resolveServiceAdvisor } from '@/lib/advisorIntelligence';
 import { apiError, VALIDATION_ERROR } from '@/lib/errors';
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
         return apiError('Could not resolve a valid service advisor name', 400);
       }
 
-      await writeAuditLog({
+      await writeAuditedAccess({
         action: 'advisor.resolve',
         dealershipId: session.dealershipId,
         dealerId: auditDealerIdFromSession(session),
@@ -38,6 +39,10 @@ export async function POST(request: Request) {
 
       return { serviceAdvisor: resolved };
     },
-    { rateLimitKey: 'advisors.resolve' }
+    {
+      rateLimitKey: 'advisors.resolve',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

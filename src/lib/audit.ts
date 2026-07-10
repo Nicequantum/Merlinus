@@ -112,6 +112,14 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'user.password_reset',
   'user.reactivate',
   'user.create',
+  'advisor.create',
+  'advisor.deactivate',
+  'advisor.reactivate',
+  'advisor.delete',
+  'advisor.resolve',
+  'template.save',
+  'template.use',
+  'auth.clerk_link',
 ]);
 
 /** AI warranty story actions must record the active Merlin PROMPT_VERSION for audit defensibility. */
@@ -199,7 +207,8 @@ export interface CustomerPayTemplateAuditInput {
  * Does not record Merlin PROMPT_VERSION — non-warranty work is outside AI compliance scope.
  */
 export async function writeCustomerPayTemplateAudit(input: CustomerPayTemplateAuditInput): Promise<void> {
-  await writeAuditLog({
+  const { writeAuditedAccess } = await import('@/lib/auditedAccess');
+  await writeAuditedAccess({
     action: 'customerPayTemplateApplied',
     dealershipId: input.dealershipId,
     dealerId: input.dealerId,
