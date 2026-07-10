@@ -34,6 +34,18 @@ export interface ApexOwnerSeedConfig {
   multiRooftopName?: string;
 }
 
+/** Strip optional wrapping quotes from dotenv values (Windows shells sometimes re-quote). */
+function stripEnvQuotes(value: string | undefined): string {
+  let v = value?.trim() ?? '';
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
 function pushOwnerIfConfigured(
   owners: ApexOwnerAccountSeed[],
   emailRaw: string | undefined,
@@ -41,8 +53,8 @@ function pushOwnerIfConfigured(
   nameRaw: string | undefined,
   fallbackName: string
 ): void {
-  const email = emailRaw?.trim().toLowerCase();
-  const password = passwordRaw?.trim();
+  const email = stripEnvQuotes(emailRaw).toLowerCase();
+  const password = stripEnvQuotes(passwordRaw);
   if (!email || !password) return;
   if (!email.includes('@')) return;
   // Avoid duplicates when the same email is listed twice.
@@ -50,7 +62,7 @@ function pushOwnerIfConfigured(
   owners.push({
     email,
     password,
-    name: nameRaw?.trim() || fallbackName,
+    name: stripEnvQuotes(nameRaw) || fallbackName,
   });
 }
 

@@ -34,9 +34,11 @@ export async function POST(request: Request) {
     }
 
     const { identifier, password } = parsed.data;
+    // Apex mode (PLATFORM_MODE / NEXT_PUBLIC / APEX_ENV) uses unified email/D7/username login.
     const apexMode = isApexPlatformMode();
 
     if (!apexMode) {
+      // Merlinus: D7-only. Owner email logins require PLATFORM_MODE=apex (or APEX_ENV=1).
       const session = await loginTechnician(identifier, password);
       if (!session) {
         return apiError(LEGACY_LOGIN_FAILURE_MESSAGE, 401);

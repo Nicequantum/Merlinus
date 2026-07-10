@@ -53,11 +53,18 @@ async function findTechnicianByCredential(
   normalizedIdentifier: string
 ): Promise<TechnicianWithDealership | null> {
   switch (credentialType) {
-    case 'email':
+    case 'email': {
+      // Prefer exact lowercase match (owners are seeded lowercased); fall back insensitive.
+      const exact = await prisma.technician.findUnique({
+        where: { email: normalizedIdentifier },
+        include: technicianInclude,
+      });
+      if (exact) return exact;
       return prisma.technician.findFirst({
         where: { email: { equals: normalizedIdentifier, mode: 'insensitive' } },
         include: technicianInclude,
       });
+    }
     case 'd7':
       return prisma.technician.findUnique({
         where: { d7Number: normalizedIdentifier },

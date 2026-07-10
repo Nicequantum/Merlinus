@@ -106,10 +106,11 @@ export function ApexPlatformApp() {
           dealerships: result.dealerships,
         };
       }
-      const latest = await refreshSession();
-      if (!latest) {
-        throw new Error('Login succeeded but session could not be verified');
-      }
+      // Trust the login response body immediately. Apex dual-token cookies are set on the
+      // response; requiring /api/auth/me before paint races Clerk dual-mode and cookie apply.
+      setSession(result.session);
+      setSessionPhase('authenticated');
+      void refreshSession();
       return { status: 'success' };
     },
     [refreshSession]
@@ -117,11 +118,10 @@ export function ApexPlatformApp() {
 
   const selectDealership = useCallback(
     async (pendingToken: string, dealershipId: string, rememberAsDefault = false) => {
-      await selectDealershipSession(pendingToken, dealershipId, rememberAsDefault);
-      const latest = await refreshSession();
-      if (!latest) {
-        throw new Error('Dealership selected but session could not be verified');
-      }
+      const session = await selectDealershipSession(pendingToken, dealershipId, rememberAsDefault);
+      setSession(session);
+      setSessionPhase('authenticated');
+      void refreshSession();
     },
     [refreshSession]
   );

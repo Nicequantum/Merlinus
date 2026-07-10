@@ -31,9 +31,10 @@ loadDotEnvFile('.env.local');
 const loadedApex = loadDotEnvFile('.env.apex.local');
 
 process.env.APEX_ENV = '1';
-process.env.PLATFORM_MODE = process.env.PLATFORM_MODE || 'apex';
-process.env.NEXT_PUBLIC_PLATFORM_MODE =
-  process.env.NEXT_PUBLIC_PLATFORM_MODE || process.env.PLATFORM_MODE || 'apex';
+// Always force Apex platform mode for this entrypoint (do not inherit merlinus from shell).
+process.env.PLATFORM_MODE = 'apex';
+process.env.NEXT_PUBLIC_PLATFORM_MODE = 'apex';
+process.env.APEX_USE_SUPABASE_DB = process.env.APEX_USE_SUPABASE_DB || 'true';
 
 // Legacy ENCRYPTION_KEY → modern names (same as src/lib/env.ts)
 const legacy = process.env.ENCRYPTION_KEY?.trim();

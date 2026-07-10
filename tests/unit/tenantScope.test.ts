@@ -30,17 +30,26 @@ const baseSession: SessionPayload = {
 
 describe('tenantScope (Phase 5.5)', () => {
   const savedPlatformMode = process.env.PLATFORM_MODE;
+  const savedPublicPlatformMode = process.env.NEXT_PUBLIC_PLATFORM_MODE;
+  const savedApexEnv = process.env.APEX_ENV;
+
+  function restorePlatformEnv() {
+    if (savedPlatformMode === undefined) delete process.env.PLATFORM_MODE;
+    else process.env.PLATFORM_MODE = savedPlatformMode;
+    if (savedPublicPlatformMode === undefined) delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
+    else process.env.NEXT_PUBLIC_PLATFORM_MODE = savedPublicPlatformMode;
+    if (savedApexEnv === undefined) delete process.env.APEX_ENV;
+    else process.env.APEX_ENV = savedApexEnv;
+  }
 
   afterEach(() => {
-    if (savedPlatformMode === undefined) {
-      delete process.env.PLATFORM_MODE;
-    } else {
-      process.env.PLATFORM_MODE = savedPlatformMode;
-    }
+    restorePlatformEnv();
   });
 
   test('merlinus mode always resolves dealership scope', () => {
     delete process.env.PLATFORM_MODE;
+    delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
+    delete process.env.APEX_ENV;
     const ownerNational: SessionPayload = {
       ...baseSession,
       role: 'owner',

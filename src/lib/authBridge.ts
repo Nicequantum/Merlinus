@@ -6,6 +6,7 @@ import { enrichSessionWithTenantScope } from '@/lib/apex/tenantScope';
 import { resolvePlatformSessionContext } from '@/lib/apex/platformSession';
 import { attemptClerkEmailLinkOnSignIn, loadLinkedTechnicianSession } from '@/lib/clerkIdentity';
 import { isClerkAuthPathEnabled, isLegacyAuthPathEnabled } from '@/lib/authMode';
+import { isApexPlatformMode } from '@/lib/platformMode';
 import { logger } from '@/lib/logger';
 
 export type AuthSource = 'clerk' | 'legacy';
@@ -38,10 +39,25 @@ async function tryResolveClerkSession(): Promise<SessionPayload | null> {
 }
 
 /**
- * Unified session resolver — Clerk (when enabled and linked) then legacy JWT.
- * MERLINUS: default AUTH_MODE=legacy behaves exactly like getSessionContext today.
+ * Unified session resolver.
+ *
+ * Apex mode: prefer apex_access dual-token cookies (password / refresh / owner national)
+ * before Clerk so AUTH_MODE=dual does not mask a successful owner email login.
+ *
+ * Merlinus: Clerk (when enabled and linked) then legacy benz_tech_session JWT.
  */
 export async function resolveAppSessionContext(request?: Request): Promise<AppSessionContext> {
+  if (isLegacyAuthPathEnabled() && isApexPlatformMode()) {
+    const apex = await resolvePlatformSessionContext(request);
+    if (apex.session) {
+      return {
+        session: apex.session,
+        source: 'legacy',
+        jwtPayload: apex.jwtPayload as SessionPayload | null,
+      };
+    }
+  }
+
   const clerkSession = await tryResolveClerkSession();
   if (clerkSession) {
     return { session: clerkSession, source: 'clerk', jwtPayload: null };
@@ -51,6 +67,7 @@ export async function resolveAppSessionContext(request?: Request): Promise<AppSe
     return { session: null, source: null, jwtPayload: null };
   }
 
+  // Merlinus legacy JWT (or apex when cookies were missing above)
   const legacy = await resolvePlatformSessionContext(request);
   return {
     session: legacy.session,
