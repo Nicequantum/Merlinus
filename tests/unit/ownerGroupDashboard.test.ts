@@ -69,4 +69,29 @@ describe('PR-G3 / PR-G4 group owner dashboard', () => {
     assert.match(src, /export function OwnerSparkline/);
     assert.match(src, /formatTrendPct/);
   });
+
+  it('Tier 3 flags and UX polish are present (PR-G5)', () => {
+    const summary = readFileSync(resolve(root, 'src/lib/apex/ownerNationalSummary.ts'), 'utf8');
+    assert.match(summary, /category/);
+    assert.match(summary, /portfolio_volume_drop|slow_certification|empty_portfolio/);
+    assert.match(summary, /Single-manager coverage|Volume cliff|password change pending/);
+
+    const shell = readFileSync(
+      resolve(root, 'src/components/apex/ApexOwnerNationalShell.tsx'),
+      'utf8'
+    );
+    assert.match(shell, /Tier 3/);
+    assert.match(shell, /Risk, compliance/);
+    assert.match(shell, /apex-section-label/);
+    assert.match(shell, /All clear|No rooftops yet/);
+    assert.match(shell, /Refresh metrics/);
+
+    const docs = readFileSync(
+      resolve(root, 'docs/Apex-DealerGroup-Owner-Dashboard.md'),
+      'utf8'
+    );
+    assert.match(docs, /VITI-AUTO/);
+    assert.match(docs, /viti\.james\.gray/);
+    assert.match(docs, /PR-G5/);
+  });
 });

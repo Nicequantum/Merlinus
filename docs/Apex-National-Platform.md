@@ -27,7 +27,9 @@ Local dev: `npm run dev:apex` loads `.env.apex.local`.
 
 Owners authenticate with **email** (platform operators) or **Apex username** (group owners) and land in **national scope** — aggregate visibility only, no customer PII until they explicitly enter a dealership.
 
-### DealerGroup (PR-G1)
+### DealerGroup & group owner dashboard (PR-G1 → G5 complete)
+
+**Full guide:** [Apex-DealerGroup-Owner-Dashboard.md](./Apex-DealerGroup-Owner-Dashboard.md)
 
 Franchise portfolio above brand dealers. Seed example:
 
@@ -41,45 +43,39 @@ Franchise portfolio above brand dealers. Seed example:
 | Password env | `VITI_AUTO_OWNER_PASSWORD` |
 
 ```bash
-# Set password then seed (creates group, links dealers, upserts James Gray)
 # PowerShell: $env:VITI_AUTO_OWNER_PASSWORD = "your-strong-password"
 npm run db:seed
+npm run dev:apex
+# Sign in: viti.james.gray
 ```
 
-Optional overrides: `VITI_AUTO_OWNER_USERNAME`, `VITI_AUTO_OWNER_EMAIL`, `VITI_AUTO_OWNER_NAME`.  
-**PR-G2:** Group owners login with Apex username and land in `scopeMode: 'group'`.  
-Dealership list and summary metrics are filtered to their `DealerGroupMembership`.  
-Platform owners (no membership) keep full national scope.
+#### Group owner flow
 
 ```text
-James Gray (viti.james.gray) → group home (Viti Automotive Group)
-  → enter dealership → only VITIMB / VITIVOLVO rooftops
-  → exit → back to group home
+viti.james.gray + password
+  → scopeMode: group · Viti Automotive Group home (no PII)
+  → Tier 1 health · Tier 2 trends/sparklines · Tier 3 attention flags
+  → Rooftop scoreboard (VITIMB | VITIVOLVO) · Enter rooftop
+  → scopeMode: dealership (PII allowed, audited)
+  → Exit → group home
 ```
 
-**PR-G3 Tier 1 dashboard** (group + national owner home):
+| Actor | Login | Home scope | Rooftops listed |
+|-------|--------|------------|-----------------|
+| Group owner (James) | Apex username | `group` | Membership only |
+| Platform owner | Email | `national` | All platform rooftops |
 
-| Metric | Notes |
-|--------|--------|
-| Rooftops active | Dealerships in portfolio |
-| Brands / dealers | Active `Dealer` rows |
-| Active staff | Non-owner users |
-| RO volume 7d / 30d | Repair orders updated in window |
-| Stories certified 7d / 30d | `TechnicianCertifiedStory` counts |
-| Adoption rate | % staff with login/work activity in 7d |
-| Attention flags | Stale rooftops, low adoption, password gates, … |
-| Rooftop comparison cards | Side-by-side scoreboard + Enter rooftop |
+Optional seed overrides: `VITI_AUTO_OWNER_USERNAME`, `VITI_AUTO_OWNER_EMAIL`, `VITI_AUTO_OWNER_NAME`.
 
-**PR-G4 Tier 2 trends:**
+#### Dashboard tiers (summary)
 
-| Metric | Notes |
-|--------|--------|
-| Volume trend | 7d vs prior 7d + 14-day sparkline |
-| Certification rate | Certified stories ÷ RO volume (7d) |
-| Time-to-certify | Median hours RO create → first cert (30d sample) |
-| AI usage (7d) | `UsageLog` hits |
-| Login health | `auth.login` count + password-change pending |
-| Staff depth | Managers / technicians / advisors per rooftop |
+| Tier | Content |
+|------|---------|
+| **1** | Rooftops, brands, staff, RO 7d/30d, certs, adoption, flag count |
+| **2** | Volume trend + sparkline, cert rate, time-to-certify, AI usage, login health, staff depth |
+| **3** | Categorized exceptions (ops / risk / compliance / quality) |
+
+Pre-rollout section **APEX DealerGroup** must PASS before production group-owner use.
 
 ### Seed an owner (development / staging)
 
@@ -112,9 +108,12 @@ MULTI_ROOFTOP_SEED_PASSWORD="your-strong-multi-rooftop-password"
 
 ## Owner session flow
 
-1. **Login** → `scopeMode: national` → National Operations dashboard
-2. **Enter dealership** → audited `owner.dealership_enter` → dealership PII access
-3. **Exit to national** → audited `owner.dealership_exit` → returns to aggregates-only console
+1. **Login**
+   - Platform owner (email) → `scopeMode: national` → National Operations
+   - Group owner (username) → `scopeMode: group` → Group portfolio dashboard
+2. **Enter dealership** → audited `owner.dealership_enter` → dealership PII access  
+   (group owners: only rooftops under their DealerGroup)
+3. **Exit** → audited `owner.dealership_exit` → group home or national console
 
 National summary API: `GET /api/owner/summary` (owner-gated, apex-only, no PII in response).
 

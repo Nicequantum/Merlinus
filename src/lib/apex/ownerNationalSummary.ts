@@ -48,6 +48,8 @@ export interface OwnerAttentionFlag {
   code: string;
   label: string;
   severity: 'watch' | 'attention';
+  /** PR-G5 — ops | risk | compliance | quality */
+  category?: 'ops' | 'risk' | 'compliance' | 'quality';
   dealershipId?: string;
   dealershipName?: string;
 }
@@ -501,32 +503,75 @@ export async function getOwnerNationalSummary(
     const logins = loginMap.get(r.id) ?? 0;
 
     const attentionReasons: string[] = [];
-    if (activeStaff === 0) attentionReasons.push('No active staff');
-    if (depth.managers === 0 && activeStaff > 0) attentionReasons.push('No active manager');
-    if (roVolume7d === 0 && activeStaff > 0) attentionReasons.push('No RO activity in 7 days');
-    if (daysSinceActivity > 14) attentionReasons.push('No platform activity in 14+ days');
-    if (adoptionRatePct < 40 && activeStaff >= 2) attentionReasons.push('Low adoption (<40%)');
+    const pushReason = (
+      reason: string,
+      severity: 'watch' | 'attention',
+      category: OwnerAttentionFlag['category']
+    ) => {
+      attentionReasons.push(reason);
+      attentionFlags.push({
+        code: reason.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 48),
+        label: reason,
+        severity,
+        category,
+        dealershipId: r.id,
+        dealershipName: r.name,
+      });
+    };
+
+    if (activeStaff === 0) pushReason('No active staff', 'attention', 'risk');
+    if (depth.managers === 0 && activeStaff > 0) {
+      pushReason('No active manager', 'attention', 'risk');
+    }
+    if (depth.managers === 1 && activeStaff >= 4) {
+      pushReason('Single-manager coverage risk', 'watch', 'risk');
+    }
+    if (roVolume7d === 0 && activeStaff > 0) {
+      pushReason('No RO activity in 7 days', 'attention', 'ops');
+    }
+    if (daysSinceActivity > 14) {
+      pushReason('No platform activity in 14+ days', 'attention', 'ops');
+    }
+    if (daysSinceActivity > 7 && daysSinceActivity <= 14 && activeStaff > 0) {
+      pushReason('Stale rooftop (7–14 days quiet)', 'watch', 'ops');
+    }
+    if (adoptionRatePct < 40 && activeStaff >= 2) {
+      pushReason('Low adoption (<40%)', 'watch', 'ops');
+    }
     if (staffMustChangePassword > 0) {
-      attentionReasons.push(`${staffMustChangePassword} password change pending`);
+      pushReason(`${staffMustChangePassword} password change pending`, 'watch', 'compliance');
+    }
+    if (logins === 0 && activeStaff > 0) {
+      pushReason('No staff logins in 7 days', 'attention', 'compliance');
+    }
+    if (roVolume7d >= 5 && certifiedStories7d === 0) {
+      pushReason('ROs without certifications (7d)', 'watch', 'quality');
+    }
+    if (
+      certificationRatePct !== null &&
+      certificationRatePct < 25 &&
+      roVolume7d >= 3
+    ) {
+      pushReason(`Low certification rate (${certificationRatePct}%)`, 'watch', 'quality');
+    }
+    if (aiUsage >= 20 && certifiedStories7d === 0) {
+      pushReason('AI usage without certifications', 'watch', 'quality');
+    }
+    if (roVolumePrior7d > 0 && roVolume7d === 0) {
+      pushReason('Volume cliff vs prior week', 'attention', 'ops');
     }
 
     let status: OwnerRooftopScorecard['status'] = 'healthy';
-    if (attentionReasons.length >= 2 || activeStaff === 0 || daysSinceActivity > 14) {
+    const attentionCount = attentionFlags.filter(
+      (f) => f.dealershipId === r.id && f.severity === 'attention'
+    ).length;
+    const watchCount = attentionFlags.filter(
+      (f) => f.dealershipId === r.id && f.severity === 'watch'
+    ).length;
+    if (attentionCount > 0 || activeStaff === 0 || daysSinceActivity > 14) {
       status = 'attention';
-    } else if (attentionReasons.length === 1 || adoptionRatePct < 60) {
+    } else if (watchCount > 0 || adoptionRatePct < 60) {
       status = 'watch';
-    }
-
-    if (status !== 'healthy') {
-      for (const reason of attentionReasons) {
-        attentionFlags.push({
-          code: reason.toLowerCase().replace(/\s+/g, '_').slice(0, 48),
-          label: reason,
-          severity: status === 'attention' ? 'attention' : 'watch',
-          dealershipId: r.id,
-          dealershipName: r.name,
-        });
-      }
     }
 
     return {
@@ -561,6 +606,7 @@ export async function getOwnerNationalSummary(
       code: 'password_change_pending',
       label: `${mustChangePasswordCount} staff must change temporary password`,
       severity: 'watch',
+      category: 'compliance',
     });
   }
 
@@ -570,13 +616,72 @@ export async function getOwnerNationalSummary(
   const certificationRatePct =
     ro7 > 0 ? Math.min(100, Math.round((cert7 / ro7) * 1000) / 10) : cert7 > 0 ? 100 : null;
 
+  // Portfolio-level Tier 3 exceptions (not tied to a single rooftop card)
+  const portfolioVolumeTrend = percentChange(ro7, roPrior7);
+  if (portfolioVolumeTrend !== null && portfolioVolumeTrend <= -40 && roPrior7 >= 3) {
+    attentionFlags.push({
+      code: 'portfolio_volume_drop',
+      label: `Portfolio RO volume down ${Math.abs(portfolioVolumeTrend)}% vs prior 7d`,
+      severity: 'attention',
+      category: 'ops',
+    });
+  }
+  if (medianTimeToCertifyHours !== null && medianTimeToCertifyHours > 48) {
+    attentionFlags.push({
+      code: 'slow_certification',
+      label: `Median time-to-certify is ${medianTimeToCertifyHours}h (target under 48h)`,
+      severity: 'watch',
+      category: 'quality',
+    });
+  }
+  if (rooftops.length === 0) {
+    attentionFlags.push({
+      code: 'empty_portfolio',
+      label: 'No rooftops in this portfolio — provision or link dealers',
+      severity: 'attention',
+      category: 'ops',
+    });
+  }
+  if (activeUsers === 0 && rooftops.length > 0) {
+    attentionFlags.push({
+      code: 'no_portfolio_staff',
+      label: 'No active staff across portfolio rooftops',
+      severity: 'attention',
+      category: 'risk',
+    });
+  }
+  if (logins7d === 0 && activeUsers > 0) {
+    attentionFlags.push({
+      code: 'no_portfolio_logins',
+      label: 'No staff logins across portfolio in 7 days',
+      severity: 'attention',
+      category: 'compliance',
+    });
+  }
+  if (aiUsage7d >= 50 && cert7 === 0) {
+    attentionFlags.push({
+      code: 'ai_without_output',
+      label: 'High AI usage with zero certifications this week',
+      severity: 'watch',
+      category: 'quality',
+    });
+  }
+
   const seen = new Set<string>();
-  const uniqueFlags = attentionFlags.filter((f) => {
-    const key = `${f.dealershipId ?? ''}:${f.label}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const uniqueFlags = attentionFlags
+    .filter((f) => {
+      const key = `${f.dealershipId ?? ''}:${f.code}:${f.label}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => {
+      const sev = (s: string) => (s === 'attention' ? 0 : 1);
+      return sev(a.severity) - sev(b.severity) || a.label.localeCompare(b.label);
+    });
+
+  const statusRank = (s: OwnerRooftopScorecard['status']) =>
+    s === 'attention' ? 0 : s === 'watch' ? 1 : 2;
 
   return {
     dealerCount,
@@ -589,8 +694,10 @@ export async function getOwnerNationalSummary(
     certifiedStories30d: cert30,
     adoptionRatePct,
     attentionFlagCount: uniqueFlags.length,
-    attentionFlags: uniqueFlags.slice(0, 20),
-    rooftops: scorecards.sort((a, b) => a.name.localeCompare(b.name)),
+    attentionFlags: uniqueFlags.slice(0, 40),
+    rooftops: scorecards.sort(
+      (a, b) => statusRank(a.status) - statusRank(b.status) || a.name.localeCompare(b.name)
+    ),
     recentActivity: activityRows.map((row) => ({
       id: row.id,
       action: row.action,

@@ -1765,11 +1765,12 @@ function checkApexPhase55OwnerScope(): void {
   if (existsSync(enterPath) && existsSync(exitPath)) {
     const enterSrc = readFileSync(enterPath, 'utf8');
     const exitSrc = readFileSync(exitPath, 'utf8');
+    // Exit returns to group or national home via buildOwnerHomeSession (PR-G2+)
     const ok =
       enterSrc.includes('owner.dealership_enter') &&
       exitSrc.includes('owner.dealership_exit') &&
       enterSrc.includes('buildOwnerDealershipSession') &&
-      exitSrc.includes('buildOwnerNationalSession');
+      (exitSrc.includes('buildOwnerHomeSession') || exitSrc.includes('buildOwnerNationalSession'));
     if (ok) {
       record('APEX 5.5', 'Enter/exit routes', 'pass', 'Owner dealership context flows + audit');
     } else {
@@ -1777,6 +1778,137 @@ function checkApexPhase55OwnerScope(): void {
     }
   } else {
     record('APEX 5.5', 'Enter/exit routes', 'fail', 'Missing enter-dealership or exit-dealership route');
+  }
+}
+
+/**
+ * PR-G1–G5 — DealerGroup + group owner dashboard complete gate.
+ */
+function checkApexDealerGroupFinalize(): void {
+  section('APEX DealerGroup — Finalize (PR-G5)');
+
+  const schema = resolve(process.cwd(), 'prisma/schema.prisma');
+  if (existsSync(schema)) {
+    const src = readFileSync(schema, 'utf8');
+    if (
+      src.includes('model DealerGroup') &&
+      src.includes('model DealerGroupMembership') &&
+      src.includes('dealerGroupId')
+    ) {
+      record('APEX DealerGroup', 'Prisma schema', 'pass', 'DealerGroup + membership + dealer FK');
+    } else {
+      record('APEX DealerGroup', 'Prisma schema', 'fail', 'DealerGroup models incomplete');
+    }
+  } else {
+    record('APEX DealerGroup', 'Prisma schema', 'fail', 'Missing schema.prisma');
+  }
+
+  const migration = resolve(
+    process.cwd(),
+    'prisma/migrations/20250714120000_apex_dealer_group/migration.sql'
+  );
+  if (existsSync(migration)) {
+    record('APEX DealerGroup', 'Migration', 'pass', '20250714120000_apex_dealer_group');
+  } else {
+    record('APEX DealerGroup', 'Migration', 'fail', 'Missing DealerGroup migration');
+  }
+
+  const seed = resolve(process.cwd(), 'src/lib/apex/seedDealerGroups.ts');
+  if (existsSync(seed)) {
+    const src = readFileSync(seed, 'utf8');
+    if (src.includes('VITI-AUTO') && src.includes('viti.james.gray') && src.includes('VITI_AUTO_OWNER_PASSWORD')) {
+      record('APEX DealerGroup', 'Seed', 'pass', 'Viti Automotive Group + James Gray seed');
+    } else {
+      record('APEX DealerGroup', 'Seed', 'fail', 'seedDealerGroups incomplete');
+    }
+  } else {
+    record('APEX DealerGroup', 'Seed', 'fail', 'Missing seedDealerGroups.ts');
+  }
+
+  const access = resolve(process.cwd(), 'src/lib/apex/dealerGroupAccess.ts');
+  if (existsSync(access) && readFileSync(access, 'utf8').includes('listEnterableDealershipsForOwner')) {
+    record('APEX DealerGroup', 'Access helpers', 'pass', 'Group-scoped rooftop listing');
+  } else {
+    record('APEX DealerGroup', 'Access helpers', 'fail', 'Missing dealerGroupAccess helpers');
+  }
+
+  const session = resolve(process.cwd(), 'src/lib/apex/ownerDealershipContext.ts');
+  if (existsSync(session)) {
+    const src = readFileSync(session, 'utf8');
+    if (src.includes('buildOwnerHomeSession') && src.includes('buildOwnerGroupSession')) {
+      record('APEX DealerGroup', 'Session home', 'pass', 'Group vs national owner home session');
+    } else {
+      record('APEX DealerGroup', 'Session home', 'fail', 'Owner home session incomplete');
+    }
+  }
+
+  const summary = resolve(process.cwd(), 'src/lib/apex/ownerNationalSummary.ts');
+  if (existsSync(summary)) {
+    const src = readFileSync(summary, 'utf8');
+    if (
+      src.includes('volumeTrend') &&
+      src.includes('certificationRatePct') &&
+      src.includes('medianTimeToCertifyHours') &&
+      src.includes('attentionFlags') &&
+      src.includes('category')
+    ) {
+      record('APEX DealerGroup', 'Dashboard metrics', 'pass', 'Tier 1–3 owner summary fields');
+    } else {
+      record('APEX DealerGroup', 'Dashboard metrics', 'fail', 'Owner summary missing Tier 2/3 fields');
+    }
+  } else {
+    record('APEX DealerGroup', 'Dashboard metrics', 'fail', 'Missing ownerNationalSummary.ts');
+  }
+
+  const shell = resolve(process.cwd(), 'src/components/apex/ApexOwnerNationalShell.tsx');
+  if (existsSync(shell)) {
+    const src = readFileSync(shell, 'utf8');
+    if (
+      src.includes('OwnerSparkline') &&
+      src.includes('Tier 3') &&
+      src.includes('Rooftop comparison') &&
+      src.includes("scopeMode === 'group'")
+    ) {
+      record('APEX DealerGroup', 'Owner dashboard UI', 'pass', 'Group shell Tier 1–3 + sparklines');
+    } else {
+      record('APEX DealerGroup', 'Owner dashboard UI', 'fail', 'ApexOwnerNationalShell incomplete');
+    }
+  }
+
+  const platformConsts = resolve(process.cwd(), 'src/lib/apex/platformConstants.ts');
+  if (existsSync(platformConsts) && readFileSync(platformConsts, 'utf8').includes("'group'")) {
+    record('APEX DealerGroup', 'scopeMode group', 'pass', 'Audit/session scope includes group');
+  } else {
+    record('APEX DealerGroup', 'scopeMode group', 'fail', 'group scope mode missing');
+  }
+
+  const docs = resolve(process.cwd(), 'docs/Apex-DealerGroup-Owner-Dashboard.md');
+  if (existsSync(docs)) {
+    const text = readFileSync(docs, 'utf8');
+    if (text.includes('VITI-AUTO') && text.includes('Tier 3') && text.includes('viti.james.gray')) {
+      record('APEX DealerGroup', 'Documentation', 'pass', 'Apex-DealerGroup-Owner-Dashboard.md');
+    } else {
+      record('APEX DealerGroup', 'Documentation', 'fail', 'DealerGroup docs incomplete');
+    }
+  } else {
+    record('APEX DealerGroup', 'Documentation', 'fail', 'Missing Apex-DealerGroup-Owner-Dashboard.md');
+  }
+
+  const national = resolve(process.cwd(), 'docs/Apex-National-Platform.md');
+  if (existsSync(national) && readFileSync(national, 'utf8').includes('DealerGroup & group owner')) {
+    record('APEX DealerGroup', 'National platform docs', 'pass', 'Group owner flow in Apex-National-Platform.md');
+  } else {
+    record('APEX DealerGroup', 'National platform docs', 'fail', 'National platform missing group owner section');
+  }
+
+  const testsOk =
+    existsSync(resolve(process.cwd(), 'tests/unit/dealerGroup.test.ts')) &&
+    existsSync(resolve(process.cwd(), 'tests/unit/dealerGroupScope.test.ts')) &&
+    existsSync(resolve(process.cwd(), 'tests/unit/ownerGroupDashboard.test.ts'));
+  if (testsOk) {
+    record('APEX DealerGroup', 'Unit tests', 'pass', 'G1–G5 unit coverage present');
+  } else {
+    record('APEX DealerGroup', 'Unit tests', 'fail', 'Missing DealerGroup unit tests');
   }
 }
 
@@ -2457,6 +2589,7 @@ async function main(): Promise<void> {
   checkApexPhase63SecurityExpansion();
   checkApexPhase64FortressComplete();
   checkApexDealerProvisionFinalize();
+  checkApexDealerGroupFinalize();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

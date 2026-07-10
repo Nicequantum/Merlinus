@@ -88,6 +88,28 @@ function trendClass(pct: number | null | undefined): string {
   return 'apex-trend';
 }
 
+function formatGeneratedAt(iso: string | undefined): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function categoryLabel(category?: string): string {
+  if (category === 'risk') return 'Risk';
+  if (category === 'compliance') return 'Compliance';
+  if (category === 'quality') return 'Quality';
+  if (category === 'ops') return 'Ops';
+  return 'Ops';
+}
+
 function RooftopCard({
   rooftop,
   onEnter,
@@ -341,29 +363,47 @@ export function ApexOwnerNationalShell({
                 </h1>
                 <p className="apex-national-hero-subtitle">
                   {isGroupHome
-                    ? 'Tier 1 + Tier 2 portfolio metrics — volume trends, certification, AI usage, and staff depth. No customer PII until you enter a rooftop.'
-                    : 'Aggregate visibility across dealers and rooftops — trends and operating health without customer PII. Enter a dealership when you need bay access.'}
+                    ? 'Complete portfolio command center — Tier 1 health, Tier 2 trends, and Tier 3 risk flags. No customer PII until you enter a rooftop.'
+                    : 'Aggregate visibility across dealers and rooftops — trends, attention flags, and operating health without customer PII.'}
                 </p>
               </div>
-              <button
-                type="button"
-                className="apex-btn-primary apex-national-enter-btn touch-target"
-                onClick={() => void openEnterDealership()}
-              >
-                Enter dealership
-              </button>
-            </section>
-
-            {summaryLoading ? (
-              <p className="apex-hint apex-national-loading">
-                {isGroupHome ? 'Loading group metrics…' : 'Loading national metrics…'}
-              </p>
-            ) : summaryError ? (
-              <div className="apex-national-panel apex-card">
-                <p className="apex-hint">{summaryError}</p>
+              <div className="apex-national-hero-actions">
+                <button
+                  type="button"
+                  className="apex-btn-primary apex-national-enter-btn touch-target"
+                  onClick={() => void openEnterDealership()}
+                >
+                  Enter dealership
+                </button>
                 <button
                   type="button"
                   className="apex-btn-secondary touch-target"
+                  disabled={summaryLoading}
+                  onClick={() => void loadSummary()}
+                >
+                  Refresh metrics
+                </button>
+              </div>
+            </section>
+
+            {summaryLoading ? (
+              <div className="apex-national-panel apex-card apex-national-loading-card" role="status">
+                <p className="apex-hint apex-national-loading">
+                  {isGroupHome ? 'Loading group metrics…' : 'Loading national metrics…'}
+                </p>
+                <p className="apex-hint">Computing portfolio trends and attention flags.</p>
+              </div>
+            ) : summaryError ? (
+              <div className="apex-national-panel apex-card apex-error-panel" role="alert">
+                <h2 className="apex-national-panel-title">Could not load dashboard</h2>
+                <p className="apex-hint">{summaryError}</p>
+                <p className="apex-hint">
+                  Check your network connection and try again. If this persists, contact platform
+                  support — audit-gated metrics fail closed for compliance.
+                </p>
+                <button
+                  type="button"
+                  className="apex-btn-primary touch-target"
                   onClick={() => void loadSummary()}
                 >
                   Retry
@@ -371,6 +411,18 @@ export function ApexOwnerNationalShell({
               </div>
             ) : summary ? (
               <>
+                {summary.generatedAt ? (
+                  <p className="apex-dashboard-meta">
+                    Updated {formatGeneratedAt(summary.generatedAt)}
+                    {summary.scopeMode === 'group' && summary.dealerGroupName
+                      ? ` · ${summary.dealerGroupName}`
+                      : summary.scopeMode === 'national'
+                        ? ' · Platform national'
+                        : ''}
+                  </p>
+                ) : null}
+
+                <p className="apex-section-label">Tier 1 — Portfolio health</p>
                 <section
                   className="apex-stat-grid apex-stat-grid--tier1"
                   aria-label={isGroupHome ? 'Group Tier 1 metrics' : 'National Tier 1 metrics'}
@@ -408,6 +460,7 @@ export function ApexOwnerNationalShell({
                   />
                 </section>
 
+                <p className="apex-section-label">Tier 2 — Trends & operating performance</p>
                 <section
                   className="apex-stat-grid apex-stat-grid--tier2"
                   aria-label={isGroupHome ? 'Group Tier 2 metrics' : 'National Tier 2 metrics'}
@@ -461,11 +514,30 @@ export function ApexOwnerNationalShell({
                   />
                 </section>
 
-                {summary.attentionFlags.length > 0 ? (
-                  <section className="apex-national-panel apex-card apex-attention-panel">
-                    <div className="apex-national-panel-head">
-                      <h2 className="apex-national-panel-title">Attention</h2>
+                <p className="apex-section-label">Tier 3 — Risk, compliance & exceptions</p>
+                <section className="apex-national-panel apex-card apex-attention-panel">
+                  <div className="apex-national-panel-head">
+                    <div>
+                      <h2 className="apex-national-panel-title">Attention & exceptions</h2>
+                      <p className="apex-hint">
+                        Ops, risk, compliance, and quality flags — sorted by severity. Still
+                        PII-free.
+                      </p>
                     </div>
+                    <span className="apex-attention-count">
+                      {summary.attentionFlagCount} flag
+                      {summary.attentionFlagCount === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  {summary.attentionFlags.length === 0 ? (
+                    <div className="apex-empty-state">
+                      <p className="apex-empty-title">All clear</p>
+                      <p className="apex-hint">
+                        No attention flags in this portfolio right now. Keep monitoring volume and
+                        certification trends above.
+                      </p>
+                    </div>
+                  ) : (
                     <ul className="apex-attention-list">
                       {summary.attentionFlags.map((flag, i) => (
                         <li
@@ -477,6 +549,9 @@ export function ApexOwnerNationalShell({
                           }
                         >
                           <span className="apex-attention-severity">{flag.severity}</span>
+                          <span className="apex-attention-category">
+                            {categoryLabel(flag.category)}
+                          </span>
                           <span>
                             {flag.label}
                             {flag.dealershipName ? ` · ${flag.dealershipName}` : ''}
@@ -484,28 +559,29 @@ export function ApexOwnerNationalShell({
                         </li>
                       ))}
                     </ul>
-                  </section>
-                ) : null}
+                  )}
+                </section>
 
+                <p className="apex-section-label">Rooftop comparison</p>
                 <section className="apex-national-panel apex-card">
                   <div className="apex-national-panel-head">
                     <div>
-                      <h2 className="apex-national-panel-title">Rooftop comparison</h2>
+                      <h2 className="apex-national-panel-title">Scoreboard</h2>
                       <p className="apex-hint">
-                        Side-by-side scoreboard with volume sparks, staff depth, cert rate, and
-                        login health — enter a rooftop for PII access.
+                        Attention rooftops first — volume sparks, staff depth, cert rate, login
+                        health. Enter for PII access.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className="apex-btn-secondary touch-target"
-                      onClick={() => void loadSummary()}
-                    >
-                      Refresh
-                    </button>
                   </div>
                   {summary.rooftops.length === 0 ? (
-                    <p className="apex-hint">No rooftops in this portfolio yet.</p>
+                    <div className="apex-empty-state">
+                      <p className="apex-empty-title">No rooftops yet</p>
+                      <p className="apex-hint">
+                        {isGroupHome
+                          ? 'Link dealers to this DealerGroup or provision rooftops, then refresh.'
+                          : 'No dealerships found on the platform.'}
+                      </p>
+                    </div>
                   ) : (
                     <div className="apex-rooftop-grid">
                       {summary.rooftops.map((rooftop) => (
@@ -520,6 +596,7 @@ export function ApexOwnerNationalShell({
                   )}
                 </section>
 
+                <p className="apex-section-label">Activity</p>
                 <section className="apex-national-panel apex-card">
                   <div className="apex-national-panel-head">
                     <h2 className="apex-national-panel-title">

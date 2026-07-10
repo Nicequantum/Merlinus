@@ -1132,6 +1132,69 @@
   background: rgba(239, 68, 68, 0.15);
 }
 
+[data-platform='apex'] .apex-attention-category {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--apex-text-muted);
+  min-width: 4.5rem;
+}
+
+[data-platform='apex'] .apex-attention-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--apex-text-muted);
+  white-space: nowrap;
+}
+
+[data-platform='apex'] .apex-section-label {
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--apex-text-muted);
+}
+
+[data-platform='apex'] .apex-dashboard-meta {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--apex-text-muted);
+}
+
+[data-platform='apex'] .apex-national-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+[data-platform='apex'] .apex-empty-state {
+  padding: 1rem 0.25rem 0.5rem;
+  text-align: left;
+}
+
+[data-platform='apex'] .apex-empty-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--apex-silver-bright);
+}
+
+[data-platform='apex'] .apex-error-panel {
+  border-color: rgba(239, 68, 68, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+[data-platform='apex'] .apex-national-loading-card {
+  text-align: center;
+}
+
 [data-platform='apex'] .apex-national-panel {
   padding: clamp(1.25rem, 2vw, 1.55rem) clamp(1.15rem, 2vw, 1.55rem) clamp(1.35rem, 2vw, 1.65rem);
 }
