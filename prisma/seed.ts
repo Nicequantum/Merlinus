@@ -22,6 +22,23 @@ async function main() {
       `  Multi-rooftop login: ${result.multiRooftopUsername} — password from MULTI_ROOFTOP_SEED_PASSWORD`
     );
   }
+  if (result.dealerGroupCode) {
+    console.log(
+      `  DealerGroup: ${result.dealerGroupCode}` +
+        (result.linkedDealerCodes?.length
+          ? ` (linked: ${result.linkedDealerCodes.join(', ')})`
+          : ' (no VITIMB/VITIVOLVO dealers found yet)')
+    );
+  }
+  if (result.groupOwnerUsername) {
+    console.log(
+      `  Group owner login: ${result.groupOwnerUsername} — password from VITI_AUTO_OWNER_PASSWORD`
+    );
+  } else if (result.dealerGroupCode) {
+    console.log(
+      '  Group owner not seeded — set VITI_AUTO_OWNER_PASSWORD then re-run npm run db:seed'
+    );
+  }
 }
 
 main()

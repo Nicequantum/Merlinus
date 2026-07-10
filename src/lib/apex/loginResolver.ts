@@ -174,9 +174,9 @@ export async function resolveUnifiedLogin(
   if (!passwordValid) return { status: 'invalid' };
 
   if (tech.role === 'owner') {
-    // Owners always land in national scope on credential login (email-only).
-    // Enter-dealership is required later for rooftop PII access.
-    if (credentialType !== 'email') return { status: 'invalid' };
+    // Owners: email (platform) or apex username (group owners). Land national until enter-rooftop.
+    // Group membership scoping (DealerGroup) is enforced in later PRs on dealership list/enter.
+    if (credentialType !== 'email' && credentialType !== 'username') return { status: 'invalid' };
     const ownerSession = await buildOwnerNationalSession(tech.id);
     if (!ownerSession) return { status: 'invalid' };
     return {

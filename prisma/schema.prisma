@@ -41,13 +41,57 @@ enum TechnicianRole {
   owner
 }
 
-// APEX NATIONAL PLATFORM — top-level franchise tenant for multi-dealer deployments.
+/**
+ * APEX — franchise / ownership portfolio above brand Dealers.
+ * Example: Viti Automotive Group owns VITIMB + VITIVOLVO.
+ */
+model DealerGroup {
+  id          String   @id @default(cuid())
+  /** Ops slug, unique (e.g. VITI-AUTO). */
+  code        String   @unique
+  /** UI name (e.g. Viti Automotive Group). */
+  name        String
+  /** Legal entity (e.g. Viti, Inc.). */
+  legalName   String?  @map("legal_name")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dealers     Dealer[]
+  memberships DealerGroupMembership[]
+
+  @@index([status])
+  @@map("DealerGroup")
+}
+
+/** Owner (or co-owner) access to a DealerGroup portfolio. */
+model DealerGroupMembership {
+  id            String   @id @default(cuid())
+  dealerGroupId String   @map("dealer_group_id")
+  dealerGroup   DealerGroup @relation(fields: [dealerGroupId], references: [id], onDelete: Cascade)
+  technicianId  String   @map("technician_id")
+  technician    Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  /** owner | viewer (future roles as needed). */
+  role          String   @default("owner")
+  isPrimary     Boolean  @default(false) @map("is_primary")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([dealerGroupId, technicianId])
+  @@index([technicianId, isActive])
+  @@index([dealerGroupId])
+  @@map("DealerGroupMembership")
+}
+
+// APEX NATIONAL PLATFORM — brand / franchise unit under an optional DealerGroup.
 // MERLINUS SINGLE-DEALER: one default Dealer row backs the existing Tiverton dealership.
 model Dealer {
   id                        String                        @id @default(cuid())
   code                      String                        @unique
   name                      String
   status                    String                        @default("active")
+  dealerGroupId             String?                       @map("dealer_group_id")
+  dealerGroup               DealerGroup?                  @relation(fields: [dealerGroupId], references: [id], onDelete: SetNull)
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
   dealerships               Dealership[]
@@ -64,6 +108,7 @@ model Dealer {
   knowledgeBaseEntries      KnowledgeBase[]
 
   @@index([status])
+  @@index([dealerGroupId])
   @@map("Dealer")
 }
 
@@ -132,6 +177,7 @@ model Technician {
   certifiedStories       TechnicianCertifiedStory[]
   sessionRefreshTokens SessionRefreshToken[]
   dealershipMemberships TechnicianDealership[]
+  dealerGroupMemberships DealerGroupMembership[]
 
   @@index([dealerId])
   @@index([dealershipId])

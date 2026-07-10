@@ -25,7 +25,29 @@ Local dev: `npm run dev:apex` loads `.env.apex.local`.
 
 ## Owner accounts
 
-Owners authenticate with **email** and land in **national scope** — aggregate visibility only, no customer PII until they explicitly enter a dealership.
+Owners authenticate with **email** (platform operators) or **Apex username** (group owners) and land in **national scope** — aggregate visibility only, no customer PII until they explicitly enter a dealership.
+
+### DealerGroup (PR-G1)
+
+Franchise portfolio above brand dealers. Seed example:
+
+| Field | Value |
+|-------|--------|
+| Code | `VITI-AUTO` |
+| Name | Viti Automotive Group |
+| Legal | Viti, Inc. |
+| Dealers | `VITIMB`, `VITIVOLVO` (linked when present) |
+| Group owner username | `viti.james.gray` |
+| Password env | `VITI_AUTO_OWNER_PASSWORD` |
+
+```bash
+# Set password then seed (creates group, links dealers, upserts James Gray)
+# PowerShell: $env:VITI_AUTO_OWNER_PASSWORD = "your-strong-password"
+npm run db:seed
+```
+
+Optional overrides: `VITI_AUTO_OWNER_USERNAME`, `VITI_AUTO_OWNER_EMAIL`, `VITI_AUTO_OWNER_NAME`.  
+Group-scoped dashboard filtering lands in later PRs (G2+); membership rows are stored now.
 
 ### Seed an owner (development / staging)
 

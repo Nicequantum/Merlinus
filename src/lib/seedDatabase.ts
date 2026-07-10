@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { CONSENT_VERSION } from '@/types';
+import { runDealerGroupSeedIfConfigured } from '@/lib/apex/seedDealerGroups';
 import { runApexOwnerSeedIfConfigured } from '@/lib/apex/seedOwnerAccounts';
 import { upsertTechnicianDealershipMembership } from '@/lib/apex/membershipGuard';
 import { internalEmailForD7, normalizeD7Number } from './d7Number';
@@ -169,6 +170,9 @@ export interface SeedResult {
   ownerEmail?: string;
   ownerEmails?: string[];
   multiRooftopUsername?: string;
+  dealerGroupCode?: string;
+  groupOwnerUsername?: string;
+  linkedDealerCodes?: string[];
 }
 
 export async function runDatabaseSeed(): Promise<SeedResult> {
@@ -210,6 +214,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
 
   const library = await seedTemplateLibraryIfEmpty();
   const apexOwner = await runApexOwnerSeedIfConfigured();
+  const dealerGroup = await runDealerGroupSeedIfConfigured();
 
   return {
     managerD7,
@@ -219,5 +224,8 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
     ownerEmail: apexOwner?.ownerEmail,
     ownerEmails: apexOwner?.owners.map((o) => o.email),
     multiRooftopUsername: apexOwner?.multiRooftopUsername,
+    dealerGroupCode: dealerGroup?.dealerGroupCode,
+    groupOwnerUsername: dealerGroup?.ownerUsername ?? undefined,
+    linkedDealerCodes: dealerGroup?.linkedDealerCodes,
   };
 }

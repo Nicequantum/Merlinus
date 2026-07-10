@@ -61,8 +61,17 @@ export function normalizeCredentialIdentifier(
   }
 }
 
-/** Email is owner-only; D7 and username are dealership staff only. */
-export function isCredentialRoleAllowed(credentialType: Exclude<CredentialType, 'invalid'>, role: string): boolean {
-  if (credentialType === 'email') return role === 'owner';
-  return role !== 'owner';
+/**
+ * Credential vs role:
+ * - Owners: email (platform) or apex username (group owners e.g. viti.james.gray)
+ * - Staff: D7 (Mercedes) or apex username (generic brands) — not email
+ */
+export function isCredentialRoleAllowed(
+  credentialType: Exclude<CredentialType, 'invalid'>,
+  role: string
+): boolean {
+  if (role === 'owner') {
+    return credentialType === 'email' || credentialType === 'username';
+  }
+  return credentialType === 'd7' || credentialType === 'username';
 }
