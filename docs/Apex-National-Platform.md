@@ -35,6 +35,10 @@ Add to `.env.local` or `.env.apex.local`:
 OWNER_SEED_EMAIL="owner@your-apex-platform.example"
 OWNER_SEED_PASSWORD="your-strong-owner-seed-password"
 OWNER_SEED_NAME="National Owner"
+# Optional second national owner
+OWNER_SEED_EMAIL_2="co-owner@your-apex-platform.example"
+OWNER_SEED_PASSWORD_2="your-strong-second-owner-password"
+OWNER_SEED_NAME_2="Co-Owner"
 ```
 
 Run:
