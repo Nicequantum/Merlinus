@@ -2,6 +2,22 @@
 
 All notable changes to Merlinus are documented here.
 
+## [3.0.1] — 2026-07-10
+
+### Secure dealer provisioning (Apex multi-rooftop)
+
+- **PR-P1** — `provisionDealer()` engine, CLI (`npm run provision-dealer`), templates, `must_change_password` migration, PII-free `dealer.provision` audit.
+- **PR-P2** — Operator docs (`docs/Apex-Dealer-Onboarding.md`), forced password change UI gate.
+- **PR-P3** — Opt-in `POST /api/owner/provision-dealer` behind `APEX_ALLOW_HTTP_PROVISION=true`.
+- **PR-P4** — Integration tests (CLI + HTTP + password gate), `npm run smoke:dealer-provision`, pre-rollout **APEX Dealer Provision** gate.
+
+### Security fortress & Apex platform (prior 3.0.x)
+
+- Phase 6.0 Security Fortress complete (RLS, fail-closed audits, session revocation).
+- Owner national scope + multi-rooftop login fixes for Apex mode.
+
+---
+
 ## [3.0.0] — 2026-07-02
 
 ### Shop-floor release

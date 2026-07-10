@@ -75,9 +75,27 @@
 |------|--------------------|
 | Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.select_dealership`, `auth.password_change`, `auth.clerk_link` |
 | Owner | `owner.national_access`, `owner.dealership_enter`, `owner.dealership_exit` |
+| Control plane | `dealer.provision` (PII-free metadata only — see below) |
 | RO / story | `ro.create`, `ro.read`, `ro.update`, `ro.delete`, `ro.extract`, `story.*` |
 | Compliance | `audit.access`, `image.upload`, `story.pdf_export` |
 | Admin | `user.*`, `advisor.*`, `template.save` / `template.use` |
+
+---
+
+## Dealer provision (control plane)
+
+Secure multi-rooftop onboarding reuses fortress primitives:
+
+| Control | Behavior |
+|---------|----------|
+| Engine | `provisionDealer()` in RLS-bypass transaction (`withRlsBypass`) |
+| CLI | `npm run provision-dealer` — passwords never on argv |
+| HTTP | `POST /api/owner/provision-dealer` only when `APEX_ALLOW_HTTP_PROVISION=true`; owner **national** scope |
+| Audit | `dealer.provision` fail-closed; metadata allow-list (hashes/ids — no email, D7, rooftop name, password) |
+| First login | `Technician.mustChangePassword` → API `PASSWORD_CHANGE_REQUIRED` until change-password |
+| Session | Password change revokes JWT version + apex refresh + Clerk |
+
+Full operator runbook: [Apex-Dealer-Onboarding.md](./Apex-Dealer-Onboarding.md).
 
 ---
 
@@ -87,6 +105,7 @@
 |-------|----------------|--------------|-------|
 | Logout | yes | yes | active + linked |
 | Password change (self) | yes | yes | linked |
+| Forced password change (provision) | yes | yes | linked |
 | Admin password reset | yes | yes | linked |
 | User deactivate / delete | yes | yes | linked |
 | Owner enter / exit | — | yes (scope switch) | — |
@@ -100,11 +119,13 @@
 npm run typecheck
 npm test
 npm run test:integration
+npm run smoke:dealer-provision
 npm run validate:pre-rollout
 ```
 
 Security-focused suite: `tests/integration/security-fortress.test.ts`  
-Unit guards: `tests/unit/phase63Security.test.ts`, `tests/unit/rlsEnforcement.test.ts`
+Provision suite: `tests/integration/dealer-provision.test.ts`  
+Unit guards: `tests/unit/phase63Security.test.ts`, `tests/unit/rlsEnforcement.test.ts`, `tests/unit/provisionDealer.test.ts`
 
 ---
 

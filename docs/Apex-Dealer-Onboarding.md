@@ -2,13 +2,15 @@
 
 **Audience:** Platform operators provisioning new franchise dealers and rooftops  
 **Prerequisites:** Apex national platform (Phase 5) + Security Fortress (Phase 6)  
-**Implementation:** PR-P1 (engine + CLI) · PR-P2 (docs + forced-password UI)
+**Status:** Complete (PR-P1 engine/CLI · PR-P2 docs/UI · PR-P3 HTTP API · PR-P4 finalize)
 
 Related:
 
 - [Apex-National-Platform.md](./Apex-National-Platform.md) — modes, owners, fortress overview  
-- [Security-Fortress.md](./Security-Fortress.md) — RLS, audits, session revocation  
+- [Security-Fortress.md](./Security-Fortress.md) — RLS, audits, session revocation, provision controls  
 - [Admin-Setup-Guide.md](./Admin-Setup-Guide.md) — env / migrations for Merlinus pilot  
+
+**Pre-rollout gate:** `npm run validate:pre-rollout` includes section **APEX Dealer Provision** (code artifacts). Config-only failures (e.g. DB host unreachable) are reported separately from repository defects. 
 
 ---
 
@@ -438,4 +440,4 @@ Prefer CLI for production operator workflows; HTTP is for controlled national-ow
 
 ---
 
-*Last updated with PR-P4 (integration tests, smoke script, pre-rollout gate, UI polish).*
+*Finalized — secure dealer provisioning system complete (PR-P1–P4).*

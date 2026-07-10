@@ -197,3 +197,5 @@ APEX_ALLOW_HTTP_PROVISION=true
 `POST /api/owner/provision-dealer` — same `provisionDealer()` core as the CLI, owner **national** scope only, rate-limited, confirm-code required, password never returned. Disabled unless the env flag is exactly `true`.
 
 Smoke tests, env vars, deny-lists, and troubleshooting are documented in the onboarding guide.
+
+**Provision system status: complete** (PR-P1–P4). Pre-rollout section **APEX Dealer Provision** must PASS before multi-rooftop production use.
