@@ -50,7 +50,17 @@ export async function loginWithIdentifier(
     throw new Error('Login succeeded but no session was returned');
   }
 
-  return { status: 'success', session: data.session };
+  // Normalize owner national routing fields client-side as a belt-and-suspenders check.
+  const session: TechnicianSession =
+    data.session.role === 'owner'
+      ? {
+          ...data.session,
+          scopeMode: data.session.scopeMode === 'dealership' ? 'dealership' : 'national',
+          isOwner: true,
+        }
+      : data.session;
+
+  return { status: 'success', session };
 }
 
 export async function selectDealershipSession(

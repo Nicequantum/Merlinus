@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApexLoadingScreen } from '@/components/apex/ApexLoadingScreen';
 import { ApexLoginShell, type ApexLoginShellResult } from '@/components/apex/ApexLoginShell';
@@ -40,6 +40,25 @@ const BenzTechAuthenticatedApp = dynamic(
 
 type SessionPhase = 'checking' | 'anonymous' | 'authenticated';
 
+/** Normalize owner national fields so routing never misses national console. */
+function normalizeClientSession(session: TechnicianSession): TechnicianSession {
+  if (session.role !== 'owner') {
+    return {
+      ...session,
+      scopeMode: session.scopeMode ?? 'dealership',
+      isOwner: false,
+    };
+  }
+  const scopeMode = session.scopeMode === 'dealership' ? 'dealership' : 'national';
+  return {
+    ...session,
+    scopeMode,
+    isOwner: true,
+    // Clear stale active rooftop when national
+    activeDealershipId: scopeMode === 'dealership' ? session.activeDealershipId : undefined,
+  };
+}
+
 function isOwnerNationalScope(session: TechnicianSession): boolean {
   return session.role === 'owner' && (session.scopeMode ?? 'national') === 'national';
 }
@@ -54,16 +73,57 @@ export function ApexPlatformApp() {
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking');
   const [consentLoading, setConsentLoading] = useState(false);
   const [legalDisclaimerLoading, setLegalDisclaimerLoading] = useState(false);
+  /** When true, soft refresh must not demote an authenticated password login. */
+  const holdAuthenticatedRef = useRef(false);
+
+  const applySession = useCallback((next: TechnicianSession) => {
+    const normalized = normalizeClientSession(next);
+    setSession(normalized);
+    setSessionPhase('authenticated');
+    holdAuthenticatedRef.current = true;
+  }, []);
+
+  /**
+   * Soft session refresh from /api/auth/me.
+   * - clearOnMissing: only for cold start (no password session yet)
+   * - never leaves the user on "checking" forever (fetchCurrentSession times out)
+   */
+  const refreshSession = useCallback(
+    async (options?: { clearOnMissing?: boolean }): Promise<TechnicianSession | null> => {
+      const clearOnMissing = options?.clearOnMissing ?? !holdAuthenticatedRef.current;
+      try {
+        const latest = await fetchCurrentSession({ timeoutMs: 8_000 });
+        if (latest) {
+          applySession(latest);
+          return latest;
+        }
+        if (clearOnMissing && !holdAuthenticatedRef.current) {
+          setSession(null);
+          setSessionPhase('anonymous');
+        }
+        // Keep existing authenticated session if cookie probe failed after login.
+        return null;
+      } catch (error: unknown) {
+        clientLog.error('auth.session_refresh_failed', error);
+        if (clearOnMissing && !holdAuthenticatedRef.current) {
+          setSession(null);
+          setSessionPhase('anonymous');
+        }
+        return null;
+      }
+    },
+    [applySession]
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    fetchCurrentSession()
+    // Cold start: leave "checking" as soon as me returns or times out.
+    fetchCurrentSession({ timeoutMs: 8_000 })
       .then((existing) => {
         if (cancelled) return;
         if (existing) {
-          setSession(existing);
-          setSessionPhase('authenticated');
+          applySession(existing);
           return;
         }
         setSessionPhase('anonymous');
@@ -77,24 +137,7 @@ export function ApexPlatformApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const refreshSession = useCallback(async () => {
-    try {
-      const latest = await fetchCurrentSession();
-      if (latest) {
-        setSession(latest);
-        setSessionPhase('authenticated');
-        return latest;
-      }
-      setSession(null);
-      setSessionPhase('anonymous');
-      return null;
-    } catch (error: unknown) {
-      clientLog.error('auth.session_refresh_failed', error);
-      return null;
-    }
-  }, []);
+  }, [applySession]);
 
   const login = useCallback(
     async (identifier: string, password: string): Promise<ApexLoginShellResult> => {
@@ -106,27 +149,28 @@ export function ApexPlatformApp() {
           dealerships: result.dealerships,
         };
       }
-      // Trust the login response body immediately. Apex dual-token cookies are set on the
-      // response; requiring /api/auth/me before paint races Clerk dual-mode and cookie apply.
-      setSession(result.session);
-      setSessionPhase('authenticated');
-      void refreshSession();
+
+      // Immediate transition off login / checking using the login response body.
+      // Do not block on /api/auth/me (Clerk dual-mode + cookie races caused hang loops).
+      applySession(result.session);
+      // Soft revalidate only — must not clear the session we just applied.
+      void refreshSession({ clearOnMissing: false });
       return { status: 'success' };
     },
-    [refreshSession]
+    [applySession, refreshSession]
   );
 
   const selectDealership = useCallback(
     async (pendingToken: string, dealershipId: string, rememberAsDefault = false) => {
-      const session = await selectDealershipSession(pendingToken, dealershipId, rememberAsDefault);
-      setSession(session);
-      setSessionPhase('authenticated');
-      void refreshSession();
+      const next = await selectDealershipSession(pendingToken, dealershipId, rememberAsDefault);
+      applySession(next);
+      void refreshSession({ clearOnMissing: false });
     },
-    [refreshSession]
+    [applySession, refreshSession]
   );
 
   const logout = useCallback(async () => {
+    holdAuthenticatedRef.current = false;
     await merlinLogout();
     setSession(null);
     setSessionPhase('anonymous');
@@ -156,7 +200,7 @@ export function ApexPlatformApp() {
             setConsentLoading(true);
             try {
               const accepted = await acceptConsentSession();
-              setSession(accepted);
+              applySession(accepted);
             } catch (error: unknown) {
               clientLog.error('compliance.consent_accept_failed', error);
               toast.error(error instanceof Error ? error.message : 'Could not save consent — try again');
@@ -179,8 +223,8 @@ export function ApexPlatformApp() {
             try {
               const accepted = await acceptLegalDisclaimerSession();
               cacheLegalDisclaimerLocally(accepted.technicianId);
-              const latest = await refreshSession();
-              setSession(latest ?? accepted);
+              applySession(accepted);
+              void refreshSession({ clearOnMissing: false });
             } catch (error: unknown) {
               clientLog.error('compliance.legal_disclaimer_accept_failed', error);
               toast.error(
@@ -200,7 +244,7 @@ export function ApexPlatformApp() {
       <ApexOwnerNationalShell
         session={session}
         onLogout={logout}
-        onSessionRefresh={refreshSession}
+        onSessionRefresh={() => refreshSession({ clearOnMissing: false })}
       />
     );
   }
@@ -210,7 +254,7 @@ export function ApexPlatformApp() {
       <ApexOwnerDealershipWorkspace
         session={session}
         onLogout={logout}
-        onSessionRefresh={refreshSession}
+        onSessionRefresh={() => refreshSession({ clearOnMissing: false })}
         AuthenticatedApp={BenzTechAuthenticatedApp}
       />
     );
@@ -221,7 +265,7 @@ export function ApexPlatformApp() {
       <BenzTechAuthenticatedApp
         session={session}
         onLogout={logout}
-        onSessionRefresh={refreshSession}
+        onSessionRefresh={() => refreshSession({ clearOnMissing: false })}
       />
     </div>
   );

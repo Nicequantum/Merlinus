@@ -101,6 +101,22 @@ export async function POST(request: Request) {
 
     const { session } = loginResult;
 
+    // Ensure owner national fields are always present for the client router.
+    const clientSession =
+      session.role === 'owner'
+        ? {
+            ...session,
+            scopeMode: (session.scopeMode ?? 'national') as 'national' | 'dealership',
+            isOwner: true as const,
+            activeDealershipId:
+              session.scopeMode === 'dealership' ? session.activeDealershipId : undefined,
+          }
+        : {
+            ...session,
+            scopeMode: (session.scopeMode ?? 'dealership') as 'national' | 'dealership',
+            isOwner: false as const,
+          };
+
     await writeAuditedAccess({
       action: 'auth.login',
       dealershipId: session.dealershipId,
@@ -110,16 +126,16 @@ export async function POST(request: Request) {
       entityId: session.technicianId,
       ipAddress: getRequestIp(request),
       authSource: 'legacy',
-      scopeMode: session.role === 'owner' ? 'national' : 'dealership',
+      scopeMode: clientSession.scopeMode,
       metadata: { credentialType: loginResult.credentialType },
     });
 
     const response = NextResponse.json({
-      session,
+      session: clientSession,
       authSource: 'legacy' as const,
       credentialType: loginResult.credentialType,
     });
-    await issueApexSessionCookies(response, session, request, { authSource: 'legacy' });
+    await issueApexSessionCookies(response, clientSession, request, { authSource: 'legacy' });
     logApiWriteRequest({
       routeKey: 'auth.login',
       method: request.method,

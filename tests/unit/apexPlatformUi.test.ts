@@ -40,6 +40,10 @@ describe('Apex platform UI foundation (Phase 5.6)', () => {
     assert.match(src, /isOwnerNationalScope/);
     assert.match(src, /loginWithIdentifier/);
     assert.match(src, /BenzTechAuthenticatedApp/);
+    // Must trust login body immediately and never hang on /api/auth/me
+    assert.match(src, /applySession\(result\.session\)/);
+    assert.match(src, /clearOnMissing:\s*false/);
+    assert.match(src, /timeoutMs:\s*8_000|timeoutMs:\s*8000/);
   });
 
   it('HomePageClient keeps Merlinus path when platformMode is not apex', () => {

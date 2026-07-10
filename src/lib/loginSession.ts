@@ -2,14 +2,43 @@ import type { TechnicianSession } from '@/types';
 
 /** Minimal auth fetch helpers — kept separate so the login shell never imports @/lib/api. */
 
-export async function fetchCurrentSession(): Promise<TechnicianSession | null> {
-  const res = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
-  if (res.status === 401) return null;
-  if (!res.ok) {
-    throw new Error(`Session check failed (${res.status})`);
+const DEFAULT_SESSION_FETCH_TIMEOUT_MS = 8_000;
+
+/**
+ * Fetch the current session from /api/auth/me.
+ * Always settles within timeoutMs so the UI cannot hang on "Checking session…".
+ * Returns null on 401, abort/timeout, or missing body.
+ */
+export async function fetchCurrentSession(options?: {
+  timeoutMs?: number;
+}): Promise<TechnicianSession | null> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_SESSION_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (res.status === 401) return null;
+    if (!res.ok) {
+      throw new Error(`Session check failed (${res.status})`);
+    }
+    const data = (await res.json()) as { session?: TechnicianSession | null };
+    return data.session ?? null;
+  } catch (error: unknown) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return null;
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      return null;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = (await res.json()) as { session?: TechnicianSession | null };
-  return data.session ?? null;
 }
 
 export async function loginWithCredentials(
@@ -90,7 +119,6 @@ export async function acceptConsentSession(): Promise<TechnicianSession> {
   };
   if (!res.ok) throw new Error(data.error || 'Could not save consent');
   if (data.session) return data.session;
-  if (!data.consentAt) throw new Error('Consent accepted but no session was returned');
   throw new Error('Consent accepted but no session was returned');
 }
 
@@ -104,8 +132,5 @@ export async function acceptLegalDisclaimerSession(): Promise<TechnicianSession>
   };
   if (!res.ok) throw new Error(data.error || 'Could not save legal acknowledgment');
   if (data.session) return data.session;
-  if (!data.legalDisclaimerAt) {
-    throw new Error('Legal disclaimer accepted but no session was returned');
-  }
   throw new Error('Legal disclaimer accepted but no session was returned');
 }

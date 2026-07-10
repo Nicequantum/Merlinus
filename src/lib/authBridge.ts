@@ -41,10 +41,11 @@ async function tryResolveClerkSession(): Promise<SessionPayload | null> {
 /**
  * Unified session resolver.
  *
- * Apex mode: prefer apex_access dual-token cookies (password / refresh / owner national)
- * before Clerk so AUTH_MODE=dual does not mask a successful owner email login.
+ * Apex password login sets apex_access cookies. Prefer those before Clerk so
+ * AUTH_MODE=dual does not mask a successful owner email login.
  *
  * Merlinus: Clerk (when enabled and linked) then legacy benz_tech_session JWT.
+ * platformSession also honors apex_access cookies if present.
  */
 export async function resolveAppSessionContext(request?: Request): Promise<AppSessionContext> {
   if (isLegacyAuthPathEnabled() && isApexPlatformMode()) {
@@ -67,7 +68,6 @@ export async function resolveAppSessionContext(request?: Request): Promise<AppSe
     return { session: null, source: null, jwtPayload: null };
   }
 
-  // Merlinus legacy JWT (or apex when cookies were missing above)
   const legacy = await resolvePlatformSessionContext(request);
   return {
     session: legacy.session,

@@ -48,28 +48,39 @@ function ownerTechnicianForSession(
 export async function buildOwnerNationalSession(technicianId: string): Promise<SessionPayload | null> {
   const tech = await prisma.technician.findUnique({
     where: { id: technicianId.trim() },
-    include: { dealership: true },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      isAdmin: true,
+      isActive: true,
+      deletedAt: true,
+      serviceAdvisorId: true,
+      sessionVersion: true,
+      consentAt: true,
+      consentVersion: true,
+      legalDisclaimerAt: true,
+      legalDisclaimerVersion: true,
+      dealershipId: true,
+    },
   });
 
   if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
 
-  // Ensure sentinel rooftop exists so owner FK / session dealershipName stay consistent.
-  await prisma.dealership.upsert({
-    where: { id: APEX_NATIONAL_DEALERSHIP_ID },
-    update: { name: APEX_NATIONAL_DEALERSHIP_NAME },
-    create: { id: APEX_NATIONAL_DEALERSHIP_ID, name: APEX_NATIONAL_DEALERSHIP_NAME },
-  });
-
+  // Hot path: no upsert on every /api/auth/me — sentinel is created at seed time.
+  // Heal mis-stamped FK asynchronously only when needed (rare).
   if (tech.dealershipId !== APEX_NATIONAL_DEALERSHIP_ID) {
-    await prisma.technician.update({
-      where: { id: tech.id },
-      data: {
-        dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
-        dealerId: null,
-        d7Number: null,
-        apexUsername: null,
-      },
-    });
+    void prisma.technician
+      .update({
+        where: { id: tech.id },
+        data: {
+          dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+          dealerId: null,
+          d7Number: null,
+          apexUsername: null,
+        },
+      })
+      .catch(() => undefined);
   }
 
   return ownerTechnicianForSession(
