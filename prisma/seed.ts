@@ -10,7 +10,11 @@ async function main() {
   console.log(`  Primary login: ${result.managerD7} (service manager)`);
   console.log(`  Technician login: ${result.techD7}`);
   console.log('  First-login password rotation enforced — use ADMIN_SEED_PASSWORD / TECH_SEED_PASSWORD from .env.local');
-  if (result.ownerEmail) {
+  if (result.ownerEmails?.length) {
+    for (const email of result.ownerEmails) {
+      console.log(`  Owner login: ${email} — password from OWNER_SEED_PASSWORD / OWNER_SEED_PASSWORD_2`);
+    }
+  } else if (result.ownerEmail) {
     console.log(`  Owner login: ${result.ownerEmail} — password from OWNER_SEED_PASSWORD`);
   }
   if (result.multiRooftopUsername) {

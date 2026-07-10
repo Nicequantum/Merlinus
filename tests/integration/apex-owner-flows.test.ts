@@ -50,9 +50,13 @@ describe('Apex owner + multi-rooftop HTTP flows (Phase 5.10)', () => {
     });
 
     const apexSeed = await seedApexOwnerAccounts({
-      ownerEmail: INTEGRATION_OWNER_EMAIL,
-      ownerPassword: INTEGRATION_OWNER_PASSWORD,
-      ownerName: 'Integration National Owner',
+      owners: [
+        {
+          email: INTEGRATION_OWNER_EMAIL,
+          password: INTEGRATION_OWNER_PASSWORD,
+          name: 'Integration National Owner',
+        },
+      ],
       multiRooftopUsername: INTEGRATION_MULTI_USERNAME,
       multiRooftopPassword: INTEGRATION_MULTI_PASSWORD,
       multiRooftopName: 'Integration Multi-Rooftop Tech',

@@ -97,32 +97,40 @@ export function ApexOwnerNationalShell({
 
   return (
     <div className="apex-app-root apex-national-dashboard" data-platform="apex">
+      <div className="apex-ambient apex-ambient--dashboard" aria-hidden="true">
+        <div className="apex-ambient-grid" />
+        <div className="apex-ambient-logo-wash" />
+        <div className="apex-ambient-circuit" />
+      </div>
+
       <header className="apex-national-header">
-        <div className="apex-national-header-brand">
-          <ApexLogoMark size="sm" title="Apex National Platform" />
-          <div>
-            <p className="apex-national-header-title">National Operations</p>
-            <p className="apex-national-header-user">{session.name}</p>
+        <div className="apex-national-header-inner">
+          <div className="apex-national-header-brand">
+            <ApexLogoMark size="sm" title="Apex National Platform" />
+            <div>
+              <p className="apex-national-header-title">National Operations</p>
+              <p className="apex-national-header-user">{session.name}</p>
+            </div>
           </div>
-        </div>
-        <div className="apex-national-header-actions">
-          <div className="apex-scope-badge" aria-label="Current scope">
-            <span aria-hidden="true">◆</span>
-            National
+          <div className="apex-national-header-actions">
+            <div className="apex-scope-badge" aria-label="Current scope">
+              <span aria-hidden="true">◆</span>
+              National
+            </div>
+            <button
+              type="button"
+              className="apex-btn-secondary apex-national-signout touch-target"
+              onClick={() => void onLogout()}
+            >
+              Sign out
+            </button>
           </div>
-          <button
-            type="button"
-            className="apex-btn-secondary apex-national-signout touch-target"
-            onClick={() => void onLogout()}
-          >
-            Sign out
-          </button>
         </div>
       </header>
 
       <main className="apex-national-main">
         {view === 'enter-dealership' ? (
-          <section className="apex-national-panel apex-card apex-card-accent">
+          <section className="apex-national-panel apex-card apex-card-accent apex-national-panel--wide">
             <div className="apex-national-panel-head">
               <div>
                 <h2 className="apex-national-panel-title">Enter dealership</h2>
@@ -156,9 +164,11 @@ export function ApexOwnerNationalShell({
           <>
             <section className="apex-national-hero apex-card apex-card-accent">
               <div className="apex-national-hero-copy">
-                <h1 className="apex-national-hero-title">National command center</h1>
+                <p className="apex-login-kicker">Command center</p>
+                <h1 className="apex-national-hero-title">National operations overview</h1>
                 <p className="apex-national-hero-subtitle">
-                  Aggregate visibility across dealers and rooftops — no customer PII at national scope.
+                  Aggregate visibility across dealers and rooftops — no customer PII at national
+                  scope. Enter a dealership when you need repair-order access.
                 </p>
               </div>
               <button

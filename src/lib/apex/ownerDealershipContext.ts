@@ -53,9 +53,45 @@ export async function buildOwnerNationalSession(technicianId: string): Promise<S
 
   if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
 
+  // Ensure sentinel rooftop exists so owner FK / session dealershipName stay consistent.
+  await prisma.dealership.upsert({
+    where: { id: APEX_NATIONAL_DEALERSHIP_ID },
+    update: { name: APEX_NATIONAL_DEALERSHIP_NAME },
+    create: { id: APEX_NATIONAL_DEALERSHIP_ID, name: APEX_NATIONAL_DEALERSHIP_NAME },
+  });
+
+  if (tech.dealershipId !== APEX_NATIONAL_DEALERSHIP_ID) {
+    await prisma.technician.update({
+      where: { id: tech.id },
+      data: {
+        dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+        dealerId: null,
+        d7Number: null,
+        apexUsername: null,
+      },
+    });
+  }
+
   return ownerTechnicianForSession(
-    tech as TechnicianForSession & {
-      dealership: { id: string; name: string; dealerId: string | null };
+    {
+      id: tech.id,
+      d7Number: null,
+      name: tech.name,
+      role: tech.role,
+      isAdmin: tech.isAdmin,
+      dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+      dealerId: null,
+      serviceAdvisorId: tech.serviceAdvisorId,
+      sessionVersion: tech.sessionVersion,
+      consentAt: tech.consentAt,
+      consentVersion: tech.consentVersion,
+      legalDisclaimerAt: tech.legalDisclaimerAt,
+      legalDisclaimerVersion: tech.legalDisclaimerVersion,
+      dealership: {
+        id: APEX_NATIONAL_DEALERSHIP_ID,
+        name: APEX_NATIONAL_DEALERSHIP_NAME,
+        dealerId: null,
+      },
     },
     {
       id: APEX_NATIONAL_DEALERSHIP_ID,

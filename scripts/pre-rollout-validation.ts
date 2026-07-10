@@ -2038,6 +2038,7 @@ function checkApexPhase510Finalize(): void {
     const src = readFileSync(seedPath, 'utf8');
     const ok =
       src.includes('OWNER_SEED_EMAIL') &&
+      src.includes('OWNER_SEED_EMAIL_2') &&
       src.includes('seedApexOwnerAccounts') &&
       src.includes('APEX_NATIONAL_DEALERSHIP_ID');
     if (ok) {

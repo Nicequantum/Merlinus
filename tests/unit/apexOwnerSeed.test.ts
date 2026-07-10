@@ -18,11 +18,14 @@ describe('Apex owner seed (Phase 5.10)', () => {
     const src = readSrc('src/lib/apex/seedOwnerAccounts.ts');
     assert.match(src, /OWNER_SEED_EMAIL/);
     assert.match(src, /OWNER_SEED_PASSWORD/);
+    assert.match(src, /OWNER_SEED_EMAIL_2/);
+    assert.match(src, /OWNER_SEED_PASSWORD_2/);
     assert.match(src, /MULTI_ROOFTOP_SEED_USERNAME/);
     assert.match(src, /APEX_NATIONAL_DEALERSHIP_ID/);
     assert.match(src, /role: 'owner'/);
     assert.match(src, /d7Number: null/);
-    assert.match(src, /where: \{ email: config\.ownerEmail \}/);
+    assert.match(src, /upsertNationalOwnerAccount/);
+    assert.match(src, /config\.owners/);
     assert.match(src, /where: \{ email: multiEmail \}/);
     assert.doesNotMatch(src, /where: \{ apexUsername:/);
   });
@@ -53,13 +56,56 @@ describe('Apex owner seed (Phase 5.10)', () => {
   test('readApexOwnerSeedConfig returns null when owner env is unset', () => {
     const savedEmail = process.env.OWNER_SEED_EMAIL;
     const savedPassword = process.env.OWNER_SEED_PASSWORD;
+    const savedEmail2 = process.env.OWNER_SEED_EMAIL_2;
+    const savedPassword2 = process.env.OWNER_SEED_PASSWORD_2;
     delete process.env.OWNER_SEED_EMAIL;
     delete process.env.OWNER_SEED_PASSWORD;
+    delete process.env.OWNER_SEED_EMAIL_2;
+    delete process.env.OWNER_SEED_PASSWORD_2;
     try {
       assert.equal(readApexOwnerSeedConfig(), null);
     } finally {
       if (savedEmail) process.env.OWNER_SEED_EMAIL = savedEmail;
       if (savedPassword) process.env.OWNER_SEED_PASSWORD = savedPassword;
+      if (savedEmail2) process.env.OWNER_SEED_EMAIL_2 = savedEmail2;
+      if (savedPassword2) process.env.OWNER_SEED_PASSWORD_2 = savedPassword2;
+    }
+  });
+
+  test('readApexOwnerSeedConfig supports two national owners', () => {
+    const saved = {
+      e1: process.env.OWNER_SEED_EMAIL,
+      p1: process.env.OWNER_SEED_PASSWORD,
+      n1: process.env.OWNER_SEED_NAME,
+      e2: process.env.OWNER_SEED_EMAIL_2,
+      p2: process.env.OWNER_SEED_PASSWORD_2,
+      n2: process.env.OWNER_SEED_NAME_2,
+    };
+    process.env.OWNER_SEED_EMAIL = 'owner.one@example.com';
+    process.env.OWNER_SEED_PASSWORD = 'password-one';
+    process.env.OWNER_SEED_NAME = 'Owner One';
+    process.env.OWNER_SEED_EMAIL_2 = 'owner.two@example.com';
+    process.env.OWNER_SEED_PASSWORD_2 = 'password-two';
+    process.env.OWNER_SEED_NAME_2 = 'Owner Two';
+    try {
+      const config = readApexOwnerSeedConfig();
+      assert.ok(config);
+      assert.equal(config!.owners.length, 2);
+      assert.equal(config!.owners[0].email, 'owner.one@example.com');
+      assert.equal(config!.owners[1].email, 'owner.two@example.com');
+      assert.equal(config!.owners[1].name, 'Owner Two');
+    } finally {
+      for (const [key, value] of Object.entries({
+        OWNER_SEED_EMAIL: saved.e1,
+        OWNER_SEED_PASSWORD: saved.p1,
+        OWNER_SEED_NAME: saved.n1,
+        OWNER_SEED_EMAIL_2: saved.e2,
+        OWNER_SEED_PASSWORD_2: saved.p2,
+        OWNER_SEED_NAME_2: saved.n2,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 

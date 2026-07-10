@@ -134,10 +134,12 @@ export function ApexPlatformApp() {
 
   if (sessionPhase === 'checking') {
     return (
-      <ApexLoadingScreen
-        label="Checking session"
-        sublabel="Verifying secure platform access…"
-      />
+      <div data-platform="apex" className="apex-app-root min-h-dvh apex-platform-stage">
+        <ApexLoadingScreen
+          label="Checking session"
+          sublabel="Verifying secure platform access…"
+        />
+      </div>
     );
   }
 
@@ -147,7 +149,7 @@ export function ApexPlatformApp() {
 
   if (needsConsent(session)) {
     return (
-      <div data-platform="apex" className="apex-app-root min-h-dvh">
+      <div data-platform="apex" className="apex-app-root min-h-dvh apex-platform-stage">
         <ConsentModal
           loading={consentLoading}
           onAccept={async () => {
@@ -169,7 +171,7 @@ export function ApexPlatformApp() {
 
   if (needsLegalDisclaimer(session)) {
     return (
-      <div data-platform="apex" className="apex-app-root min-h-dvh">
+      <div data-platform="apex" className="apex-app-root min-h-dvh apex-platform-stage">
         <LegalDisclaimerModal
           loading={legalDisclaimerLoading}
           onAccept={async () => {
@@ -215,7 +217,7 @@ export function ApexPlatformApp() {
   }
 
   return (
-    <div data-platform="apex" className="apex-app-root min-h-dvh">
+    <div data-platform="apex" className="apex-app-root min-h-dvh apex-platform-stage">
       <BenzTechAuthenticatedApp
         session={session}
         onLogout={logout}

@@ -167,6 +167,7 @@ export interface SeedResult {
   templates: number;
   knowledgeBase: number;
   ownerEmail?: string;
+  ownerEmails?: string[];
   multiRooftopUsername?: string;
 }
 
@@ -216,6 +217,7 @@ export async function runDatabaseSeed(): Promise<SeedResult> {
     templates: library.templates,
     knowledgeBase: library.knowledgeBase,
     ownerEmail: apexOwner?.ownerEmail,
+    ownerEmails: apexOwner?.owners.map((o) => o.email),
     multiRooftopUsername: apexOwner?.multiRooftopUsername,
   };
 }

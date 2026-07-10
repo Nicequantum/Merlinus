@@ -166,12 +166,20 @@ export async function resolveUnifiedLogin(
   if (!passwordValid) return { status: 'invalid' };
 
   if (tech.role === 'owner') {
+    // Owners always land in national scope on credential login (email-only).
+    // Enter-dealership is required later for rooftop PII access.
+    if (credentialType !== 'email') return { status: 'invalid' };
     const ownerSession = await buildOwnerNationalSession(tech.id);
     if (!ownerSession) return { status: 'invalid' };
     return {
       status: 'success',
       credentialType,
-      session: ownerSession,
+      session: {
+        ...ownerSession,
+        scopeMode: 'national',
+        isOwner: true,
+        activeDealershipId: undefined,
+      },
     };
   }
 
