@@ -262,6 +262,42 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(128),
 });
 
+/**
+ * Owner national HTTP provision body.
+ * Password is accepted only in JSON body (never query/headers); never echoed in responses.
+ * confirmDealerCode must match dealerCode (operator retype, same spirit as CLI confirm).
+ */
+export const provisionDealerHttpSchema = z
+  .object({
+    dealerCode: z.string().trim().min(2).max(32),
+    /** Must equal dealerCode after trim (case-insensitive). */
+    confirmDealerCode: z.string().trim().min(2).max(32),
+    dealerName: z.string().trim().min(3).max(120),
+    rooftopName: z.string().trim().min(5).max(120),
+    templateId: z.string().trim().min(3).max(64),
+    manager: z.object({
+      name: z.string().trim().min(2).max(80),
+      email: z.string().trim().email().max(254),
+      /** Temporary password — min 12 to match provision policy. */
+      password: z.string().min(12).max(128),
+      d7Number: z.string().trim().min(5).max(16).optional().nullable(),
+      apexUsername: z.string().trim().min(3).max(80).optional().nullable(),
+    }),
+    ifExists: z.enum(['fail', 'skip', 'update-metadata']).optional().default('fail'),
+    dryRun: z.boolean().optional().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (data.confirmDealerCode.trim().toUpperCase() !== data.dealerCode.trim().toUpperCase()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'confirmDealerCode must match dealerCode',
+        path: ['confirmDealerCode'],
+      });
+    }
+  });
+
+export type ProvisionDealerHttpBody = z.infer<typeof provisionDealerHttpSchema>;
+
 export const reviewStorySchema = z.object({
   warrantyStory: safeText(STORY_TEXT_MAX_CHARS),
 });

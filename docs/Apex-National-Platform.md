@@ -186,4 +186,12 @@ npm run provision-dealer -- \
 
 After provision, the manager signs into Apex, completes the **forced password change** screen, then re-authenticates into the rooftop workspace. National owners see the new rooftop under the full storefront name and enter dealership for scoped PII.
 
+### Optional HTTP provision
+
+```env
+APEX_ALLOW_HTTP_PROVISION=true
+```
+
+`POST /api/owner/provision-dealer` — same `provisionDealer()` core as the CLI, owner **national** scope only, rate-limited, confirm-code required, password never returned. Disabled unless the env flag is exactly `true`.
+
 Smoke tests, env vars, deny-lists, and troubleshooting are documented in the onboarding guide.

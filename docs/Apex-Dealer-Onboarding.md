@@ -309,6 +309,72 @@ POST /api/auth/change-password
 | `APEX_MAX_PROVISIONS_PER_DAY` | Daily cap (default 20) |
 | `APEX_MAX_DEALERSHIPS` | Hard cap (default 500) |
 | `PROVISION_AUDIT_HMAC_KEY` | Optional; else falls back to search/data encryption key for code hash |
+| `APEX_ALLOW_HTTP_PROVISION` | Must be exactly `true` to enable `POST /api/owner/provision-dealer` (default off) |
+
+---
+
+## HTTP provision (optional owner API)
+
+**Endpoint:** `POST /api/owner/provision-dealer`  
+**Default:** **disabled**. Enable only when needed:
+
+```env
+APEX_ALLOW_HTTP_PROVISION=true
+```
+
+### Fortress guards
+
+| Guard | Behavior |
+|-------|----------|
+| Platform | Apex mode only (`404` otherwise) |
+| Feature flag | `APEX_ALLOW_HTTP_PROVISION=true` or `403` + `HTTP_PROVISION_DISABLED` |
+| Auth | Owner session + **national** scope (`requireOwnerNational`) |
+| Rate limit | 5 req / 60s per IP (`owner.provision-dealer`) |
+| Confirmation | Body `confirmDealerCode` must match `dealerCode` (case-insensitive) |
+| Production DB | Same `PROVISION_DATABASE_URL` / break-glass rule as CLI |
+| Core engine | Same `provisionDealer()` — RLS bypass tx + fail-closed `dealer.provision` audit |
+| Password | Accepted in JSON body only; **never** returned in response or logs |
+
+### Example body
+
+```json
+{
+  "dealerCode": "NEWPORT",
+  "confirmDealerCode": "NEWPORT",
+  "dealerName": "Mercedes-Benz of Newport Group",
+  "rooftopName": "Mercedes-Benz of Newport",
+  "templateId": "mercedes-rooftop-v1",
+  "manager": {
+    "name": "Alex Rivera",
+    "email": "alex.rivera@example-dealer.com",
+    "password": "temporary-strong-password",
+    "d7Number": "D7NEWPORT1"
+  },
+  "ifExists": "fail",
+  "dryRun": false
+}
+```
+
+### Safe response (no secrets)
+
+```json
+{
+  "created": true,
+  "skipped": false,
+  "dryRun": false,
+  "dealerId": "…",
+  "dealershipId": "…",
+  "managerId": "…",
+  "templateId": "mercedes-rooftop-v1",
+  "rooftopName": "Mercedes-Benz of Newport",
+  "dealerCode": "NEWPORT",
+  "auditLogId": "…",
+  "mustChangePassword": true,
+  "logins": [{ "role": "manager", "identifierType": "d7" }]
+}
+```
+
+Prefer CLI for production operator workflows; HTTP is for controlled national-owner automation.
 
 ---
 
@@ -320,6 +386,7 @@ POST /api/auth/change-password
 | Templates | [`src/lib/apex/dealerTemplates.ts`](../src/lib/apex/dealerTemplates.ts) |
 | CLI | [`scripts/provision-dealer.ts`](../scripts/provision-dealer.ts) |
 | npm script | `npm run provision-dealer` |
+| HTTP owner API | [`src/app/api/owner/provision-dealer/route.ts`](../src/app/api/owner/provision-dealer/route.ts) |
 | Forced password UI | [`src/components/ForcedPasswordChangeScreen.tsx`](../src/components/ForcedPasswordChangeScreen.tsx) |
 | API gate | [`src/lib/apiRoute.ts`](../src/lib/apiRoute.ts) (`skipPasswordChange`) |
 | Change password | [`src/app/api/auth/change-password/route.ts`](../src/app/api/auth/change-password/route.ts) |
@@ -343,7 +410,7 @@ POST /api/auth/change-password
 
 ## Out of scope (v1)
 
-- Owner-facing “provision from UI” API  
+- Full national-console **UI form** for provision (HTTP API is opt-in; CLI remains primary)  
 - Nickname / short rooftop codes in UI  
 - Cloning Tiverton custom templates into new rooftops  
 - Automatic email delivery of temporary passwords  
@@ -351,4 +418,4 @@ POST /api/auth/change-password
 
 ---
 
-*Last updated with PR-P2 (docs + forced password change polish).*
+*Last updated with PR-P3 (optional HTTP owner provision endpoint).*

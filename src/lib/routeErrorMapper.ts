@@ -48,6 +48,9 @@ const ROUTE_FEATURE_LABELS: Readonly<Record<string, string>> = {
   'dashboard.summary': 'Dashboard load',
   'advisors.resolve': 'Service advisor lookup',
   'images.get': 'Image load',
+  'owner.summary': 'Owner national summary',
+  'owner.dealerships': 'Owner dealership list',
+  'owner.provision-dealer': 'Dealer provision',
 };
 
 const GROK_ROUTE_CONTEXTS = new Set([

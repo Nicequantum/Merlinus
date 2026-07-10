@@ -6,14 +6,18 @@ import {
   buildDealerProvisionAuditMetadata,
   DEALER_PROVISION_METADATA_ALLOWED_KEYS,
   hashDealerCodeForAudit,
+  httpStatusForProvisionError,
+  isHttpProvisionEnabled,
   normalizeDealerCode,
   ProvisionDealerError,
+  toSafeProvisionHttpResponse,
   validateDealerName,
   validateRooftopDisplayName,
   PROVISION_DENY_DEALERSHIP_IDS,
 } from '@/lib/apex/provisionDealer';
 import { getDealerTemplate, isDealerTemplateId, listDealerTemplates } from '@/lib/apex/dealerTemplates';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
+import { parseBody, provisionDealerHttpSchema } from '@/lib/validation';
 
 const root = resolve(process.cwd());
 
@@ -106,5 +110,122 @@ describe('provisionDealer naming + security helpers', () => {
     const audit = readFileSync(resolve(root, 'src/lib/audit.ts'), 'utf8');
     assert.match(audit, /dealer\.provision/);
     assert.match(audit, /CRITICAL_AUDIT_ACTIONS/);
+  });
+});
+
+describe('HTTP provision endpoint guards', () => {
+  it('is disabled unless APEX_ALLOW_HTTP_PROVISION is exactly true', () => {
+    const prev = process.env.APEX_ALLOW_HTTP_PROVISION;
+    try {
+      delete process.env.APEX_ALLOW_HTTP_PROVISION;
+      assert.equal(isHttpProvisionEnabled(), false);
+      process.env.APEX_ALLOW_HTTP_PROVISION = '1';
+      assert.equal(isHttpProvisionEnabled(), false);
+      process.env.APEX_ALLOW_HTTP_PROVISION = 'yes';
+      assert.equal(isHttpProvisionEnabled(), false);
+      process.env.APEX_ALLOW_HTTP_PROVISION = 'true';
+      assert.equal(isHttpProvisionEnabled(), true);
+      process.env.APEX_ALLOW_HTTP_PROVISION = ' true ';
+      assert.equal(isHttpProvisionEnabled(), true);
+    } finally {
+      if (prev === undefined) delete process.env.APEX_ALLOW_HTTP_PROVISION;
+      else process.env.APEX_ALLOW_HTTP_PROVISION = prev;
+    }
+  });
+
+  it('maps provision error codes to HTTP statuses', () => {
+    assert.equal(httpStatusForProvisionError('PROVISION_DAILY_CAP'), 429);
+    assert.equal(httpStatusForProvisionError('DEALER_EXISTS'), 409);
+    assert.equal(httpStatusForProvisionError('PROVISION_DB_REQUIRED'), 503);
+    assert.equal(httpStatusForProvisionError('WEAK_PASSWORD'), 400);
+  });
+
+  it('safe HTTP response never includes password or login identifiers', () => {
+    const safe = toSafeProvisionHttpResponse({
+      created: true,
+      skipped: false,
+      dryRun: false,
+      dealerId: 'd1',
+      dealershipId: 'r1',
+      managerId: 'm1',
+      templateId: 'mercedes-rooftop-v1',
+      rooftopName: 'Mercedes-Benz of Newport',
+      dealerCode: 'NEWPORT',
+      auditLogId: 'a1',
+      mustChangePassword: true,
+      logins: [{ role: 'manager', identifierType: 'd7', identifier: 'D7SECRET' }],
+    });
+    const json = JSON.stringify(safe);
+    assert.doesNotMatch(json, /"password"/i);
+    assert.doesNotMatch(json, /D7SECRET/);
+    assert.equal(safe.mustChangePassword, true);
+    assert.equal(safe.logins[0]?.identifierType, 'd7');
+    assert.equal('identifier' in (safe.logins[0] as object), false);
+  });
+
+  it('HTTP body schema requires confirmDealerCode match and min password length', () => {
+    const badConfirm = parseBody(provisionDealerHttpSchema, {
+      dealerCode: 'NEWPORT',
+      confirmDealerCode: 'OTHER',
+      dealerName: 'Franchise Group',
+      rooftopName: 'Mercedes-Benz of Newport',
+      templateId: 'mercedes-rooftop-v1',
+      manager: {
+        name: 'Alex Rivera',
+        email: 'alex@example.com',
+        password: 'strong-temp-pass-99',
+        d7Number: 'D7NEWPORT1',
+      },
+    });
+    assert.ok('error' in badConfirm);
+
+    const shortPw = parseBody(provisionDealerHttpSchema, {
+      dealerCode: 'NEWPORT',
+      confirmDealerCode: 'newport',
+      dealerName: 'Franchise Group',
+      rooftopName: 'Mercedes-Benz of Newport',
+      templateId: 'mercedes-rooftop-v1',
+      manager: {
+        name: 'Alex Rivera',
+        email: 'alex@example.com',
+        password: 'short',
+        d7Number: 'D7NEWPORT1',
+      },
+    });
+    assert.ok('error' in shortPw);
+
+    const ok = parseBody(provisionDealerHttpSchema, {
+      dealerCode: 'NEWPORT',
+      confirmDealerCode: 'newport',
+      dealerName: 'Franchise Group',
+      rooftopName: 'Mercedes-Benz of Newport',
+      templateId: 'mercedes-rooftop-v1',
+      manager: {
+        name: 'Alex Rivera',
+        email: 'alex@example.com',
+        password: 'strong-temp-pass-99',
+        d7Number: 'D7NEWPORT1',
+      },
+    });
+    assert.ok('data' in ok);
+    if ('data' in ok) {
+      assert.equal(ok.data.ifExists, 'fail');
+      assert.equal(ok.data.dryRun, false);
+    }
+  });
+
+  it('route uses fortress owner national guards and shared provisionDealer', () => {
+    const src = readFileSync(resolve(root, 'src/app/api/owner/provision-dealer/route.ts'), 'utf8');
+    assert.match(src, /requireOwnerNational:\s*true/);
+    assert.match(src, /requireOwner:\s*true/);
+    assert.match(src, /isHttpProvisionEnabled/);
+    assert.match(src, /provisionDealer\(/);
+    assert.match(src, /toSafeProvisionHttpResponse/);
+    assert.match(src, /assertNotProductionWithoutProvisionUrl/);
+    assert.match(src, /type:\s*'owner_api'/);
+    assert.match(src, /rateLimitKey:\s*'owner\.provision-dealer'/);
+    assert.match(src, /useRls:\s*false/);
+    assert.doesNotMatch(src, /password:\s*result/);
+    assert.doesNotMatch(src, /logger\.[a-z]+\([^)]*password/i);
   });
 });

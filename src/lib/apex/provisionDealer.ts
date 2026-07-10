@@ -592,3 +592,82 @@ export function assertNotProductionWithoutProvisionUrl(): void {
     );
   }
 }
+
+/**
+ * HTTP provision is opt-in only. CLI is always available to operators with DB access.
+ * Requires exact truthy string "true" (not 1/yes) so mis-set envs stay closed.
+ */
+export function isHttpProvisionEnabled(): boolean {
+  return process.env.APEX_ALLOW_HTTP_PROVISION?.trim() === 'true';
+}
+
+/** Map provision engine errors to HTTP status (no secrets in messages). */
+export function httpStatusForProvisionError(code: string): number {
+  switch (code) {
+    case 'PROVISION_DAILY_CAP':
+      return 429;
+    case 'PROVISION_MAX_DEALERSHIPS':
+    case 'PROVISION_DB_REQUIRED':
+      return 503;
+    case 'MANAGER_EMAIL_EXISTS':
+    case 'MANAGER_D7_EXISTS':
+    case 'MANAGER_USERNAME_EXISTS':
+    case 'DEALER_EXISTS':
+      return 409;
+    case 'UNKNOWN_TEMPLATE':
+    case 'INVALID_DEALER_CODE':
+    case 'RESERVED_DEALER_CODE':
+    case 'INVALID_DEALER_NAME':
+    case 'INVALID_ROOFTOP_NAME':
+    case 'FORBIDDEN_ROOFTOP_NAME':
+    case 'INVALID_MANAGER_NAME':
+    case 'INVALID_MANAGER_EMAIL':
+    case 'INVALID_MANAGER_D7':
+    case 'INVALID_MANAGER_USERNAME':
+    case 'MANAGER_D7_REQUIRED':
+    case 'MANAGER_USERNAME_REQUIRED':
+    case 'WEAK_PASSWORD':
+    case 'CONFIRM_MISMATCH':
+    case 'HTTP_PROVISION_DISABLED':
+      return 400;
+    default:
+      return 400;
+  }
+}
+
+/**
+ * Safe JSON body for HTTP clients — never includes passwords or optional PII identifiers
+ * unless caller explicitly builds them separately.
+ */
+export function toSafeProvisionHttpResponse(result: ProvisionDealerResult): {
+  created: boolean;
+  skipped: boolean;
+  dryRun: boolean;
+  dealerId: string;
+  dealershipId: string;
+  managerId: string;
+  templateId: DealerTemplateId;
+  rooftopName: string;
+  dealerCode: string;
+  auditLogId: string | null;
+  mustChangePassword: true;
+  logins: Array<{ role: 'manager'; identifierType: 'd7' | 'email' | 'username' }>;
+} {
+  return {
+    created: result.created,
+    skipped: result.skipped,
+    dryRun: result.dryRun,
+    dealerId: result.dealerId,
+    dealershipId: result.dealershipId,
+    managerId: result.managerId,
+    templateId: result.templateId,
+    rooftopName: result.rooftopName,
+    dealerCode: result.dealerCode,
+    auditLogId: result.auditLogId,
+    mustChangePassword: true,
+    logins: result.logins.map((l) => ({
+      role: l.role,
+      identifierType: l.identifierType,
+    })),
+  };
+}
