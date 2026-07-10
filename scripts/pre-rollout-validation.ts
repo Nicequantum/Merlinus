@@ -1780,6 +1780,199 @@ function checkApexPhase55OwnerScope(): void {
   }
 }
 
+/**
+ * PR-P1–P4 — secure multi-dealer provision system gate.
+ * Ensures CLI + HTTP + forced password + docs + tests ship together.
+ */
+function checkApexDealerProvisionFinalize(): void {
+  section('APEX Dealer Provision — Finalize (PR-P4)');
+
+  const engine = resolve(process.cwd(), 'src/lib/apex/provisionDealer.ts');
+  if (existsSync(engine)) {
+    const src = readFileSync(engine, 'utf8');
+    const ok =
+      src.includes('export async function provisionDealer') &&
+      src.includes('mustChangePassword') &&
+      src.includes('dealer.provision') &&
+      src.includes('isHttpProvisionEnabled') &&
+      src.includes('toSafeProvisionHttpResponse') &&
+      src.includes('withRlsBypass') &&
+      src.includes('buildDealerProvisionAuditMetadata');
+    if (ok) {
+      record('APEX Provision', 'Core engine', 'pass', 'provisionDealer + HTTP helpers + audit');
+    } else {
+      record('APEX Provision', 'Core engine', 'fail', 'provisionDealer.ts incomplete');
+    }
+  } else {
+    record('APEX Provision', 'Core engine', 'fail', 'Missing provisionDealer.ts');
+  }
+
+  const templates = resolve(process.cwd(), 'src/lib/apex/dealerTemplates.ts');
+  if (existsSync(templates)) {
+    const src = readFileSync(templates, 'utf8');
+    if (src.includes('mercedes-rooftop-v1') && src.includes('generic-rooftop-v1')) {
+      record('APEX Provision', 'Templates', 'pass', 'mercedes + generic rooftop templates');
+    } else {
+      record('APEX Provision', 'Templates', 'fail', 'dealerTemplates incomplete');
+    }
+  } else {
+    record('APEX Provision', 'Templates', 'fail', 'Missing dealerTemplates.ts');
+  }
+
+  const cli = resolve(process.cwd(), 'scripts/provision-dealer.ts');
+  if (existsSync(cli)) {
+    const src = readFileSync(cli, 'utf8');
+    if (
+      src.includes('FORBIDDEN_PASSWORD_FLAGS') &&
+      src.includes('manager-password-env') &&
+      src.includes('APEX_PROVISION_ALLOW_YES')
+    ) {
+      record('APEX Provision', 'CLI security', 'pass', 'No argv passwords + confirm gates');
+    } else {
+      record('APEX Provision', 'CLI security', 'fail', 'provision-dealer CLI incomplete');
+    }
+  } else {
+    record('APEX Provision', 'CLI security', 'fail', 'Missing scripts/provision-dealer.ts');
+  }
+
+  const httpRoute = resolve(process.cwd(), 'src/app/api/owner/provision-dealer/route.ts');
+  if (existsSync(httpRoute)) {
+    const src = readFileSync(httpRoute, 'utf8');
+    if (
+      src.includes('requireOwnerNational') &&
+      src.includes('isHttpProvisionEnabled') &&
+      src.includes('provisionDealer') &&
+      src.includes('toSafeProvisionHttpResponse') &&
+      src.includes("type: 'owner_api'")
+    ) {
+      record('APEX Provision', 'HTTP owner API', 'pass', 'POST /api/owner/provision-dealer fortress guards');
+    } else {
+      record('APEX Provision', 'HTTP owner API', 'fail', 'HTTP provision route incomplete');
+    }
+  } else {
+    record('APEX Provision', 'HTTP owner API', 'fail', 'Missing provision-dealer route');
+  }
+
+  const forcedUi = resolve(process.cwd(), 'src/components/ForcedPasswordChangeScreen.tsx');
+  const apexApp = resolve(process.cwd(), 'src/components/apex/ApexPlatformApp.tsx');
+  const benzApp = resolve(process.cwd(), 'src/components/BenzTechApp.tsx');
+  if (existsSync(forcedUi) && existsSync(apexApp) && existsSync(benzApp)) {
+    const ui = readFileSync(forcedUi, 'utf8');
+    const apex = readFileSync(apexApp, 'utf8');
+    const benz = readFileSync(benzApp, 'utf8');
+    if (
+      ui.includes('data-testid="forced-password-change"') &&
+      apex.includes('needsPasswordChange') &&
+      benz.includes('needsPasswordChange')
+    ) {
+      record('APEX Provision', 'Forced password UI', 'pass', 'Gate screen wired in Apex + Merlinus shells');
+    } else {
+      record('APEX Provision', 'Forced password UI', 'fail', 'Forced password gate incomplete');
+    }
+  } else {
+    record('APEX Provision', 'Forced password UI', 'fail', 'Missing ForcedPasswordChangeScreen or app shells');
+  }
+
+  const apiRoute = resolve(process.cwd(), 'src/lib/apiRoute.ts');
+  const changePw = resolve(process.cwd(), 'src/app/api/auth/change-password/route.ts');
+  if (existsSync(apiRoute) && existsSync(changePw)) {
+    const routeSrc = readFileSync(apiRoute, 'utf8');
+    const pwSrc = readFileSync(changePw, 'utf8');
+    if (
+      routeSrc.includes('PASSWORD_CHANGE_REQUIRED') &&
+      routeSrc.includes('skipPasswordChange') &&
+      pwSrc.includes('skipPasswordChange: true') &&
+      pwSrc.includes('mustChangePassword: false')
+    ) {
+      record('APEX Provision', 'API password gate', 'pass', 'PII blocked until change-password');
+    } else {
+      record('APEX Provision', 'API password gate', 'fail', 'Password-change gate incomplete');
+    }
+  }
+
+  const migration = resolve(
+    process.cwd(),
+    'prisma/migrations/20250713120000_apex_provision_must_change_password/migration.sql'
+  );
+  if (existsSync(migration)) {
+    record('APEX Provision', 'must_change_password migration', 'pass', 'Technician password rotation column');
+  } else {
+    record('APEX Provision', 'must_change_password migration', 'fail', 'Missing provision migration');
+  }
+
+  const unitTest = resolve(process.cwd(), 'tests/unit/provisionDealer.test.ts');
+  const integTest = resolve(process.cwd(), 'tests/integration/dealer-provision.test.ts');
+  if (existsSync(unitTest)) {
+    record('APEX Provision', 'Unit tests', 'pass', 'tests/unit/provisionDealer.test.ts');
+  } else {
+    record('APEX Provision', 'Unit tests', 'fail', 'Missing provisionDealer unit tests');
+  }
+  if (existsSync(integTest)) {
+    const src = readFileSync(integTest, 'utf8');
+    if (
+      src.includes('provisionDealer') &&
+      src.includes('postProvisionDealer') &&
+      src.includes('PASSWORD_CHANGE_REQUIRED')
+    ) {
+      record('APEX Provision', 'Integration tests', 'pass', 'CLI + HTTP + password gate suite');
+    } else {
+      record('APEX Provision', 'Integration tests', 'fail', 'dealer-provision integration incomplete');
+    }
+  } else {
+    record('APEX Provision', 'Integration tests', 'fail', 'Missing dealer-provision integration tests');
+  }
+
+  const docs = resolve(process.cwd(), 'docs/Apex-Dealer-Onboarding.md');
+  const national = resolve(process.cwd(), 'docs/Apex-National-Platform.md');
+  if (existsSync(docs)) {
+    const text = readFileSync(docs, 'utf8');
+    if (
+      text.includes('provision-dealer') &&
+      text.includes('mustChangePassword') &&
+      text.includes('APEX_ALLOW_HTTP_PROVISION') &&
+      text.includes('smoke:dealer-provision')
+    ) {
+      record('APEX Provision', 'Onboarding docs', 'pass', 'Apex-Dealer-Onboarding.md complete');
+    } else {
+      record('APEX Provision', 'Onboarding docs', 'fail', 'Onboarding docs missing smoke/HTTP sections');
+    }
+  } else {
+    record('APEX Provision', 'Onboarding docs', 'fail', 'Missing Apex-Dealer-Onboarding.md');
+  }
+  if (existsSync(national) && readFileSync(national, 'utf8').includes('Dealer onboarding')) {
+    record('APEX Provision', 'National platform docs', 'pass', 'Onboarding section in Apex-National-Platform.md');
+  } else {
+    record('APEX Provision', 'National platform docs', 'fail', 'National platform missing onboarding section');
+  }
+
+  const smoke = resolve(process.cwd(), 'scripts/smoke-dealer-provision.ts');
+  if (existsSync(smoke)) {
+    record('APEX Provision', 'Smoke script', 'pass', 'scripts/smoke-dealer-provision.ts');
+  } else {
+    record('APEX Provision', 'Smoke script', 'fail', 'Missing smoke-dealer-provision script');
+  }
+
+  const pkg = resolve(process.cwd(), 'package.json');
+  if (existsSync(pkg)) {
+    const json = readFileSync(pkg, 'utf8');
+    if (json.includes('provision-dealer') && json.includes('smoke:dealer-provision')) {
+      record('APEX Provision', 'npm scripts', 'pass', 'provision-dealer + smoke:dealer-provision');
+    } else {
+      record('APEX Provision', 'npm scripts', 'fail', 'package.json missing provision scripts');
+    }
+  }
+
+  const envExample = resolve(process.cwd(), '.env.example');
+  if (existsSync(envExample)) {
+    const env = readFileSync(envExample, 'utf8');
+    if (env.includes('APEX_ALLOW_HTTP_PROVISION')) {
+      record('APEX Provision', 'Env example', 'pass', 'APEX_ALLOW_HTTP_PROVISION documented');
+    } else {
+      record('APEX Provision', 'Env example', 'fail', '.env.example missing HTTP provision flag');
+    }
+  }
+}
+
 function checkApexPhase64FortressComplete(): void {
   section('APEX Phase 6.4 — Finalize Security Fortress Hardening');
 
@@ -2263,6 +2456,7 @@ async function main(): Promise<void> {
   checkApexPhase62RlsEnforcement();
   checkApexPhase63SecurityExpansion();
   checkApexPhase64FortressComplete();
+  checkApexDealerProvisionFinalize();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

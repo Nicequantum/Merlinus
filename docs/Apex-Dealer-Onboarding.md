@@ -211,14 +211,31 @@ Optional Settings “Change Password” remains available after the forced gate 
 
 Run these after deploy or before first production rooftop.
 
+### Automated smoke script (preferred first pass)
+
+```bash
+# Static gates + CLI password-argv rejection
+npm run smoke:dealer-provision
+
+# Also run dry-run provision against configured DB (no writes)
+npm run smoke:dealer-provision -- --dry-run-db
+
+# Optional one-shot live create (staging only)
+APEX_SMOKE_LIVE=1 npm run smoke:dealer-provision -- --live
+```
+
+Script: [`scripts/smoke-dealer-provision.ts`](../scripts/smoke-dealer-provision.ts)
+
 ### A. Unit / static
 
 ```bash
 npm run typecheck
 npm test -- tests/unit/provisionDealer.test.ts
+npm run test:integration -- tests/integration/dealer-provision.test.ts
+npm run validate:pre-rollout
 ```
 
-Expect: template list, naming validators, CLI forbids password argv patterns, audit metadata allow-list.
+Expect: template list, naming validators, CLI forbids password argv patterns, audit metadata allow-list, pre-rollout **APEX Dealer Provision** section all PASS.
 
 ### B. Dry-run provision
 
@@ -391,6 +408,9 @@ Prefer CLI for production operator workflows; HTTP is for controlled national-ow
 | API gate | [`src/lib/apiRoute.ts`](../src/lib/apiRoute.ts) (`skipPasswordChange`) |
 | Change password | [`src/app/api/auth/change-password/route.ts`](../src/app/api/auth/change-password/route.ts) |
 | Unit tests | [`tests/unit/provisionDealer.test.ts`](../tests/unit/provisionDealer.test.ts) |
+| Integration tests | [`tests/integration/dealer-provision.test.ts`](../tests/integration/dealer-provision.test.ts) |
+| Smoke script | `npm run smoke:dealer-provision` → [`scripts/smoke-dealer-provision.ts`](../scripts/smoke-dealer-provision.ts) |
+| Pre-rollout gate | [`scripts/pre-rollout-validation.ts`](../scripts/pre-rollout-validation.ts) section **APEX Dealer Provision** |
 
 ---
 
@@ -418,4 +438,4 @@ Prefer CLI for production operator workflows; HTTP is for controlled national-ow
 
 ---
 
-*Last updated with PR-P3 (optional HTTP owner provision endpoint).*
+*Last updated with PR-P4 (integration tests, smoke script, pre-rollout gate, UI polish).*

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { KeyRound, ShieldAlert } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Check, KeyRound, ShieldAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
@@ -15,7 +15,26 @@ interface ForcedPasswordChangeScreenProps {
   onLogout: () => void | Promise<void>;
 }
 
+/** Matches API changePasswordSchema min; provision CLI requires 12 for temp passwords. */
 const MIN_PASSWORD_LEN = 8;
+const RECOMMENDED_PASSWORD_LEN = 12;
+
+function passwordStrengthLabel(password: string): { label: string; score: 0 | 1 | 2 | 3 } {
+  if (!password) return { label: 'Enter a new password', score: 0 };
+  let score = 0 as 0 | 1 | 2 | 3;
+  if (password.length >= MIN_PASSWORD_LEN) score = 1;
+  if (password.length >= RECOMMENDED_PASSWORD_LEN) score = 2;
+  if (
+    password.length >= RECOMMENDED_PASSWORD_LEN &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password)
+  ) {
+    score = 3;
+  }
+  const labels = ['Too short', 'Acceptable', 'Stronger', 'Strong'] as const;
+  return { label: labels[score], score };
+}
 
 export function ForcedPasswordChangeScreen({
   userName,
@@ -24,23 +43,40 @@ export function ForcedPasswordChangeScreen({
   onLogout,
 }: ForcedPasswordChangeScreenProps) {
   const apex = isApexPlatformMode();
+  const formId = useId();
+  const currentRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [touched, setTouched] = useState({ new: false, confirm: false });
+
+  useEffect(() => {
+    currentRef.current?.focus();
+  }, []);
+
+  const strength = useMemo(() => passwordStrengthLabel(newPassword), [newPassword]);
+  const matches = newPassword.length > 0 && newPassword === confirmPassword;
+  const differsFromTemp =
+    newPassword.length > 0 && currentPassword.length > 0 && newPassword !== currentPassword;
+  const longEnough = newPassword.length >= MIN_PASSWORD_LEN;
+  const canSubmit =
+    currentPassword.length > 0 && longEnough && matches && differsFromTemp && !submitting && !signingOut;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < MIN_PASSWORD_LEN) {
+    setTouched({ new: true, confirm: true });
+
+    if (!longEnough) {
       toast.error(`New password must be at least ${MIN_PASSWORD_LEN} characters`);
       return;
     }
-    if (newPassword !== confirmPassword) {
+    if (!matches) {
       toast.error('New password and confirmation do not match');
       return;
     }
-    if (newPassword === currentPassword) {
+    if (!differsFromTemp) {
       toast.error('Choose a new password that is different from the temporary one');
       return;
     }
@@ -72,18 +108,34 @@ export function ForcedPasswordChangeScreen({
     }
   };
 
+  const requirementRow = (ok: boolean, text: string) => (
+    <li
+      className={`flex items-center gap-2 text-xs ${
+        ok ? (apex ? 'text-emerald-400/90' : 'text-emerald-500') : apex ? 'text-slate-400' : 'text-benz-muted'
+      }`}
+    >
+      {ok ? <Check size={14} aria-hidden /> : <X size={14} aria-hidden />}
+      <span>{text}</span>
+    </li>
+  );
+
   const form = (
-    <form onSubmit={handleSubmit} className={apex ? 'apex-login-form space-y-4' : 'space-y-3'}>
-      <div className={apex ? 'apex-field' : undefined}>
-        {apex ? (
-          <label className="apex-label" htmlFor="forced-current-password">
-            Temporary password
-          </label>
-        ) : null}
+    <form
+      id={formId}
+      onSubmit={handleSubmit}
+      className={apex ? 'apex-login-form space-y-4' : 'space-y-3'}
+      noValidate
+      aria-describedby={`${formId}-requirements`}
+    >
+      <div className={apex ? 'apex-field' : 'space-y-1.5'}>
+        <label className={apex ? 'apex-label' : 'benz-label'} htmlFor="forced-current-password">
+          Temporary password
+        </label>
         <input
+          ref={currentRef}
           id="forced-current-password"
           type="password"
-          placeholder={apex ? '••••••••••••' : 'Temporary / current password'}
+          placeholder={apex ? '••••••••••••' : 'Temporary password from onboarding'}
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           autoComplete="current-password"
@@ -91,46 +143,73 @@ export function ForcedPasswordChangeScreen({
           className={apex ? 'apex-input' : 'benz-input'}
         />
       </div>
-      <div className={apex ? 'apex-field' : undefined}>
-        {apex ? (
-          <label className="apex-label" htmlFor="forced-new-password">
-            New password
-          </label>
-        ) : null}
+      <div className={apex ? 'apex-field' : 'space-y-1.5'}>
+        <label className={apex ? 'apex-label' : 'benz-label'} htmlFor="forced-new-password">
+          New password
+        </label>
         <input
           id="forced-new-password"
           type="password"
-          placeholder={apex ? `At least ${MIN_PASSWORD_LEN} characters` : `New password (min ${MIN_PASSWORD_LEN})`}
+          placeholder={`At least ${MIN_PASSWORD_LEN} characters (recommend ${RECOMMENDED_PASSWORD_LEN}+)`}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
+          onBlur={() => setTouched((t) => ({ ...t, new: true }))}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LEN}
           required
+          aria-invalid={touched.new && !longEnough}
           className={apex ? 'apex-input' : 'benz-input'}
         />
-      </div>
-      <div className={apex ? 'apex-field' : undefined}>
-        {apex ? (
-          <label className="apex-label" htmlFor="forced-confirm-password">
-            Confirm new password
-          </label>
+        {newPassword ? (
+          <p
+            className={`text-xs mt-1 ${
+              strength.score >= 2
+                ? apex
+                  ? 'text-emerald-400/90'
+                  : 'text-emerald-600'
+                : apex
+                  ? 'text-amber-300/90'
+                  : 'text-amber-600'
+            }`}
+            aria-live="polite"
+          >
+            Strength: {strength.label}
+          </p>
         ) : null}
+      </div>
+      <div className={apex ? 'apex-field' : 'space-y-1.5'}>
+        <label className={apex ? 'apex-label' : 'benz-label'} htmlFor="forced-confirm-password">
+          Confirm new password
+        </label>
         <input
           id="forced-confirm-password"
           type="password"
-          placeholder={apex ? 'Re-enter new password' : 'Confirm new password'}
+          placeholder="Re-enter new password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
+          onBlur={() => setTouched((t) => ({ ...t, confirm: true }))}
           autoComplete="new-password"
           minLength={MIN_PASSWORD_LEN}
           required
+          aria-invalid={touched.confirm && !matches}
           className={apex ? 'apex-input' : 'benz-input'}
         />
+        {touched.confirm && confirmPassword && !matches ? (
+          <p className={`text-xs mt-1 ${apex ? 'text-rose-300' : 'text-red-500'}`} role="alert">
+            Passwords do not match
+          </p>
+        ) : null}
       </div>
+
+      <ul id={`${formId}-requirements`} className="space-y-1.5 py-1" aria-label="Password requirements">
+        {requirementRow(longEnough, `At least ${MIN_PASSWORD_LEN} characters`)}
+        {requirementRow(matches, 'Confirmation matches')}
+        {requirementRow(differsFromTemp, 'Different from temporary password')}
+      </ul>
 
       <button
         type="submit"
-        disabled={submitting || signingOut}
+        disabled={!canSubmit}
         className={
           apex
             ? 'apex-btn-primary w-full touch-target disabled:opacity-50'
@@ -157,7 +236,13 @@ export function ForcedPasswordChangeScreen({
 
   if (apex) {
     return (
-      <div className="apex-login-shell" data-platform="apex" data-testid="forced-password-change">
+      <div
+        className="apex-login-shell"
+        data-platform="apex"
+        data-testid="forced-password-change"
+        role="main"
+        aria-labelledby="forced-password-title"
+      >
         <div className="apex-ambient" aria-hidden="true">
           <div className="apex-ambient-grid" />
           <div className="apex-ambient-logo-wash" />
@@ -199,7 +284,9 @@ export function ForcedPasswordChangeScreen({
           <div className="apex-login-panel">
             <div className="apex-login-panel-header">
               <p className="apex-login-kicker">Required before workspace access</p>
-              <h1 className="apex-login-title">Change your password</h1>
+              <h1 id="forced-password-title" className="apex-login-title">
+                Change your password
+              </h1>
               <p className="apex-login-lead">
                 {userName ? (
                   <>
@@ -226,15 +313,24 @@ export function ForcedPasswordChangeScreen({
   }
 
   return (
-    <div className="benz-modal-overlay z-[100] p-4" data-testid="forced-password-change">
+    <div
+      className="benz-modal-overlay z-[100] p-4"
+      data-testid="forced-password-change"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="forced-password-title"
+    >
       <div className="benz-modal-panel sm:max-w-md w-full max-h-[90dvh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3.5 mb-5">
             <MerlinLogoMark size="md" />
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Password change required</h2>
+              <h2 id="forced-password-title" className="text-lg font-semibold tracking-tight">
+                Password change required
+              </h2>
               <p className="text-xs text-benz-secondary mt-0.5">
                 Temporary credentials must be rotated before bay use
+                {rooftopName ? ` · ${rooftopName}` : ''}
               </p>
             </div>
           </div>

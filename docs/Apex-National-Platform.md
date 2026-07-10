@@ -81,6 +81,7 @@ National summary API: `GET /api/owner/summary` (owner-gated, apex-only, no PII i
 npm run typecheck
 npm test
 npm run test:integration
+npm run smoke:dealer-provision -- --dry-run-db
 npm run validate:pre-rollout
 ```
 
@@ -88,6 +89,7 @@ Integration coverage:
 
 - `tests/integration/apex-owner-flows.test.ts`
 - `tests/integration/security-fortress.test.ts`
+- `tests/integration/dealer-provision.test.ts` (CLI core + HTTP + forced password)
 
 ---
 
