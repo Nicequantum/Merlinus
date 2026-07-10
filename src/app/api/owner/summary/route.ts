@@ -46,6 +46,10 @@ export async function GET(request: Request) {
             adoptionRatePct: summary.adoptionRatePct,
             attentionFlagCount: summary.attentionFlagCount,
             rooftopCount: summary.rooftops?.length ?? 0,
+            volumeTrendPct: summary.volumeTrend?.changePct ?? null,
+            certificationRatePct: summary.certificationRatePct ?? null,
+            aiUsage7d: summary.aiUsage7d ?? 0,
+            logins7d: summary.logins7d ?? 0,
           },
         },
         { rls: { ...rlsContextFromSession(session), enforced: true } }

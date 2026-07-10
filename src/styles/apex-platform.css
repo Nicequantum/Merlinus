@@ -920,6 +920,53 @@
   opacity: 0.9;
 }
 
+[data-platform='apex'] .apex-stat-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+[data-platform='apex'] .apex-stat-grid--tier2 {
+  margin-top: 0.15rem;
+}
+
+[data-platform='apex'] .apex-sparkline {
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
+[data-platform='apex'] .apex-trend {
+  font-weight: 600;
+}
+
+[data-platform='apex'] .apex-trend--up {
+  color: #6ee7b7;
+}
+
+[data-platform='apex'] .apex-trend--down {
+  color: #fbbf24;
+}
+
+[data-platform='apex'] .apex-rooftop-spark {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0 0.1rem;
+}
+
+[data-platform='apex'] .apex-rooftop-depth {
+  font-size: 0.8125rem !important;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 900px) {
+  [data-platform='apex'] .apex-stat-grid--tier2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* PR-G3 — rooftop comparison scoreboard */
 [data-platform='apex'] .apex-rooftop-grid {
   display: grid;

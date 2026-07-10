@@ -14,6 +14,7 @@ import type {
   OwnerRooftopScorecard,
 } from '@/lib/ownerSummaryClient';
 import { fetchOwnerNationalSummary } from '@/lib/ownerSummaryClient';
+import { formatTrendPct, OwnerSparkline } from '@/components/apex/OwnerSparkline';
 import { clientLog } from '@/lib/clientLog';
 import type { TechnicianSession } from '@/types';
 import { toast } from 'sonner';
@@ -30,18 +31,46 @@ function StatCard({
   label,
   value,
   hint,
+  sparkline,
+  trendPct,
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  sparkline?: number[];
+  trendPct?: number | null;
 }) {
+  const trendClass =
+    trendPct === null || trendPct === undefined
+      ? ''
+      : trendPct > 0
+        ? 'apex-trend apex-trend--up'
+        : trendPct < 0
+          ? 'apex-trend apex-trend--down'
+          : 'apex-trend';
+
   return (
     <div className="apex-stat-card">
-      <p className="apex-stat-value">
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </p>
+      <div className="apex-stat-card-top">
+        <p className="apex-stat-value">
+          {typeof value === 'number' ? value.toLocaleString() : value}
+        </p>
+        {sparkline && sparkline.length > 0 ? (
+          <OwnerSparkline values={sparkline} label={`${label} trend`} />
+        ) : null}
+      </div>
       <p className="apex-stat-label">{label}</p>
-      {hint ? <p className="apex-stat-hint">{hint}</p> : null}
+      {hint || trendPct !== undefined ? (
+        <p className="apex-stat-hint">
+          {hint}
+          {trendPct !== undefined ? (
+            <>
+              {hint ? ' · ' : null}
+              <span className={trendClass}>{formatTrendPct(trendPct)} vs prior 7d</span>
+            </>
+          ) : null}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -50,6 +79,13 @@ function statusClass(status: OwnerRooftopScorecard['status']): string {
   if (status === 'attention') return 'apex-rooftop-status apex-rooftop-status--attention';
   if (status === 'watch') return 'apex-rooftop-status apex-rooftop-status--watch';
   return 'apex-rooftop-status apex-rooftop-status--healthy';
+}
+
+function trendClass(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined) return 'apex-trend';
+  if (pct > 0) return 'apex-trend apex-trend--up';
+  if (pct < 0) return 'apex-trend apex-trend--down';
+  return 'apex-trend';
 }
 
 function RooftopCard({
@@ -73,6 +109,19 @@ function RooftopCard({
         </div>
         <span className={statusClass(rooftop.status)}>{rooftop.status}</span>
       </div>
+      {rooftop.roDaily14d?.length ? (
+        <div className="apex-rooftop-spark">
+          <OwnerSparkline
+            values={rooftop.roDaily14d}
+            width={160}
+            height={32}
+            label={`${rooftop.name} RO volume 14 days`}
+          />
+          <span className={trendClass(rooftop.roVolumeTrendPct)}>
+            {formatTrendPct(rooftop.roVolumeTrendPct)}
+          </span>
+        </div>
+      ) : null}
       <dl className="apex-rooftop-metrics">
         <div>
           <dt>RO 7d</dt>
@@ -87,16 +136,34 @@ function RooftopCard({
           <dd>{rooftop.certifiedStories7d}</dd>
         </div>
         <div>
-          <dt>Certified 30d</dt>
-          <dd>{rooftop.certifiedStories30d}</dd>
+          <dt>Cert rate</dt>
+          <dd>
+            {rooftop.certificationRatePct === null || rooftop.certificationRatePct === undefined
+              ? '—'
+              : `${rooftop.certificationRatePct}%`}
+          </dd>
         </div>
         <div>
-          <dt>Staff</dt>
-          <dd>{rooftop.activeStaff}</dd>
+          <dt>Staff depth</dt>
+          <dd className="apex-rooftop-depth">
+            {rooftop.managers}M · {rooftop.technicians}T · {rooftop.advisors}A
+          </dd>
         </div>
         <div>
           <dt>Adoption</dt>
           <dd>{rooftop.adoptionRatePct}%</dd>
+        </div>
+        <div>
+          <dt>AI 7d</dt>
+          <dd>{rooftop.aiUsage7d}</dd>
+        </div>
+        <div>
+          <dt>Logins 7d</dt>
+          <dd>{rooftop.logins7d}</dd>
+        </div>
+        <div>
+          <dt>Pwd gate</dt>
+          <dd>{rooftop.staffMustChangePassword}</dd>
         </div>
       </dl>
       {rooftop.attentionReasons.length > 0 ? (
@@ -274,8 +341,8 @@ export function ApexOwnerNationalShell({
                 </h1>
                 <p className="apex-national-hero-subtitle">
                   {isGroupHome
-                    ? 'Tier 1 portfolio metrics across your franchise rooftops — no customer PII. Compare stores side by side, then enter a rooftop for bay work.'
-                    : 'Aggregate visibility across dealers and rooftops — no customer PII at national scope. Enter a dealership when you need repair-order access.'}
+                    ? 'Tier 1 + Tier 2 portfolio metrics — volume trends, certification, AI usage, and staff depth. No customer PII until you enter a rooftop.'
+                    : 'Aggregate visibility across dealers and rooftops — trends and operating health without customer PII. Enter a dealership when you need bay access.'}
                 </p>
               </div>
               <button
@@ -315,11 +382,15 @@ export function ApexOwnerNationalShell({
                     label="RO volume"
                     value={summary.repairOrders7d}
                     hint={`${summary.repairOrders30d.toLocaleString()} in 30d`}
+                    sparkline={summary.volumeTrend?.values}
+                    trendPct={summary.volumeTrend?.changePct}
                   />
                   <StatCard
                     label="Stories certified"
                     value={summary.certifiedStories7d}
                     hint={`${summary.certifiedStories30d.toLocaleString()} in 30d`}
+                    sparkline={summary.certificationTrend?.values}
+                    trendPct={summary.certificationTrend?.changePct}
                   />
                   <StatCard
                     label="Adoption rate"
@@ -334,6 +405,59 @@ export function ApexOwnerNationalShell({
                         ? 'All clear'
                         : 'Review flags below'
                     }
+                  />
+                </section>
+
+                <section
+                  className="apex-stat-grid apex-stat-grid--tier2"
+                  aria-label={isGroupHome ? 'Group Tier 2 metrics' : 'National Tier 2 metrics'}
+                >
+                  <StatCard
+                    label="Volume trend"
+                    value={formatTrendPct(summary.volumeTrend?.changePct)}
+                    hint={`7d ${summary.volumeTrend?.current7d ?? summary.repairOrders7d} vs prior ${summary.volumeTrend?.prior7d ?? '—'}`}
+                    sparkline={summary.volumeTrend?.values}
+                    trendPct={summary.volumeTrend?.changePct}
+                  />
+                  <StatCard
+                    label="Certification rate"
+                    value={
+                      summary.certificationRatePct === null ||
+                      summary.certificationRatePct === undefined
+                        ? '—'
+                        : `${summary.certificationRatePct}%`
+                    }
+                    hint="Certified stories ÷ RO volume (7d)"
+                    sparkline={summary.certificationTrend?.values}
+                  />
+                  <StatCard
+                    label="Time-to-certify"
+                    value={
+                      summary.medianTimeToCertifyHours === null ||
+                      summary.medianTimeToCertifyHours === undefined
+                        ? '—'
+                        : `${summary.medianTimeToCertifyHours}h`
+                    }
+                    hint="Median hours RO create → certify (30d)"
+                  />
+                  <StatCard
+                    label="AI usage (7d)"
+                    value={summary.aiUsage7d ?? 0}
+                    hint="Usage log hits across portfolio"
+                  />
+                  <StatCard
+                    label="Login health"
+                    value={summary.logins7d ?? 0}
+                    hint={
+                      (summary.staffMustChangePassword ?? 0) > 0
+                        ? `${summary.staffMustChangePassword} password changes pending`
+                        : 'Logins in last 7 days'
+                    }
+                  />
+                  <StatCard
+                    label="Staff depth"
+                    value={summary.activeUsers}
+                    hint="See managers / techs / advisors per rooftop"
                   />
                 </section>
 
@@ -368,7 +492,8 @@ export function ApexOwnerNationalShell({
                     <div>
                       <h2 className="apex-national-panel-title">Rooftop comparison</h2>
                       <p className="apex-hint">
-                        Side-by-side portfolio scoreboard — enter a rooftop for PII access.
+                        Side-by-side scoreboard with volume sparks, staff depth, cert rate, and
+                        login health — enter a rooftop for PII access.
                       </p>
                     </div>
                     <button

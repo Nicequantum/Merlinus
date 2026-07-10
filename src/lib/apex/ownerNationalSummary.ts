@@ -19,16 +19,29 @@ export interface OwnerRooftopScorecard {
   dealerCode: string | null;
   dealerName: string | null;
   activeStaff: number;
+  /** Staff depth by role */
+  managers: number;
+  technicians: number;
+  advisors: number;
   roVolume7d: number;
   roVolume30d: number;
+  /** Prior calendar 7d window for trend */
+  roVolumePrior7d: number;
+  roVolumeTrendPct: number | null;
   certifiedStories7d: number;
   certifiedStories30d: number;
+  certificationRatePct: number | null;
+  aiUsage7d: number;
+  logins7d: number;
+  staffMustChangePassword: number;
   /** Distinct staff with login/activity in last 7d / active staff (0–100). */
   adoptionRatePct: number;
   /** healthy | watch | attention */
   status: 'healthy' | 'watch' | 'attention';
   attentionReasons: string[];
   lastActivityAt: string | null;
+  /** Daily RO volume last 14 days (oldest → newest) for sparkline */
+  roDaily14d: number[];
 }
 
 export interface OwnerAttentionFlag {
@@ -39,20 +52,27 @@ export interface OwnerAttentionFlag {
   dealershipName?: string;
 }
 
+export interface OwnerTrendSeries {
+  /** ISO date (UTC day) oldest → newest */
+  dates: string[];
+  /** Values aligned with dates */
+  values: number[];
+  current7d: number;
+  prior7d: number;
+  /** Percent change current vs prior; null if prior is 0 */
+  changePct: number | null;
+}
+
 export interface OwnerNationalSummary {
-  /** Brands / dealers in portfolio */
   dealerCount: number;
-  /** Rooftops active */
   dealershipCount: number;
-  /** Active non-owner staff */
   activeUsers: number;
-  /** @deprecated prefer repairOrders7d — kept for older clients */
+  /** @deprecated prefer repairOrders7d */
   repairOrdersLast7Days: number;
   repairOrders7d: number;
   repairOrders30d: number;
   certifiedStories7d: number;
   certifiedStories30d: number;
-  /** % active staff with activity in last 7 days (0–100) */
   adoptionRatePct: number;
   attentionFlagCount: number;
   attentionFlags: OwnerAttentionFlag[];
@@ -62,10 +82,26 @@ export interface OwnerNationalSummary {
   scopeMode?: 'national' | 'group';
   dealerGroupId?: string | null;
   dealerGroupName?: string | null;
+
+  // ─── PR-G4 Tier 2 ─────────────────────────────────────────────
+  /** RO volume trend with 14-day sparkline series */
+  volumeTrend: OwnerTrendSeries;
+  /** Certified stories / ROs updated in 7d (proxy completion rate) */
+  certificationRatePct: number | null;
+  /** Median hours from RO create → first certification (30d sample) */
+  medianTimeToCertifyHours: number | null;
+  /** UsageLog AI route hits in 7d */
+  aiUsage7d: number;
+  /** Distinct auth.login events / staff in 7d */
+  logins7d: number;
+  staffMustChangePassword: number;
+  /** Certification count trend sparkline */
+  certificationTrend: OwnerTrendSeries;
 }
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
 
 export interface OwnerSummaryContext {
   technicianId: string;
@@ -74,18 +110,67 @@ export interface OwnerSummaryContext {
   dealerGroupName?: string | null;
 }
 
+function utcDayStart(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function dayKey(d: Date): string {
+  return utcDayStart(d).toISOString().slice(0, 10);
+}
+
+function buildDayKeys(end: Date, days: number): string[] {
+  const keys: string[] = [];
+  const endDay = utcDayStart(end);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(endDay.getTime() - i * 24 * 60 * 60 * 1000);
+    keys.push(dayKey(d));
+  }
+  return keys;
+}
+
+function percentChange(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return Math.round(((sorted[mid - 1]! + sorted[mid]!) / 2) * 10) / 10;
+  }
+  return Math.round(sorted[mid]! * 10) / 10;
+}
+
+function seriesFromDaily(
+  dayKeys: string[],
+  countsByDay: Map<string, number>
+): OwnerTrendSeries {
+  const values = dayKeys.map((k) => countsByDay.get(k) ?? 0);
+  const prior7d = values.slice(0, 7).reduce((a, b) => a + b, 0);
+  const current7d = values.slice(7).reduce((a, b) => a + b, 0);
+  return {
+    dates: dayKeys,
+    values,
+    current7d,
+    prior7d,
+    changePct: percentChange(current7d, prior7d),
+  };
+}
+
 /**
  * Owner home aggregates — no customer PII.
- * Group owners: scoped to DealerGroup memberships.
- * Platform national owners: whole platform.
+ * Tier 1 + Tier 2 (PR-G3 / PR-G4).
  */
 export async function getOwnerNationalSummary(
   context?: OwnerSummaryContext
 ): Promise<OwnerNationalSummary> {
   const now = Date.now();
+  const nowDate = new Date(now);
   const weekAgo = new Date(now - SEVEN_DAYS_MS);
+  const twoWeeksAgo = new Date(now - FOURTEEN_DAYS_MS);
   const monthAgo = new Date(now - THIRTY_DAYS_MS);
-  const notSentinel = { not: APEX_NATIONAL_DEALERSHIP_ID };
 
   const scopedDealerIds = context?.technicianId
     ? await listDealerIdsForOwnerGroups(context.technicianId)
@@ -98,12 +183,14 @@ export async function getOwnerNationalSummary(
   const rooftops = await loadRooftopRows(dealerIdList);
   const rooftopIds = rooftops.map((r) => r.id);
   const effectiveRooftopIds = rooftopIds.length > 0 ? rooftopIds : ['__none__'];
+  const dayKeys14 = buildDayKeys(nowDate, 14);
 
   const [
     dealerCount,
     activeUsers,
     ro7,
     ro30,
+    roPrior7,
     cert7,
     cert30,
     activeStaffWithActivity7d,
@@ -111,11 +198,21 @@ export async function getOwnerNationalSummary(
     mustChangePasswordCount,
     lastActivityByRooftop,
     staffByRooftop,
+    staffByRooftopRole,
     ro7ByRooftop,
     ro30ByRooftop,
+    roPrior7ByRooftop,
     cert7ByRooftop,
     cert30ByRooftop,
     activeStaffByRooftop7d,
+    roRows14d,
+    certRows14d,
+    aiUsage7d,
+    aiByRooftop,
+    logins7d,
+    loginsByRooftop,
+    mustChangeByRooftop,
+    certSample,
   ] = await Promise.all([
     prisma.dealer.count({
       where: isGroupScoped
@@ -135,6 +232,12 @@ export async function getOwnerNationalSummary(
     }),
     prisma.repairOrder.count({
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: monthAgo } },
+    }),
+    prisma.repairOrder.count({
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        updatedAt: { gte: twoWeeksAgo, lt: weekAgo },
+      },
     }),
     prisma.technicianCertifiedStory.count({
       where: { dealershipId: { in: effectiveRooftopIds }, certifiedAt: { gte: weekAgo } },
@@ -189,6 +292,16 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
+    prisma.technician.groupBy({
+      by: ['dealershipId', 'role'],
+      where: {
+        isActive: true,
+        deletedAt: null,
+        role: { not: 'owner' },
+        dealershipId: { in: effectiveRooftopIds },
+      },
+      _count: { _all: true },
+    }),
     prisma.repairOrder.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: weekAgo } },
@@ -197,6 +310,14 @@ export async function getOwnerNationalSummary(
     prisma.repairOrder.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: monthAgo } },
+      _count: { _all: true },
+    }),
+    prisma.repairOrder.groupBy({
+      by: ['dealershipId'],
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        updatedAt: { gte: twoWeeksAgo, lt: weekAgo },
+      },
       _count: { _all: true },
     }),
     prisma.technicianCertifiedStory.groupBy({
@@ -218,16 +339,130 @@ export async function getOwnerNationalSummary(
         action: { in: ['auth.login', 'auth.refresh', 'ro.create', 'story.certify', 'story.generate'] },
       },
     }),
+    prisma.repairOrder.findMany({
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        updatedAt: { gte: twoWeeksAgo },
+      },
+      select: { dealershipId: true, updatedAt: true },
+    }),
+    prisma.technicianCertifiedStory.findMany({
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        certifiedAt: { gte: twoWeeksAgo },
+      },
+      select: { dealershipId: true, certifiedAt: true },
+    }),
+    prisma.usageLog.count({
+      where: { dealershipId: { in: effectiveRooftopIds }, createdAt: { gte: weekAgo } },
+    }),
+    prisma.usageLog.groupBy({
+      by: ['dealershipId'],
+      where: { dealershipId: { in: effectiveRooftopIds }, createdAt: { gte: weekAgo } },
+      _count: { _all: true },
+    }),
+    prisma.auditLog.count({
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        createdAt: { gte: weekAgo },
+        action: 'auth.login',
+      },
+    }),
+    prisma.auditLog.groupBy({
+      by: ['dealershipId'],
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        createdAt: { gte: weekAgo },
+        action: 'auth.login',
+      },
+      _count: { _all: true },
+    }),
+    prisma.technician.groupBy({
+      by: ['dealershipId'],
+      where: {
+        isActive: true,
+        deletedAt: null,
+        mustChangePassword: true,
+        role: { not: 'owner' },
+        dealershipId: { in: effectiveRooftopIds },
+      },
+      _count: { _all: true },
+    }),
+    prisma.technicianCertifiedStory.findMany({
+      where: {
+        dealershipId: { in: effectiveRooftopIds },
+        certifiedAt: { gte: monthAgo },
+      },
+      select: {
+        certifiedAt: true,
+        repairOrderId: true,
+      },
+      take: 500,
+      orderBy: { certifiedAt: 'desc' },
+    }),
   ]);
+
+  // Time-to-certify: load RO createdAt for sample
+  const roIds = [...new Set(certSample.map((c) => c.repairOrderId))];
+  const roCreated =
+    roIds.length > 0
+      ? await prisma.repairOrder.findMany({
+          where: { id: { in: roIds } },
+          select: { id: true, createdAt: true },
+        })
+      : [];
+  const roCreatedMap = new Map(roCreated.map((r) => [r.id, r.createdAt]));
+  const hoursToCert: number[] = [];
+  for (const c of certSample) {
+    const created = roCreatedMap.get(c.repairOrderId);
+    if (!created) continue;
+    const hrs = (c.certifiedAt.getTime() - created.getTime()) / (60 * 60 * 1000);
+    if (hrs >= 0 && hrs < 24 * 60) hoursToCert.push(hrs);
+  }
+  const medianTimeToCertifyHours = median(hoursToCert);
+
+  // Portfolio daily series
+  const roDayCounts = new Map<string, number>();
+  const certDayCounts = new Map<string, number>();
+  const roDayByRooftop = new Map<string, Map<string, number>>();
+  for (const row of roRows14d) {
+    const k = dayKey(row.updatedAt);
+    roDayCounts.set(k, (roDayCounts.get(k) ?? 0) + 1);
+    const m = roDayByRooftop.get(row.dealershipId) ?? new Map();
+    m.set(k, (m.get(k) ?? 0) + 1);
+    roDayByRooftop.set(row.dealershipId, m);
+  }
+  for (const row of certRows14d) {
+    const k = dayKey(row.certifiedAt);
+    certDayCounts.set(k, (certDayCounts.get(k) ?? 0) + 1);
+  }
+  const volumeTrend = seriesFromDaily(dayKeys14, roDayCounts);
+  const certificationTrend = seriesFromDaily(dayKeys14, certDayCounts);
 
   const lastActivityMap = new Map(
     lastActivityByRooftop.map((r) => [r.dealershipId, r._max.createdAt])
   );
   const staffMap = new Map(staffByRooftop.map((r) => [r.dealershipId, r._count._all]));
+  const roleDepth = new Map<string, { managers: number; technicians: number; advisors: number }>();
+  for (const row of staffByRooftopRole) {
+    const cur = roleDepth.get(row.dealershipId) ?? {
+      managers: 0,
+      technicians: 0,
+      advisors: 0,
+    };
+    if (row.role === 'manager') cur.managers = row._count._all;
+    else if (row.role === 'service_advisor') cur.advisors = row._count._all;
+    else cur.technicians += row._count._all;
+    roleDepth.set(row.dealershipId, cur);
+  }
   const ro7Map = new Map(ro7ByRooftop.map((r) => [r.dealershipId, r._count._all]));
   const ro30Map = new Map(ro30ByRooftop.map((r) => [r.dealershipId, r._count._all]));
+  const roPrior7Map = new Map(roPrior7ByRooftop.map((r) => [r.dealershipId, r._count._all]));
   const cert7Map = new Map(cert7ByRooftop.map((r) => [r.dealershipId, r._count._all]));
   const cert30Map = new Map(cert30ByRooftop.map((r) => [r.dealershipId, r._count._all]));
+  const aiMap = new Map(aiByRooftop.map((r) => [r.dealershipId, r._count._all]));
+  const loginMap = new Map(loginsByRooftop.map((r) => [r.dealershipId, r._count._all]));
+  const mustChangeMap = new Map(mustChangeByRooftop.map((r) => [r.dealershipId, r._count._all]));
 
   const activeStaffIdsByRooftop = new Map<string, Set<string>>();
   for (const row of activeStaffByRooftop7d) {
@@ -240,23 +475,40 @@ export async function getOwnerNationalSummary(
   const attentionFlags: OwnerAttentionFlag[] = [];
   const scorecards: OwnerRooftopScorecard[] = rooftops.map((r) => {
     const activeStaff = staffMap.get(r.id) ?? 0;
+    const depth = roleDepth.get(r.id) ?? { managers: 0, technicians: 0, advisors: 0 };
     const roVolume7d = ro7Map.get(r.id) ?? 0;
     const roVolume30d = ro30Map.get(r.id) ?? 0;
+    const roVolumePrior7d = roPrior7Map.get(r.id) ?? 0;
     const certifiedStories7d = cert7Map.get(r.id) ?? 0;
     const certifiedStories30d = cert30Map.get(r.id) ?? 0;
     const activeIn7d = activeStaffIdsByRooftop.get(r.id)?.size ?? 0;
     const adoptionRatePct =
-      activeStaff > 0 ? Math.round((activeIn7d / activeStaff) * 100) : activeStaff === 0 ? 0 : 0;
+      activeStaff > 0 ? Math.round((activeIn7d / activeStaff) * 100) : 0;
     const lastAt = lastActivityMap.get(r.id) ?? null;
     const daysSinceActivity = lastAt
       ? (now - lastAt.getTime()) / (24 * 60 * 60 * 1000)
       : Number.POSITIVE_INFINITY;
+    const certificationRatePct =
+      roVolume7d > 0
+        ? Math.min(100, Math.round((certifiedStories7d / roVolume7d) * 1000) / 10)
+        : certifiedStories7d > 0
+          ? 100
+          : null;
+    const dayMap = roDayByRooftop.get(r.id) ?? new Map();
+    const roDaily14d = dayKeys14.map((k) => dayMap.get(k) ?? 0);
+    const staffMustChangePassword = mustChangeMap.get(r.id) ?? 0;
+    const aiUsage = aiMap.get(r.id) ?? 0;
+    const logins = loginMap.get(r.id) ?? 0;
 
     const attentionReasons: string[] = [];
     if (activeStaff === 0) attentionReasons.push('No active staff');
+    if (depth.managers === 0 && activeStaff > 0) attentionReasons.push('No active manager');
     if (roVolume7d === 0 && activeStaff > 0) attentionReasons.push('No RO activity in 7 days');
     if (daysSinceActivity > 14) attentionReasons.push('No platform activity in 14+ days');
     if (adoptionRatePct < 40 && activeStaff >= 2) attentionReasons.push('Low adoption (<40%)');
+    if (staffMustChangePassword > 0) {
+      attentionReasons.push(`${staffMustChangePassword} password change pending`);
+    }
 
     let status: OwnerRooftopScorecard['status'] = 'healthy';
     if (attentionReasons.length >= 2 || activeStaff === 0 || daysSinceActivity > 14) {
@@ -283,14 +535,24 @@ export async function getOwnerNationalSummary(
       dealerCode: r.dealerCode,
       dealerName: r.dealerName,
       activeStaff,
+      managers: depth.managers,
+      technicians: depth.technicians,
+      advisors: depth.advisors,
       roVolume7d,
       roVolume30d,
+      roVolumePrior7d,
+      roVolumeTrendPct: percentChange(roVolume7d, roVolumePrior7d),
       certifiedStories7d,
       certifiedStories30d,
+      certificationRatePct,
+      aiUsage7d: aiUsage,
+      logins7d: logins,
+      staffMustChangePassword,
       adoptionRatePct,
       status,
       attentionReasons,
       lastActivityAt: lastAt?.toISOString() ?? null,
+      roDaily14d,
     };
   });
 
@@ -303,11 +565,11 @@ export async function getOwnerNationalSummary(
   }
 
   const adoptionRatePct =
-    activeUsers > 0
-      ? Math.round((activeStaffWithActivity7d.length / activeUsers) * 100)
-      : 0;
+    activeUsers > 0 ? Math.round((activeStaffWithActivity7d.length / activeUsers) * 100) : 0;
 
-  // Dedupe flags by label+dealership
+  const certificationRatePct =
+    ro7 > 0 ? Math.min(100, Math.round((cert7 / ro7) * 1000) / 10) : cert7 > 0 ? 100 : null;
+
   const seen = new Set<string>();
   const uniqueFlags = attentionFlags.filter((f) => {
     const key = `${f.dealershipId ?? ''}:${f.label}`;
@@ -340,6 +602,19 @@ export async function getOwnerNationalSummary(
     scopeMode: isGroupScoped ? 'group' : 'national',
     dealerGroupId: context?.activeDealerGroupId ?? null,
     dealerGroupName: context?.dealerGroupName ?? null,
+    volumeTrend: {
+      ...volumeTrend,
+      // Prefer explicit prior window counts for headline (matches query)
+      current7d: ro7,
+      prior7d: roPrior7,
+      changePct: percentChange(ro7, roPrior7),
+    },
+    certificationRatePct,
+    medianTimeToCertifyHours,
+    aiUsage7d,
+    logins7d,
+    staffMustChangePassword: mustChangePasswordCount,
+    certificationTrend,
   };
 }
 

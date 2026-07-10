@@ -70,6 +70,17 @@ James Gray (viti.james.gray) → group home (Viti Automotive Group)
 | Attention flags | Stale rooftops, low adoption, password gates, … |
 | Rooftop comparison cards | Side-by-side scoreboard + Enter rooftop |
 
+**PR-G4 Tier 2 trends:**
+
+| Metric | Notes |
+|--------|--------|
+| Volume trend | 7d vs prior 7d + 14-day sparkline |
+| Certification rate | Certified stories ÷ RO volume (7d) |
+| Time-to-certify | Median hours RO create → first cert (30d sample) |
+| AI usage (7d) | `UsageLog` hits |
+| Login health | `auth.login` count + password-change pending |
+| Staff depth | Managers / technicians / advisors per rooftop |
+
 ### Seed an owner (development / staging)
 
 Add to `.env.local` or `.env.apex.local`:
