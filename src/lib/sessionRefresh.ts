@@ -49,6 +49,8 @@ export function toTechnicianSession(payload: SessionPayload): TechnicianSession 
     scopeMode: payload.scopeMode,
     isOwner: payload.isOwner,
     activeDealershipId: payload.activeDealershipId,
+    activeDealerGroupId: payload.activeDealerGroupId,
+    dealerGroupName: payload.dealerGroupName,
     mustChangePassword: payload.mustChangePassword,
   };
 }
@@ -64,9 +66,8 @@ async function applyRefreshedSessionCookie(
       scopeMode:
         jwtPayload && 'scopeMode' in jwtPayload
           ? jwtPayload.scopeMode
-          : session.role === 'owner'
-            ? 'national'
-            : 'dealership',
+          : session.scopeMode ??
+            (session.role === 'owner' ? 'national' : 'dealership'),
       ipHash: jwtPayload && 'ipHash' in jwtPayload ? jwtPayload.ipHash ?? null : null,
     });
     applyApexAccessCookie(response, accessToken);

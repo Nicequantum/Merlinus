@@ -50,12 +50,17 @@ export async function loginWithIdentifier(
     throw new Error('Login succeeded but no session was returned');
   }
 
-  // Normalize owner national routing fields client-side as a belt-and-suspenders check.
+  // Normalize owner home routing — preserve group scope (PR-G2).
   const session: TechnicianSession =
     data.session.role === 'owner'
       ? {
           ...data.session,
-          scopeMode: data.session.scopeMode === 'dealership' ? 'dealership' : 'national',
+          scopeMode:
+            data.session.scopeMode === 'dealership'
+              ? 'dealership'
+              : data.session.scopeMode === 'group'
+                ? 'group'
+                : 'national',
           isOwner: true,
         }
       : data.session;

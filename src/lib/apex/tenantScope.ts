@@ -66,9 +66,19 @@ export function canAccessDealershipPii(session: TenantScopedSession): boolean {
   return isUsableDealershipId(active);
 }
 
-/** Owner in national scope — allowed on /api/owner/* only. */
+/** Owner on platform national or group home — allowed on /api/owner/* (not in a rooftop). */
 export function canAccessNationalConsole(session: TenantScopedSession): boolean {
   if (!isApexPlatformMode()) return false;
+  if (!isOwnerRole(session.role)) return false;
+  const scope = resolveSessionScopeMode(session);
+  return scope === 'national' || scope === 'group';
+}
+
+export function isOwnerGroupScope(session: TenantScopedSession): boolean {
+  return isOwnerRole(session.role) && resolveSessionScopeMode(session) === 'group';
+}
+
+export function isOwnerPlatformNationalScope(session: TenantScopedSession): boolean {
   return isOwnerRole(session.role) && resolveSessionScopeMode(session) === 'national';
 }
 
@@ -83,16 +93,16 @@ export function ownerMayExerciseDealershipPrivilege(session: TenantScopedSession
 }
 
 /**
- * Phase 6.3 — national console routes must not be used while owner is in a rooftop.
- * (Dealership-scoped owners should exit first.)
+ * Phase 6.3 / G2 — owner home console (platform national or group).
+ * Must not be used while owner is in a rooftop — exit first.
  */
 export function requireOwnerNationalScope(session: TenantScopedSession): void {
   if (!isOwnerRole(session.role) || !isApexPlatformMode()) {
-    throw new DealershipScopeRequiredError('Owner national scope required');
+    throw new DealershipScopeRequiredError('Owner national or group scope required');
   }
   if (!canAccessNationalConsole(session)) {
     throw new DealershipScopeRequiredError(
-      'Exit dealership context before using the national owner console'
+      'Exit dealership context before using the owner console'
     );
   }
 }

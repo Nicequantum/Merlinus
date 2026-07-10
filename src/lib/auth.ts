@@ -49,11 +49,14 @@ export interface SessionPayload {
   legalDisclaimerAt: string | null;
   legalDisclaimerVersion: string | null;
   sessionVersion: number;
-  /** APEX Phase 5.5 — national vs dealership context (owners only in apex mode). */
-  scopeMode?: 'national' | 'dealership';
+  /** APEX — national | group | dealership (owners only in apex mode). */
+  scopeMode?: 'national' | 'group' | 'dealership';
   isOwner?: boolean;
   /** Active rooftop when scopeMode is dealership (may differ from sentinel FK). */
   activeDealershipId?: string;
+  /** Active DealerGroup when scopeMode is group (PR-G2). */
+  activeDealerGroupId?: string;
+  dealerGroupName?: string;
   /** Provisioned / reset accounts must change password before PII routes. */
   mustChangePassword?: boolean;
 }

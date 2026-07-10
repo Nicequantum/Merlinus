@@ -84,7 +84,8 @@ export async function setRlsContext(client: RlsDbClient, ctx: RlsContext): Promi
   const technicianId = ctx.technicianId?.trim() || '';
   const activeDealershipId = ctx.activeDealershipId?.trim() || '';
   const dealerId = ctx.dealerId?.trim() || '';
-  const scopeMode = ctx.scopeMode === 'national' ? 'national' : 'dealership';
+  // Group home is non-PII like national — only dealership scope enables rooftop RLS filters.
+  const scopeMode = ctx.scopeMode === 'dealership' ? 'dealership' : 'national';
 
   await client.$executeRaw`SELECT set_config('app.rls_enforced', ${enforced ? 'on' : 'off'}, true)`;
   await client.$executeRaw`SELECT set_config('app.rls_bypass', ${bypass ? 'on' : 'off'}, true)`;

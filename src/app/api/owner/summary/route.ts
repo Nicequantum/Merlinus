@@ -16,9 +16,14 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const summary = await getOwnerNationalSummary();
+      const summary = await getOwnerNationalSummary({
+        technicianId: session.technicianId,
+        scopeMode: session.scopeMode,
+        activeDealerGroupId: session.activeDealerGroupId,
+        dealerGroupName: session.dealerGroupName,
+      });
 
-      // Phase 6.1 — fail-closed national console access audit
+      // Phase 6.1 — fail-closed owner console access audit
       await writeAuditedAccess(
         {
           action: 'owner.national_access',
@@ -29,8 +34,10 @@ export async function GET(request: Request) {
           entityId: session.technicianId,
           ipAddress: getRequestIp(request),
           authSource: 'legacy',
-          scopeMode: 'national',
+          scopeMode: summary.scopeMode === 'group' ? 'national' : 'national',
           metadata: {
+            consoleScope: summary.scopeMode ?? 'national',
+            dealerGroupId: summary.dealerGroupId ?? null,
             dealerCount: summary.dealerCount,
             dealershipCount: summary.dealershipCount,
             activeUsers: summary.activeUsers,

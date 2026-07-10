@@ -374,10 +374,13 @@ export interface TechnicianSession {
   consentVersion: string | null;
   legalDisclaimerAt: string | null;
   legalDisclaimerVersion: string | null;
-  /** APEX Phase 5.5 — national vs dealership context (owners only). */
-  scopeMode?: 'national' | 'dealership';
+  /** APEX — national (platform) | group (DealerGroup) | dealership (entered rooftop). */
+  scopeMode?: 'national' | 'group' | 'dealership';
   isOwner?: boolean;
   activeDealershipId?: string;
+  /** Active franchise portfolio when scopeMode is group (PR-G2). */
+  activeDealerGroupId?: string;
+  dealerGroupName?: string;
   /** True until first successful password change after provision/admin reset. */
   mustChangePassword?: boolean;
 }

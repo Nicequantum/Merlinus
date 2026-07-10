@@ -13,7 +13,7 @@ import {
   normalizeCredentialIdentifier,
   type CredentialType,
 } from '@/lib/apex/credentialType';
-import { buildOwnerNationalSession } from '@/lib/apex/ownerDealershipContext';
+import { buildOwnerHomeSession } from '@/lib/apex/ownerDealershipContext';
 import { listActiveDealershipMemberships } from '@/lib/apex/membershipGuard';
 import { prisma } from '@/lib/db';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
@@ -174,17 +174,15 @@ export async function resolveUnifiedLogin(
   if (!passwordValid) return { status: 'invalid' };
 
   if (tech.role === 'owner') {
-    // Owners: email (platform) or apex username (group owners). Land national until enter-rooftop.
-    // Group membership scoping (DealerGroup) is enforced in later PRs on dealership list/enter.
+    // Owners: email (platform) or apex username (group). Home = group or platform national.
     if (credentialType !== 'email' && credentialType !== 'username') return { status: 'invalid' };
-    const ownerSession = await buildOwnerNationalSession(tech.id);
+    const ownerSession = await buildOwnerHomeSession(tech.id);
     if (!ownerSession) return { status: 'invalid' };
     return {
       status: 'success',
       credentialType,
       session: {
         ...ownerSession,
-        scopeMode: 'national',
         isOwner: true,
         activeDealershipId: undefined,
       },

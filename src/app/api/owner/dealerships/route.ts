@@ -1,8 +1,7 @@
-import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
+import { listEnterableDealershipsForOwner } from '@/lib/apex/dealerGroupAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError } from '@/lib/errors';
-import { prisma } from '@/lib/db';
 
 export async function GET(request: Request) {
   if (!isApexPlatformMode()) {
@@ -11,25 +10,22 @@ export async function GET(request: Request) {
 
   return withAuth(
     request,
-    async () => {
-      // National sentinel never appears as an enterable rooftop (Phase 6.3).
-      const dealerships = await prisma.dealership.findMany({
-        where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
-        select: {
-          id: true,
-          name: true,
-          dealer: { select: { code: true } },
-        },
-        orderBy: { name: 'asc' },
-      });
+    async (session) => {
+      // Group owners: only rooftops under their DealerGroup memberships.
+      // Platform national owners (no memberships): all non-sentinel rooftops.
+      const dealerships = await listEnterableDealershipsForOwner(session.technicianId);
 
       return {
         dealerships: dealerships.map((dealership) => ({
           id: dealership.id,
           name: dealership.name,
-          dealerCode: dealership.dealer?.code ?? null,
+          dealerCode: dealership.dealerCode,
           isPrimary: false,
+          dealerGroupId: dealership.dealerGroupId,
         })),
+        scopeMode: session.scopeMode ?? 'national',
+        activeDealerGroupId: session.activeDealerGroupId ?? null,
+        dealerGroupName: session.dealerGroupName ?? null,
       };
     },
     {

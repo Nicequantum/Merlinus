@@ -8,7 +8,8 @@ import type { AuditScopeMode } from '@/lib/apex/platformConstants';
 import { findActiveDealershipMembership } from '@/lib/apex/membershipGuard';
 import {
   buildOwnerDealershipSession,
-  buildOwnerNationalSession,
+  buildOwnerGroupSession,
+  buildOwnerHomeSession,
 } from '@/lib/apex/ownerDealershipContext';
 import {
   buildSessionPayloadFromTechnician,
@@ -385,7 +386,10 @@ async function resolveTechnicianSessionFromClaims(
     if (claims.scopeMode === 'dealership' && claims.activeDealershipId) {
       return buildOwnerDealershipSession(tech.id, claims.activeDealershipId);
     }
-    return buildOwnerNationalSession(tech.id);
+    if (claims.scopeMode === 'group' && claims.activeDealerGroupId) {
+      return buildOwnerGroupSession(tech.id, claims.activeDealerGroupId);
+    }
+    return buildOwnerHomeSession(tech.id);
   }
 
   const membership = await findActiveDealershipMembership(tech.id, claims.dealershipId, {
@@ -476,8 +480,10 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
   if (tech.role === 'owner') {
     if (lenientClaims?.scopeMode === 'dealership' && lenientClaims.activeDealershipId) {
       session = await buildOwnerDealershipSession(tech.id, lenientClaims.activeDealershipId);
+    } else if (lenientClaims?.scopeMode === 'group' && lenientClaims.activeDealerGroupId) {
+      session = await buildOwnerGroupSession(tech.id, lenientClaims.activeDealerGroupId);
     } else {
-      session = await buildOwnerNationalSession(tech.id);
+      session = await buildOwnerHomeSession(tech.id);
     }
   } else if (
     lenientClaims &&

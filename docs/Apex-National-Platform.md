@@ -47,7 +47,15 @@ npm run db:seed
 ```
 
 Optional overrides: `VITI_AUTO_OWNER_USERNAME`, `VITI_AUTO_OWNER_EMAIL`, `VITI_AUTO_OWNER_NAME`.  
-Group-scoped dashboard filtering lands in later PRs (G2+); membership rows are stored now.
+**PR-G2:** Group owners login with Apex username and land in `scopeMode: 'group'`.  
+Dealership list and summary metrics are filtered to their `DealerGroupMembership`.  
+Platform owners (no membership) keep full national scope.
+
+```text
+James Gray (viti.james.gray) → group home (Viti Automotive Group)
+  → enter dealership → only VITIMB / VITIVOLVO rooftops
+  → exit → back to group home
+```
 
 ### Seed an owner (development / staging)
 

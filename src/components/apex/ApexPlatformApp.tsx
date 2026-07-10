@@ -41,7 +41,7 @@ const BenzTechAuthenticatedApp = dynamic(
 
 type SessionPhase = 'checking' | 'anonymous' | 'authenticated';
 
-/** Normalize owner national fields so routing never misses national console. */
+/** Normalize owner home fields so routing never misses group/national console. */
 function normalizeClientSession(session: TechnicianSession): TechnicianSession {
   if (session.role !== 'owner') {
     return {
@@ -50,18 +50,26 @@ function normalizeClientSession(session: TechnicianSession): TechnicianSession {
       isOwner: false,
     };
   }
-  const scopeMode = session.scopeMode === 'dealership' ? 'dealership' : 'national';
+  const scopeMode =
+    session.scopeMode === 'dealership'
+      ? 'dealership'
+      : session.scopeMode === 'group'
+        ? 'group'
+        : 'national';
   return {
     ...session,
     scopeMode,
     isOwner: true,
-    // Clear stale active rooftop when national
+    // Clear stale active rooftop when on group/platform home
     activeDealershipId: scopeMode === 'dealership' ? session.activeDealershipId : undefined,
   };
 }
 
-function isOwnerNationalScope(session: TechnicianSession): boolean {
-  return session.role === 'owner' && (session.scopeMode ?? 'national') === 'national';
+/** Owner home console (platform national or DealerGroup). */
+function isOwnerHomeScope(session: TechnicianSession): boolean {
+  if (session.role !== 'owner') return false;
+  const scope = session.scopeMode ?? 'national';
+  return scope === 'national' || scope === 'group';
 }
 
 function isOwnerDealershipScope(session: TechnicianSession): boolean {
@@ -253,7 +261,7 @@ export function ApexPlatformApp() {
     );
   }
 
-  if (isOwnerNationalScope(session)) {
+  if (isOwnerHomeScope(session)) {
     return (
       <ApexOwnerNationalShell
         session={session}

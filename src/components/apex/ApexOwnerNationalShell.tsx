@@ -45,6 +45,12 @@ export function ApexOwnerNationalShell({
   const [dealerships, setDealerships] = useState<ApexDealershipOption[]>([]);
   const [loadingDealerships, setLoadingDealerships] = useState(false);
 
+  const isGroupHome = session.scopeMode === 'group';
+  const homeTitle = isGroupHome
+    ? session.dealerGroupName || 'Group operations'
+    : 'National Operations';
+  const scopeBadge = isGroupHome ? 'Group' : 'National';
+
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     setSummaryError(null);
@@ -108,14 +114,14 @@ export function ApexOwnerNationalShell({
           <div className="apex-national-header-brand">
             <ApexLogoMark size="sm" title="Apex National Platform" />
             <div>
-              <p className="apex-national-header-title">National Operations</p>
+              <p className="apex-national-header-title">{homeTitle}</p>
               <p className="apex-national-header-user">{session.name}</p>
             </div>
           </div>
           <div className="apex-national-header-actions">
             <div className="apex-scope-badge" aria-label="Current scope">
               <span aria-hidden="true">◆</span>
-              National
+              {scopeBadge}
             </div>
             <button
               type="button"
@@ -135,7 +141,9 @@ export function ApexOwnerNationalShell({
               <div>
                 <h2 className="apex-national-panel-title">Enter dealership</h2>
                 <p className="apex-hint">
-                  Select a rooftop to access dealership PII and repair orders. This action is audited.
+                  {isGroupHome
+                    ? 'Select a rooftop in your group to access dealership PII and repair orders. This action is audited.'
+                    : 'Select a rooftop to access dealership PII and repair orders. This action is audited.'}
                 </p>
               </div>
               <button
@@ -155,7 +163,11 @@ export function ApexOwnerNationalShell({
                 loading={actionLoading}
                 showRememberDefault={false}
                 title="Choose rooftop"
-                subtitle="National scope has no PII access until you enter a dealership."
+                subtitle={
+                  isGroupHome
+                    ? 'Group scope has no PII until you enter a dealership in your portfolio.'
+                    : 'National scope has no PII access until you enter a dealership.'
+                }
                 onSelect={(dealershipId) => handleEnterDealership(dealershipId)}
               />
             )}
@@ -164,11 +176,18 @@ export function ApexOwnerNationalShell({
           <>
             <section className="apex-national-hero apex-card apex-card-accent">
               <div className="apex-national-hero-copy">
-                <p className="apex-login-kicker">Command center</p>
-                <h1 className="apex-national-hero-title">National operations overview</h1>
+                <p className="apex-login-kicker">
+                  {isGroupHome ? 'Group command center' : 'Command center'}
+                </p>
+                <h1 className="apex-national-hero-title">
+                  {isGroupHome
+                    ? `${session.dealerGroupName || 'Group'} overview`
+                    : 'National operations overview'}
+                </h1>
                 <p className="apex-national-hero-subtitle">
-                  Aggregate visibility across dealers and rooftops — no customer PII at national
-                  scope. Enter a dealership when you need repair-order access.
+                  {isGroupHome
+                    ? 'Aggregate visibility across your franchise rooftops — no customer PII at group scope. Enter a dealership when you need repair-order access.'
+                    : 'Aggregate visibility across dealers and rooftops — no customer PII at national scope. Enter a dealership when you need repair-order access.'}
                 </p>
               </div>
               <button
@@ -181,7 +200,9 @@ export function ApexOwnerNationalShell({
             </section>
 
             {summaryLoading ? (
-              <p className="apex-hint apex-national-loading">Loading national metrics…</p>
+              <p className="apex-hint apex-national-loading">
+                {isGroupHome ? 'Loading group metrics…' : 'Loading national metrics…'}
+              </p>
             ) : summaryError ? (
               <div className="apex-national-panel apex-card">
                 <p className="apex-hint">{summaryError}</p>
@@ -195,7 +216,10 @@ export function ApexOwnerNationalShell({
               </div>
             ) : summary ? (
               <>
-                <section className="apex-stat-grid" aria-label="National metrics">
+                <section
+                  className="apex-stat-grid"
+                  aria-label={isGroupHome ? 'Group metrics' : 'National metrics'}
+                >
                   <StatCard label="Active dealers" value={summary.dealerCount} />
                   <StatCard label="Dealership rooftops" value={summary.dealershipCount} />
                   <StatCard label="Active users" value={summary.activeUsers} />
@@ -204,7 +228,9 @@ export function ApexOwnerNationalShell({
 
                 <section className="apex-national-panel apex-card">
                   <div className="apex-national-panel-head">
-                    <h2 className="apex-national-panel-title">Recent platform activity</h2>
+                    <h2 className="apex-national-panel-title">
+                      {isGroupHome ? 'Recent group activity' : 'Recent platform activity'}
+                    </h2>
                     <button
                       type="button"
                       className="apex-btn-secondary touch-target"

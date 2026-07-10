@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { issueApexSessionCookies } from '@/lib/apex/apexSession';
-import { buildOwnerNationalSession } from '@/lib/apex/ownerDealershipContext';
+import { buildOwnerHomeSession } from '@/lib/apex/ownerDealershipContext';
 import { rlsContextFromSession } from '@/lib/apex/rlsContext';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
@@ -35,10 +35,13 @@ export async function POST(request: Request) {
         }
 
         const previousDealershipId = session.activeDealershipId ?? session.dealershipId;
-        const ownerSession = await buildOwnerNationalSession(session.technicianId);
+        // PR-G2 — return to group home when member, else platform national
+        const ownerSession = await buildOwnerHomeSession(session.technicianId);
         if (!ownerSession) {
           return apiError('Unable to exit dealership context.', 403);
         }
+
+        const homeScope = ownerSession.scopeMode === 'group' ? 'group' : 'national';
 
         await writeAuditedAccess(
           {
@@ -50,21 +53,23 @@ export async function POST(request: Request) {
             entityId: previousDealershipId,
             ipAddress: getRequestIp(request),
             authSource: 'legacy',
-            scopeMode: 'national',
+            scopeMode: homeScope === 'group' ? 'national' : 'national',
             metadata: {
               previousDealershipId,
               previousDealershipName: session.dealershipName,
+              homeScopeMode: homeScope,
+              dealerGroupId: ownerSession.activeDealerGroupId ?? null,
             },
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
         );
 
-        // Phase 6.2 — drop dealership-scope refresh families before national re-issue
+        // Phase 6.2 — drop dealership-scope refresh families before home re-issue
         await revokeApexRefreshForScopeSwitch(session.technicianId);
 
         const response = NextResponse.json({
           session: toTechnicianSession(ownerSession),
-          scopeMode: 'national' as const,
+          scopeMode: homeScope,
         });
         await issueApexSessionCookies(response, ownerSession, request, { authSource: 'legacy' });
 

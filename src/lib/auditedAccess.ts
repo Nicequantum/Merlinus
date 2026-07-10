@@ -56,7 +56,7 @@ export async function writeAuditedAccess(
         technicianId: input.technicianId?.trim() || '',
         activeDealershipId: input.dealershipId?.trim() || null,
         dealerId: input.dealerId?.trim() || null,
-        scopeMode: input.scopeMode === 'national' ? 'national' : 'dealership',
+        scopeMode: input.scopeMode === 'dealership' ? 'dealership' : 'national',
         enforced: true,
       });
     }

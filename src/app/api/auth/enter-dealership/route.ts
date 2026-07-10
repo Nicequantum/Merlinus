@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { issueApexSessionCookies } from '@/lib/apex/apexSession';
+import { ownerMayEnterDealership } from '@/lib/apex/dealerGroupAccess';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { buildOwnerDealershipSession } from '@/lib/apex/ownerDealershipContext';
 import { rlsContextFromSession } from '@/lib/apex/rlsContext';
@@ -55,6 +56,12 @@ export async function POST(request: Request) {
           return apiError('Dealership not found.', 404);
         }
 
+        // PR-G2 — group owners may only enter rooftops in their DealerGroup(s)
+        const allowed = await ownerMayEnterDealership(session.technicianId, dealership.id);
+        if (!allowed) {
+          return apiError('You do not have access to this dealership.', 403);
+        }
+
         const ownerSession = await buildOwnerDealershipSession(session.technicianId, dealership.id);
         if (!ownerSession) {
           return apiError('Unable to enter dealership context.', 403);
@@ -74,6 +81,7 @@ export async function POST(request: Request) {
             metadata: {
               previousScopeMode: session.scopeMode ?? 'national',
               dealershipName: dealership.name,
+              dealerGroupId: ownerSession.activeDealerGroupId ?? null,
             },
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
@@ -102,7 +110,7 @@ export async function POST(request: Request) {
       },
       {
         requireOwner: true,
-        // Phase 6.4 — must be national before entering a rooftop
+        // Phase 6.4 / G2 — must be platform national or group home before entering a rooftop
         requireOwnerNational: true,
         rateLimitKey: 'auth.enter_dealership',
         skipRateLimit: true,
