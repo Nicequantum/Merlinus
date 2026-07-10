@@ -47,6 +47,30 @@ function isTruthyEnv(value: string | undefined): boolean {
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
 }
 
+/**
+ * Local/legacy alias support: older Merlinus envs used ENCRYPTION_KEY.
+ * Map to DATA_ENCRYPTION_KEY + SEARCH_HMAC_KEY when the modern names are unset
+ * so `npm run dev` / `dev:apex` work without a manual rename.
+ */
+export function applyLegacyEncryptionEnvAliases(): string[] {
+  const notes: string[] = [];
+  const legacy = process.env.ENCRYPTION_KEY?.trim();
+  if (!legacy || legacy.length < 32) return notes;
+
+  if (!process.env.DATA_ENCRYPTION_KEY?.trim()) {
+    process.env.DATA_ENCRYPTION_KEY = legacy;
+    notes.push('DATA_ENCRYPTION_KEY aliased from legacy ENCRYPTION_KEY');
+  }
+  if (!process.env.SEARCH_HMAC_KEY?.trim()) {
+    // Prefer a distinct search key when possible; fall back to legacy so RO blind-index still works.
+    process.env.SEARCH_HMAC_KEY = legacy;
+    notes.push(
+      'SEARCH_HMAC_KEY aliased from legacy ENCRYPTION_KEY — set a dedicated SEARCH_HMAC_KEY (openssl rand -hex 32) for production'
+    );
+  }
+  return notes;
+}
+
 /** True when MERLIN_MAINTENANCE_MODE is enabled — blocks AI routes and shows maintenance UI. */
 export function isMaintenanceModeEnabled(): boolean {
   return isTruthyEnv(process.env.MERLIN_MAINTENANCE_MODE);
@@ -73,6 +97,10 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
   const missing: string[] = [];
   const warnings: string[] = [];
   const isProduction = options.production ?? process.env.NODE_ENV === 'production';
+
+  for (const note of applyLegacyEncryptionEnvAliases()) {
+    warnings.push(note);
+  }
 
   for (const key of REQUIRED_ENV_VARS) {
     if (!process.env[key]?.trim()) {

@@ -6,7 +6,8 @@ import { createHmac } from 'crypto';
 const MIN_RO_SEARCH_FRAGMENT_LEN = 2;
 
 function getSearchHmacSecret(): string {
-  const secret = process.env.SEARCH_HMAC_KEY?.trim();
+  const secret =
+    process.env.SEARCH_HMAC_KEY?.trim() || process.env.ENCRYPTION_KEY?.trim();
   if (!secret || secret.length < 32) {
     throw new Error('SEARCH_HMAC_KEY must be set (min 32 chars) for PII search tokens');
   }

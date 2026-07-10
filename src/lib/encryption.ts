@@ -32,7 +32,8 @@ function getScryptSalt(): string {
 const LEGACY_SCRYPT_SALT = 'benz-tech-pii-salt';
 
 function getDataEncryptionSecret(): string {
-  const secret = process.env.DATA_ENCRYPTION_KEY?.trim();
+  const secret =
+    process.env.DATA_ENCRYPTION_KEY?.trim() || process.env.ENCRYPTION_KEY?.trim();
   if (!secret || secret.length < 32) {
     throw new Error('DATA_ENCRYPTION_KEY must be set (min 32 chars) for PII encryption');
   }
