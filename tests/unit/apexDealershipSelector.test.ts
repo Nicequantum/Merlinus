@@ -46,6 +46,8 @@ describe('ApexDealershipSelector (Phase 5.8)', () => {
     const route = readSrc('src/app/api/owner/dealerships/route.ts');
     assert.match(route, /requireOwner/);
     assert.match(route, /isApexPlatformMode/);
-    assert.match(route, /APEX_NATIONAL_DEALERSHIP_ID/);
+    // PR-G2: group-scoped listing (platform national still uses all non-sentinel rooftops)
+    assert.match(route, /listEnterableDealershipsForOwner|APEX_NATIONAL_DEALERSHIP_ID/);
+    assert.match(route, /requireOwnerNational/);
   });
 });

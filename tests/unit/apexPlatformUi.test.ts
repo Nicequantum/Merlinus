@@ -37,7 +37,8 @@ describe('Apex platform UI foundation (Phase 5.6)', () => {
   it('ApexPlatformApp routes owner national scope separately', () => {
     const src = readSrc('src/components/apex/ApexPlatformApp.tsx');
     assert.match(src, /ApexOwnerNationalShell/);
-    assert.match(src, /isOwnerNationalScope/);
+    // PR-G2: owner home includes platform national and DealerGroup scope
+    assert.match(src, /isOwnerHomeScope|isOwnerNationalScope/);
     assert.match(src, /loginWithIdentifier/);
     assert.match(src, /BenzTechAuthenticatedApp/);
     // Must trust login body immediately and never hang on /api/auth/me

@@ -53,6 +53,7 @@ describe('credentialType (Phase 5.3)', () => {
     assert.equal(isCredentialRoleAllowed('d7', 'technician'), true);
     assert.equal(isCredentialRoleAllowed('d7', 'owner'), false);
     assert.equal(isCredentialRoleAllowed('username', 'service_advisor'), true);
-    assert.equal(isCredentialRoleAllowed('username', 'owner'), false);
+    // PR-G1: group owners may sign in with apex username (e.g. viti.james.gray)
+    assert.equal(isCredentialRoleAllowed('username', 'owner'), true);
   });
 });

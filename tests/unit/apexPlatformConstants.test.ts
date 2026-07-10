@@ -15,7 +15,8 @@ describe('apex platformConstants (Phase 5.1)', () => {
 
   test('audit enums cover fortress session fields', () => {
     assert.deepEqual([...AUDIT_AUTH_SOURCES], ['legacy', 'clerk', 'refresh']);
-    assert.deepEqual([...AUDIT_SCOPE_MODES], ['national', 'dealership']);
+    // PR-G2: group scope for DealerGroup owner home (between national and dealership)
+    assert.deepEqual([...AUDIT_SCOPE_MODES], ['national', 'group', 'dealership']);
   });
 
   test('schema includes Phase 5.1 models and fields', () => {

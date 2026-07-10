@@ -4,6 +4,15 @@ All notable changes to Merlinus are documented here.
 
 ## [3.0.1] — 2026-07-10
 
+### DealerGroup & group owner dashboard
+
+- **PR-G1** — `DealerGroup` / `DealerGroupMembership` schema, VITI-AUTO seed, James Gray username owner (`viti.james.gray`).
+- **PR-G2** — `scopeMode: group`, membership-filtered dealership list, enter/exit home session.
+- **PR-G3** — Tier 1 portfolio metrics + rooftop comparison cards.
+- **PR-G4** — Tier 2 trends (sparklines), certification rate, time-to-certify, AI usage, login health, staff depth.
+- **PR-G5** — Tier 3 categorized attention flags, UX polish, `docs/Apex-DealerGroup-Owner-Dashboard.md`, pre-rollout **APEX DealerGroup** gate.
+- Unit tests updated for group scope enums, owner username login, owner home routing, and group-scoped dealership API.
+
 ### Secure dealer provisioning (Apex multi-rooftop)
 
 - **PR-P1** — `provisionDealer()` engine, CLI (`npm run provision-dealer`), templates, `must_change_password` migration, PII-free `dealer.provision` audit.
