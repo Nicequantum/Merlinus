@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConsentModal } from '@/components/ConsentModal';
+import { ForcedPasswordChangeScreen } from '@/components/ForcedPasswordChangeScreen';
 import { LegalDisclaimerModal } from '@/components/LegalDisclaimerModal';
 import { LoginView } from '@/components/LoginView';
 import { LoadingScreen } from '@/components/LoadingScreen';
@@ -19,7 +20,7 @@ import {
 } from '@/lib/loginSession';
 import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
-import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
+import { needsConsent, needsLegalDisclaimer, needsPasswordChange } from '@/lib/complianceSession';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
 import type { TechnicianSession } from '@/types';
 
@@ -154,6 +155,19 @@ export function BenzTechApp() {
       );
     }
     return <LoginView onLogin={login} />;
+  }
+
+  if (needsPasswordChange(session)) {
+    return (
+      <ForcedPasswordChangeScreen
+        userName={session.name}
+        rooftopName={session.dealershipName}
+        onCompleted={async () => {
+          await logout();
+        }}
+        onLogout={logout}
+      />
+    );
   }
 
   if (needsConsent(session)) {

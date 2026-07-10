@@ -38,6 +38,9 @@
 | Document | Purpose |
 |----------|---------|
 | [Admin-Setup-Guide.md](./Admin-Setup-Guide.md) | Environment, validation, monitoring, encryption |
+| [Apex-National-Platform.md](./Apex-National-Platform.md) | Apex modes, owners, fortress summary, onboarding pointer |
+| [Apex-Dealer-Onboarding.md](./Apex-Dealer-Onboarding.md) | Secure multi-rooftop provision CLI, forced password, smoke tests |
+| [Security-Fortress.md](./Security-Fortress.md) | Phase 6 RLS, mandatory audits, session revocation |
 
 ### Rollout execution
 | Document | Purpose |

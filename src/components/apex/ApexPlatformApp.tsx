@@ -8,13 +8,14 @@ import { ApexLoginShell, type ApexLoginShellResult } from '@/components/apex/Ape
 import { ApexOwnerDealershipWorkspace } from '@/components/apex/ApexOwnerDealershipWorkspace';
 import { ApexOwnerNationalShell } from '@/components/apex/ApexOwnerNationalShell';
 import { ConsentModal } from '@/components/ConsentModal';
+import { ForcedPasswordChangeScreen } from '@/components/ForcedPasswordChangeScreen';
 import { LegalDisclaimerModal } from '@/components/LegalDisclaimerModal';
 import {
   loginWithIdentifier,
   selectDealershipSession,
 } from '@/lib/apexLoginSession';
 import { clientLog } from '@/lib/clientLog';
-import { needsConsent, needsLegalDisclaimer } from '@/lib/complianceSession';
+import { needsConsent, needsLegalDisclaimer, needsPasswordChange } from '@/lib/complianceSession';
 import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
@@ -189,6 +190,19 @@ export function ApexPlatformApp() {
 
   if (sessionPhase !== 'authenticated' || !session) {
     return <ApexLoginShell onLogin={login} onSelectDealership={selectDealership} />;
+  }
+
+  if (needsPasswordChange(session)) {
+    return (
+      <ForcedPasswordChangeScreen
+        userName={session.name}
+        rooftopName={session.dealershipName}
+        onCompleted={async () => {
+          await logout();
+        }}
+        onLogout={logout}
+      />
+    );
   }
 
   if (needsConsent(session)) {

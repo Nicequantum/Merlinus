@@ -155,3 +155,35 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 | Docs | `docs/Security-Fortress.md` + pre-rollout Phase 6 complete gate |
 
 **Phase 6.0 status: complete.**
+
+---
+
+## Dealer onboarding (multi-rooftop provision)
+
+**Full runbook:** [Apex-Dealer-Onboarding.md](./Apex-Dealer-Onboarding.md)
+
+Secure CLI provision creates a **Dealer** (franchise) + **Dealership** (rooftop UI name) + **service manager** with:
+
+| Control | Behavior |
+|---------|----------|
+| Password delivery | Never on argv — env / stdin / interactive / generate |
+| Display name | `--rooftop-name` → `Dealership.name` (full storefront string) |
+| First login | `mustChangePassword` blocks PII until change-password |
+| Audit | `dealer.provision` metadata is PII-free (hashed code + ids) |
+| Templates | `mercedes-rooftop-v1` (D7) · `generic-rooftop-v1` (apex username) |
+
+```bash
+npm run provision-dealer -- \
+  --code=NEWPORT \
+  --dealer-name="Mercedes-Benz of Newport Group" \
+  --rooftop-name="Mercedes-Benz of Newport" \
+  --template=mercedes-rooftop-v1 \
+  --manager-name="…" \
+  --manager-email=… \
+  --manager-d7=D7… \
+  --manager-password-env=NEWPORT_MANAGER_PASSWORD
+```
+
+After provision, the manager signs into Apex, completes the **forced password change** screen, then re-authenticates into the rooftop workspace. National owners see the new rooftop under the full storefront name and enter dealership for scoped PII.
+
+Smoke tests, env vars, deny-lists, and troubleshooting are documented in the onboarding guide.

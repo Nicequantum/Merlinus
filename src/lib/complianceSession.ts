@@ -9,6 +9,13 @@ export type ComplianceSessionFields = Pick<
   'consentAt' | 'consentVersion' | 'legalDisclaimerAt' | 'legalDisclaimerVersion'
 >;
 
+/** True when provision / admin reset requires password rotation before PII routes. */
+export function needsPasswordChange(
+  session: Pick<TechnicianSession, 'mustChangePassword'>
+): boolean {
+  return Boolean(session.mustChangePassword);
+}
+
 /** True when privacy consent is missing or policy version changed. */
 export function needsConsent(session: ComplianceSessionFields): boolean {
   return !session.consentAt?.trim() || session.consentVersion !== CONSENT_VERSION;
