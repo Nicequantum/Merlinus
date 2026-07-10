@@ -9,7 +9,10 @@ import {
 } from '@/components/apex/formatOwnerActivity';
 import { enterOwnerDealership, fetchOwnerDealerships } from '@/lib/apexLoginSession';
 import type { ApexDealershipOption } from '@/lib/apexDealershipOptions';
-import type { OwnerNationalSummary } from '@/lib/ownerSummaryClient';
+import type {
+  OwnerNationalSummary,
+  OwnerRooftopScorecard,
+} from '@/lib/ownerSummaryClient';
 import { fetchOwnerNationalSummary } from '@/lib/ownerSummaryClient';
 import { clientLog } from '@/lib/clientLog';
 import type { TechnicianSession } from '@/types';
@@ -23,12 +26,97 @@ interface ApexOwnerNationalShellProps {
   onSessionRefresh: () => Promise<TechnicianSession | null>;
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+}) {
   return (
     <div className="apex-stat-card">
-      <p className="apex-stat-value">{value.toLocaleString()}</p>
+      <p className="apex-stat-value">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
       <p className="apex-stat-label">{label}</p>
+      {hint ? <p className="apex-stat-hint">{hint}</p> : null}
     </div>
+  );
+}
+
+function statusClass(status: OwnerRooftopScorecard['status']): string {
+  if (status === 'attention') return 'apex-rooftop-status apex-rooftop-status--attention';
+  if (status === 'watch') return 'apex-rooftop-status apex-rooftop-status--watch';
+  return 'apex-rooftop-status apex-rooftop-status--healthy';
+}
+
+function RooftopCard({
+  rooftop,
+  onEnter,
+  entering,
+}: {
+  rooftop: OwnerRooftopScorecard;
+  onEnter: (id: string) => void;
+  entering: boolean;
+}) {
+  return (
+    <article className="apex-rooftop-card apex-card">
+      <div className="apex-rooftop-card-head">
+        <div>
+          <p className="apex-rooftop-code">{rooftop.dealerCode ?? '—'}</p>
+          <h3 className="apex-rooftop-name">{rooftop.name}</h3>
+          {rooftop.dealerName ? (
+            <p className="apex-hint apex-rooftop-dealer">{rooftop.dealerName}</p>
+          ) : null}
+        </div>
+        <span className={statusClass(rooftop.status)}>{rooftop.status}</span>
+      </div>
+      <dl className="apex-rooftop-metrics">
+        <div>
+          <dt>RO 7d</dt>
+          <dd>{rooftop.roVolume7d}</dd>
+        </div>
+        <div>
+          <dt>RO 30d</dt>
+          <dd>{rooftop.roVolume30d}</dd>
+        </div>
+        <div>
+          <dt>Certified 7d</dt>
+          <dd>{rooftop.certifiedStories7d}</dd>
+        </div>
+        <div>
+          <dt>Certified 30d</dt>
+          <dd>{rooftop.certifiedStories30d}</dd>
+        </div>
+        <div>
+          <dt>Staff</dt>
+          <dd>{rooftop.activeStaff}</dd>
+        </div>
+        <div>
+          <dt>Adoption</dt>
+          <dd>{rooftop.adoptionRatePct}%</dd>
+        </div>
+      </dl>
+      {rooftop.attentionReasons.length > 0 ? (
+        <ul className="apex-rooftop-flags">
+          {rooftop.attentionReasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="apex-hint apex-rooftop-ok">No attention items</p>
+      )}
+      <button
+        type="button"
+        className="apex-btn-secondary apex-rooftop-enter touch-target"
+        disabled={entering}
+        onClick={() => onEnter(rooftop.dealershipId)}
+      >
+        Enter rooftop
+      </button>
+    </article>
   );
 }
 
@@ -89,7 +177,7 @@ export function ApexOwnerNationalShell({
     try {
       await enterOwnerDealership(dealershipId);
       const latest = await onSessionRefresh();
-      if (!latest || (latest.scopeMode ?? 'national') === 'national') {
+      if (!latest || latest.scopeMode !== 'dealership') {
         throw new Error('Dealership entered but session did not update');
       }
       toast.success(`Entered ${latest.dealershipName}`);
@@ -186,7 +274,7 @@ export function ApexOwnerNationalShell({
                 </h1>
                 <p className="apex-national-hero-subtitle">
                   {isGroupHome
-                    ? 'Aggregate visibility across your franchise rooftops — no customer PII at group scope. Enter a dealership when you need repair-order access.'
+                    ? 'Tier 1 portfolio metrics across your franchise rooftops — no customer PII. Compare stores side by side, then enter a rooftop for bay work.'
                     : 'Aggregate visibility across dealers and rooftops — no customer PII at national scope. Enter a dealership when you need repair-order access.'}
                 </p>
               </div>
@@ -217,20 +305,72 @@ export function ApexOwnerNationalShell({
             ) : summary ? (
               <>
                 <section
-                  className="apex-stat-grid"
-                  aria-label={isGroupHome ? 'Group metrics' : 'National metrics'}
+                  className="apex-stat-grid apex-stat-grid--tier1"
+                  aria-label={isGroupHome ? 'Group Tier 1 metrics' : 'National Tier 1 metrics'}
                 >
-                  <StatCard label="Active dealers" value={summary.dealerCount} />
-                  <StatCard label="Dealership rooftops" value={summary.dealershipCount} />
-                  <StatCard label="Active users" value={summary.activeUsers} />
-                  <StatCard label="RO volume (7 days)" value={summary.repairOrdersLast7Days} />
+                  <StatCard label="Rooftops active" value={summary.dealershipCount} />
+                  <StatCard label="Brands / dealers" value={summary.dealerCount} />
+                  <StatCard label="Active staff" value={summary.activeUsers} />
+                  <StatCard
+                    label="RO volume"
+                    value={summary.repairOrders7d}
+                    hint={`${summary.repairOrders30d.toLocaleString()} in 30d`}
+                  />
+                  <StatCard
+                    label="Stories certified"
+                    value={summary.certifiedStories7d}
+                    hint={`${summary.certifiedStories30d.toLocaleString()} in 30d`}
+                  />
+                  <StatCard
+                    label="Adoption rate"
+                    value={`${summary.adoptionRatePct}%`}
+                    hint="Active staff with activity (7d)"
+                  />
+                  <StatCard
+                    label="Attention flags"
+                    value={summary.attentionFlagCount}
+                    hint={
+                      summary.attentionFlagCount === 0
+                        ? 'All clear'
+                        : 'Review flags below'
+                    }
+                  />
                 </section>
+
+                {summary.attentionFlags.length > 0 ? (
+                  <section className="apex-national-panel apex-card apex-attention-panel">
+                    <div className="apex-national-panel-head">
+                      <h2 className="apex-national-panel-title">Attention</h2>
+                    </div>
+                    <ul className="apex-attention-list">
+                      {summary.attentionFlags.map((flag, i) => (
+                        <li
+                          key={`${flag.code}-${flag.dealershipId ?? 'g'}-${i}`}
+                          className={
+                            flag.severity === 'attention'
+                              ? 'apex-attention-item apex-attention-item--attention'
+                              : 'apex-attention-item apex-attention-item--watch'
+                          }
+                        >
+                          <span className="apex-attention-severity">{flag.severity}</span>
+                          <span>
+                            {flag.label}
+                            {flag.dealershipName ? ` · ${flag.dealershipName}` : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
 
                 <section className="apex-national-panel apex-card">
                   <div className="apex-national-panel-head">
-                    <h2 className="apex-national-panel-title">
-                      {isGroupHome ? 'Recent group activity' : 'Recent platform activity'}
-                    </h2>
+                    <div>
+                      <h2 className="apex-national-panel-title">Rooftop comparison</h2>
+                      <p className="apex-hint">
+                        Side-by-side portfolio scoreboard — enter a rooftop for PII access.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       className="apex-btn-secondary touch-target"
@@ -238,6 +378,28 @@ export function ApexOwnerNationalShell({
                     >
                       Refresh
                     </button>
+                  </div>
+                  {summary.rooftops.length === 0 ? (
+                    <p className="apex-hint">No rooftops in this portfolio yet.</p>
+                  ) : (
+                    <div className="apex-rooftop-grid">
+                      {summary.rooftops.map((rooftop) => (
+                        <RooftopCard
+                          key={rooftop.dealershipId}
+                          rooftop={rooftop}
+                          entering={actionLoading}
+                          onEnter={(id) => void handleEnterDealership(id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="apex-national-panel apex-card">
+                  <div className="apex-national-panel-head">
+                    <h2 className="apex-national-panel-title">
+                      {isGroupHome ? 'Recent group activity' : 'Recent platform activity'}
+                    </h2>
                   </div>
                   {summary.recentActivity.length === 0 ? (
                     <p className="apex-hint">No recent activity recorded.</p>

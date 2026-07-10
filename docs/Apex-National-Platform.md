@@ -57,6 +57,19 @@ James Gray (viti.james.gray) → group home (Viti Automotive Group)
   → exit → back to group home
 ```
 
+**PR-G3 Tier 1 dashboard** (group + national owner home):
+
+| Metric | Notes |
+|--------|--------|
+| Rooftops active | Dealerships in portfolio |
+| Brands / dealers | Active `Dealer` rows |
+| Active staff | Non-owner users |
+| RO volume 7d / 30d | Repair orders updated in window |
+| Stories certified 7d / 30d | `TechnicianCertifiedStory` counts |
+| Adoption rate | % staff with login/work activity in 7d |
+| Attention flags | Stale rooftops, low adoption, password gates, … |
+| Rooftop comparison cards | Side-by-side scoreboard + Enter rooftop |
+
 ### Seed an owner (development / staging)
 
 Add to `.env.local` or `.env.apex.local`:

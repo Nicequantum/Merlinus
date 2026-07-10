@@ -1,6 +1,10 @@
-import type { OwnerNationalSummary } from '@/lib/apex/ownerNationalSummary';
+import type {
+  OwnerAttentionFlag,
+  OwnerNationalSummary,
+  OwnerRooftopScorecard,
+} from '@/lib/apex/ownerNationalSummary';
 
-export type { OwnerNationalSummary };
+export type { OwnerAttentionFlag, OwnerNationalSummary, OwnerRooftopScorecard };
 
 export async function fetchOwnerNationalSummary(): Promise<OwnerNationalSummary> {
   const res = await fetch('/api/owner/summary', {

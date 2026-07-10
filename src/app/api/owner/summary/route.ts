@@ -41,7 +41,11 @@ export async function GET(request: Request) {
             dealerCount: summary.dealerCount,
             dealershipCount: summary.dealershipCount,
             activeUsers: summary.activeUsers,
-            repairOrdersLast7Days: summary.repairOrdersLast7Days,
+            repairOrders7d: summary.repairOrders7d,
+            certifiedStories7d: summary.certifiedStories7d,
+            adoptionRatePct: summary.adoptionRatePct,
+            attentionFlagCount: summary.attentionFlagCount,
+            rooftopCount: summary.rooftops?.length ?? 0,
           },
         },
         { rls: { ...rlsContextFromSession(session), enforced: true } }
