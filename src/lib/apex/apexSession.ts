@@ -349,6 +349,7 @@ function technicianForSessionFromDealership(
     consentVersion: tech.consentVersion,
     legalDisclaimerAt: tech.legalDisclaimerAt,
     legalDisclaimerVersion: tech.legalDisclaimerVersion,
+    mustChangePassword: tech.mustChangePassword,
     dealership: { name: dealership.name, dealerId: dealership.dealerId },
   };
 }

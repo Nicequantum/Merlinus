@@ -19,6 +19,7 @@ import {
   handleRouteError,
   LEGAL_DISCLAIMER_REQUIRED_ERROR,
   MAINTENANCE_MODE_ERROR,
+  PASSWORD_CHANGE_REQUIRED_ERROR,
   UNAUTHORIZED_ERROR,
 } from './errors';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
@@ -42,6 +43,11 @@ interface RouteOptions {
   skipConsent?: boolean;
   /** When true, allow the route before legal disclaimer is recorded (e.g. POST /api/legal-disclaimer). */
   skipLegalDisclaimer?: boolean;
+  /**
+   * Allow while Technician.mustChangePassword is true (change-password, logout, me).
+   * Default false — PII routes blocked until password rotated after provision.
+   */
+  skipPasswordChange?: boolean;
   /** Block when MERLIN_MAINTENANCE_MODE is enabled (AI and heavy write paths). */
   blockInMaintenance?: boolean;
   /** APEX Phase 5.5 — owner-only routes (enter/exit dealership, national console). */
@@ -174,6 +180,13 @@ export async function withAuth<T>(
         { status: 403 }
       );
     }
+  }
+
+  if (!options.skipPasswordChange && session.mustChangePassword) {
+    return NextResponse.json(
+      { error: PASSWORD_CHANGE_REQUIRED_ERROR, code: 'PASSWORD_CHANGE_REQUIRED' },
+      { status: 403 }
+    );
   }
 
   if (!options.skipConsent) {

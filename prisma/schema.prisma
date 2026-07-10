@@ -95,6 +95,12 @@ model Technician {
   apexUsername   String?       @unique
   name           String
   passwordHash   String
+  /**
+   * Apex dealer provision / admin reset — user must change password before PII routes.
+   * Forced for newly provisioned managers.
+   */
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime? @map("password_changed_at")
   /** Phase 4 Clerk — linked Clerk user id; null for legacy D7-only accounts. */
   clerkUserId    String?       @unique @map("clerk_user_id")
   /** Phase 4 — identity provider: legacy (JWT) or clerk. */

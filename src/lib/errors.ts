@@ -16,6 +16,8 @@ export const CONSENT_REQUIRED_ERROR =
   'Data and privacy consent is required before using Merlinus. Please accept the consent terms to continue.';
 export const LEGAL_DISCLAIMER_REQUIRED_ERROR =
   'Legal disclaimer acknowledgment is required before using Merlinus. Please accept the disclaimer to continue.';
+export const PASSWORD_CHANGE_REQUIRED_ERROR =
+  'You must set a new password before continuing. Temporary provision passwords cannot access dealership data.';
 export const MAINTENANCE_MODE_ERROR =
   'Merlinus is in maintenance mode. Story generation and uploads are paused — try again shortly.';
 export const GROK_UNAVAILABLE_ERROR =

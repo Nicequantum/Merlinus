@@ -32,9 +32,16 @@ export async function POST(request: Request) {
       const passwordHash = await hashPassword(parsed.data.newPassword);
       const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
 
+      const forced = Boolean(tech.mustChangePassword);
+
       await prisma.technician.updateMany({
         where: { id: session.technicianId, dealershipId: session.dealershipId },
-        data: { passwordHash, ...dealerFields },
+        data: {
+          passwordHash,
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
+          ...dealerFields,
+        },
       });
 
       // Phase 6.2 — full fortress revocation (JWT version + apex refresh + Clerk)
@@ -48,12 +55,16 @@ export async function POST(request: Request) {
         entityType: 'technician',
         entityId: session.technicianId,
         ipAddress: getRequestIp(request),
-        metadata: { sessionRevoked: true },
+        metadata: { sessionRevoked: true, forced },
       });
 
       await clearSessionCookie();
       return { ok: true, requiresReauth: true };
     },
-    { rateLimitKey: 'auth.change-password', rateLimit: { limit: 5, windowMs: 60_000 } }
+    {
+      rateLimitKey: 'auth.change-password',
+      rateLimit: { limit: 5, windowMs: 60_000 },
+      skipPasswordChange: true,
+    }
   );
 }

@@ -49,6 +49,7 @@ export function toTechnicianSession(payload: SessionPayload): TechnicianSession 
     scopeMode: payload.scopeMode,
     isOwner: payload.isOwner,
     activeDealershipId: payload.activeDealershipId,
+    mustChangePassword: payload.mustChangePassword,
   };
 }
 

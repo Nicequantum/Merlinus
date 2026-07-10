@@ -54,6 +54,8 @@ export interface SessionPayload {
   isOwner?: boolean;
   /** Active rooftop when scopeMode is dealership (may differ from sentinel FK). */
   activeDealershipId?: string;
+  /** Provisioned / reset accounts must change password before PII routes. */
+  mustChangePassword?: boolean;
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
@@ -78,6 +80,7 @@ export type TechnicianForSession = {
   consentVersion: string | null;
   legalDisclaimerAt: Date | null;
   legalDisclaimerVersion: string | null;
+  mustChangePassword?: boolean;
   dealership: { name: string; dealerId?: string | null };
 };
 
@@ -98,6 +101,7 @@ export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): S
     legalDisclaimerAt: tech.legalDisclaimerAt?.toISOString() ?? null,
     legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
+    mustChangePassword: Boolean(tech.mustChangePassword),
   };
 }
 

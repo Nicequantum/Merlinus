@@ -378,6 +378,8 @@ export interface TechnicianSession {
   scopeMode?: 'national' | 'dealership';
   isOwner?: boolean;
   activeDealershipId?: string;
+  /** True until first successful password change after provision/admin reset. */
+  mustChangePassword?: boolean;
 }
 
 export interface TechnicianUsageSummary {
@@ -511,4 +513,5 @@ export const AUDIT_ACTIONS = [
   'customerPayTemplateApplied',
   'customerPayStory.edit',
   'customerPayStory.pdf_export',
+  'dealer.provision',
 ] as const;
