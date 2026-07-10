@@ -1,6 +1,8 @@
 import { getOwnerNationalSummary } from '@/lib/apex/ownerNationalSummary';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { rlsContextFromSession } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError } from '@/lib/errors';
@@ -16,23 +18,27 @@ export async function GET(request: Request) {
     async (session) => {
       const summary = await getOwnerNationalSummary();
 
-      await writeAuditLog({
-        action: 'owner.national_access',
-        dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
-        dealerId: auditDealerIdFromSession(session),
-        technicianId: session.technicianId,
-        entityType: 'owner_console',
-        entityId: session.technicianId,
-        ipAddress: getRequestIp(request),
-        authSource: 'legacy',
-        scopeMode: 'national',
-        metadata: {
-          dealerCount: summary.dealerCount,
-          dealershipCount: summary.dealershipCount,
-          activeUsers: summary.activeUsers,
-          repairOrdersLast7Days: summary.repairOrdersLast7Days,
+      // Phase 6.1 — fail-closed national console access audit
+      await writeAuditedAccess(
+        {
+          action: 'owner.national_access',
+          dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+          dealerId: auditDealerIdFromSession(session),
+          technicianId: session.technicianId,
+          entityType: 'owner_console',
+          entityId: session.technicianId,
+          ipAddress: getRequestIp(request),
+          authSource: 'legacy',
+          scopeMode: 'national',
+          metadata: {
+            dealerCount: summary.dealerCount,
+            dealershipCount: summary.dealershipCount,
+            activeUsers: summary.activeUsers,
+            repairOrdersLast7Days: summary.repairOrdersLast7Days,
+          },
         },
-      });
+        { rls: { ...rlsContextFromSession(session), enforced: true } }
+      );
 
       return summary;
     },

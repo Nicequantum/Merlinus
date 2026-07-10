@@ -83,6 +83,8 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   'auth.password_change',
   'consent.accept',
   'legalDisclaimer.accept',
+  /** Phase 6.1 — RO create is fail-closed via writeAuditedAccess; keep critical for writeAuditLog callers. */
+  'ro.create',
   'ro.extract',
   'diagnostics.extract',
   'story.generate',

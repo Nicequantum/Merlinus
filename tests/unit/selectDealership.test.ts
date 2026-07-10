@@ -17,6 +17,12 @@ describe('select-dealership (Phase 5.4)', () => {
     assert.match(src, /isApexPlatformMode/);
   });
 
+  test('resolveSelectDealershipSession issues dealership scopeMode + activeDealershipId', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/lib/apex/selectDealership.ts'), 'utf8');
+    assert.match(src, /scopeMode:\s*'dealership'/);
+    assert.match(src, /activeDealershipId:\s*dealership\.id/);
+  });
+
   test('refresh route rotates tokens in apex mode only', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/app/api/auth/refresh/route.ts'), 'utf8');
     assert.match(src, /rotateApexRefreshToken/);

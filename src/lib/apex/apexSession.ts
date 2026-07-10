@@ -353,6 +353,21 @@ function technicianForSessionFromDealership(
   };
 }
 
+/** Non-owner rooftop sessions always include dealership scope + active rooftop id. */
+function buildDealershipScopedTechnicianSession(
+  tech: TechnicianForSession & { dealership: { id: string; name: string; dealerId: string | null } },
+  dealership: { id: string; name: string; dealerId: string | null }
+): SessionPayload {
+  const base = buildSessionPayloadFromTechnician(
+    technicianForSessionFromDealership(tech, dealership)
+  );
+  return {
+    ...base,
+    scopeMode: 'dealership',
+    activeDealershipId: dealership.id,
+  };
+}
+
 async function resolveTechnicianSessionFromClaims(
   claims: ApexAccessClaims
 ): Promise<SessionPayload | null> {
@@ -377,10 +392,11 @@ async function resolveTechnicianSessionFromClaims(
   });
   if (!membership || !('dealership' in membership)) return null;
 
-  return buildSessionPayloadFromTechnician(
-    technicianForSessionFromDealership(tech as TechnicianForSession & {
+  return buildDealershipScopedTechnicianSession(
+    tech as TechnicianForSession & {
       dealership: { id: string; name: string; dealerId: string | null };
-    }, membership.dealership)
+    },
+    membership.dealership
   );
 }
 
@@ -470,21 +486,37 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
       includeDealership: true,
     });
     if (membership && 'dealership' in membership) {
-      session = buildSessionPayloadFromTechnician(
-        technicianForSessionFromDealership(
-          tech as TechnicianForSession & {
-            dealership: { id: string; name: string; dealerId: string | null };
-          },
-          membership.dealership
-        )
+      session = buildDealershipScopedTechnicianSession(
+        tech as TechnicianForSession & {
+          dealership: { id: string; name: string; dealerId: string | null };
+        },
+        membership.dealership
       );
     } else {
-      session = buildSessionPayloadFromTechnician(tech as TechnicianForSession);
+      session = buildDealershipScopedTechnicianSession(
+        tech as TechnicianForSession & {
+          dealership: { id: string; name: string; dealerId: string | null };
+        },
+        {
+          id: tech.dealershipId,
+          name: tech.dealership.name,
+          dealerId: tech.dealership.dealerId,
+        }
+      );
     }
   }
 
   if (!session) {
-    session = buildSessionPayloadFromTechnician(tech as TechnicianForSession);
+    session = buildDealershipScopedTechnicianSession(
+      tech as TechnicianForSession & {
+        dealership: { id: string; name: string; dealerId: string | null };
+      },
+      {
+        id: tech.dealershipId,
+        name: tech.dealership.name,
+        dealerId: tech.dealership.dealerId,
+      }
+    );
   }
   const ipHash = hashClientIp(getRequestIp(request));
   const newAccessToken = await createApexAccessToken(session, {

@@ -1777,6 +1777,80 @@ function checkApexPhase55OwnerScope(): void {
   }
 }
 
+function checkApexPhase61RlsFoundation(): void {
+  section('APEX Phase 6.1 — RLS foundation + mandatory auditing');
+
+  const migrationPath = resolve(
+    process.cwd(),
+    'prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/migration.sql'
+  );
+  if (existsSync(migrationPath)) {
+    const sql = readFileSync(migrationPath, 'utf8');
+    const ok =
+      sql.includes('ENABLE ROW LEVEL SECURITY') &&
+      sql.includes('FORCE ROW LEVEL SECURITY') &&
+      sql.includes('RepairOrder') &&
+      sql.includes('AuditLog') &&
+      sql.includes('app.rls_enforced');
+    if (ok) {
+      record('APEX 6.1', 'RLS migration', 'pass', 'FORCE RLS on PII tables with soft-open bridge');
+    } else {
+      record('APEX 6.1', 'RLS migration', 'fail', 'Phase 6.1 migration SQL incomplete');
+    }
+  } else {
+    record('APEX 6.1', 'RLS migration', 'fail', 'Missing 20250712120000_apex_phase6_1_rls_foundation');
+  }
+
+  const rlsPath = resolve(process.cwd(), 'src/lib/apex/rlsContext.ts');
+  if (existsSync(rlsPath)) {
+    const src = readFileSync(rlsPath, 'utf8');
+    const ok =
+      src.includes('setRlsContext') &&
+      src.includes('withRlsContext') &&
+      src.includes('rlsContextFromSession') &&
+      src.includes('set_config');
+    if (ok) {
+      record('APEX 6.1', 'rlsContext.ts', 'pass', 'Transaction-local app.* session vars');
+    } else {
+      record('APEX 6.1', 'rlsContext.ts', 'fail', 'rlsContext.ts incomplete');
+    }
+  } else {
+    record('APEX 6.1', 'rlsContext.ts', 'fail', 'Missing src/lib/apex/rlsContext.ts');
+  }
+
+  const auditedPath = resolve(process.cwd(), 'src/lib/auditedAccess.ts');
+  if (existsSync(auditedPath)) {
+    const src = readFileSync(auditedPath, 'utf8');
+    if (src.includes('writeAuditedAccess') && src.includes('AuditedAccessError')) {
+      record('APEX 6.1', 'writeAuditedAccess', 'pass', 'Fail-closed audited access helper');
+    } else {
+      record('APEX 6.1', 'writeAuditedAccess', 'fail', 'auditedAccess.ts incomplete');
+    }
+  } else {
+    record('APEX 6.1', 'writeAuditedAccess', 'fail', 'Missing src/lib/auditedAccess.ts');
+  }
+
+  const tenantPath = resolve(process.cwd(), 'src/lib/apex/tenantScope.ts');
+  if (existsSync(tenantPath)) {
+    const src = readFileSync(tenantPath, 'utf8');
+    if (src.includes('ownerMayExerciseDealershipPrivilege') && src.includes('isUsableDealershipId')) {
+      record('APEX 6.1', 'Owner least-privilege', 'pass', 'Sentinel + national admin guards');
+    } else {
+      record('APEX 6.1', 'Owner least-privilege', 'fail', 'tenantScope least-privilege helpers missing');
+    }
+  }
+
+  const envExamplePath = resolve(process.cwd(), '.env.example');
+  if (existsSync(envExamplePath)) {
+    const env = readFileSync(envExamplePath, 'utf8');
+    if (env.includes('RLS_ENABLED')) {
+      record('APEX 6.1', 'Env example', 'pass', 'RLS_ENABLED documented');
+    } else {
+      record('APEX 6.1', 'Env example', 'fail', '.env.example missing RLS_ENABLED');
+    }
+  }
+}
+
 function checkApexPhase510Finalize(): void {
   section('APEX Phase 5.10 — Finalize Phase 5');
 
@@ -2009,6 +2083,7 @@ async function main(): Promise<void> {
   checkApexPhase58DealershipSelector();
   checkApexPhase59OwnerNationalConsole();
   checkApexPhase510Finalize();
+  checkApexPhase61RlsFoundation();
   checkLowAuditFixes();
   await checkCoreFeatures();
   await checkDocumentation();

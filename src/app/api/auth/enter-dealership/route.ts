@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { issueApexSessionCookies } from '@/lib/apex/apexSession';
+import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { buildOwnerDealershipSession } from '@/lib/apex/ownerDealershipContext';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { rlsContextFromSession } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { prisma } from '@/lib/db';
@@ -36,8 +39,14 @@ export async function POST(request: Request) {
         const parsed = await parseRequestBody(request, enterDealershipSchema, AUTH_JSON_BODY_LIMIT_BYTES);
         if ('error' in parsed) return parsed.error;
 
+        const dealershipId = parsed.data.dealershipId.trim();
+        // Phase 6.1 least-privilege: never enter the national sentinel as a rooftop.
+        if (dealershipId === APEX_NATIONAL_DEALERSHIP_ID) {
+          return apiError('Cannot enter national sentinel as a dealership context.', 403);
+        }
+
         const dealership = await prisma.dealership.findUnique({
-          where: { id: parsed.data.dealershipId },
+          where: { id: dealershipId },
           select: { id: true, name: true },
         });
 
@@ -50,21 +59,24 @@ export async function POST(request: Request) {
           return apiError('Unable to enter dealership context.', 403);
         }
 
-        await writeAuditLog({
-          action: 'owner.dealership_enter',
-          dealershipId: dealership.id,
-          dealerId: auditDealerIdFromSession(ownerSession),
-          technicianId: session.technicianId,
-          entityType: 'dealership',
-          entityId: dealership.id,
-          ipAddress: getRequestIp(request),
-          authSource: 'legacy',
-          scopeMode: 'dealership',
-          metadata: {
-            previousScopeMode: session.scopeMode ?? 'national',
-            dealershipName: dealership.name,
+        await writeAuditedAccess(
+          {
+            action: 'owner.dealership_enter',
+            dealershipId: dealership.id,
+            dealerId: auditDealerIdFromSession(ownerSession),
+            technicianId: session.technicianId,
+            entityType: 'dealership',
+            entityId: dealership.id,
+            ipAddress: getRequestIp(request),
+            authSource: 'legacy',
+            scopeMode: 'dealership',
+            metadata: {
+              previousScopeMode: session.scopeMode ?? 'national',
+              dealershipName: dealership.name,
+            },
           },
-        });
+          { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
+        );
 
         const response = NextResponse.json({
           session: toTechnicianSession(ownerSession),

@@ -146,8 +146,9 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
     return;
   }
 
+  // d7Number is a partial unique index (WHERE NOT NULL) — Prisma upsert must target email (@unique).
   const created = await prisma.technician.upsert({
-    where: { d7Number: d7 },
+    where: { email: canonicalEmail },
     update: accountData,
     create: accountData,
   });

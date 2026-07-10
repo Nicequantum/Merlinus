@@ -83,11 +83,18 @@ export async function resolveSelectDealershipSession(input: {
           select: { id: true, name: true, dealerId: true },
         });
 
-  return buildSessionPayloadFromTechnician(
+  const base = buildSessionPayloadFromTechnician(
     toTechnicianForSession(tech, {
       id: dealership.id,
       name: dealership.name,
       dealerId: dealership.dealerId,
     })
   );
+
+  // Multi-rooftop selection always lands in dealership scope with an active rooftop.
+  return {
+    ...base,
+    scopeMode: 'dealership',
+    activeDealershipId: dealership.id,
+  };
 }

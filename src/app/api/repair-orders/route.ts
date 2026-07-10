@@ -1,5 +1,7 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { rlsContextFromSession } from '@/lib/apex/rlsContext';
 import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import {
   captureAdvisorIntelligence,
@@ -256,17 +258,21 @@ export async function POST(request: Request) {
           });
         }
 
-        await writeAuditLog({
-          action: 'ro.create',
-          dealershipId: session.dealershipId,
-          dealerId: auditDealerIdFromSession(session),
-          technicianId: session.technicianId,
-          entityType: 'repairOrder',
-          entityId: created.id,
-          // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
-          metadata: { roNumber: readRoNumberFromDb(created) },
-          ipAddress: getRequestIp(request),
-        });
+        // Phase 6.1 — fail-closed create audit (RO must not exist without durable trail)
+        await writeAuditedAccess(
+          {
+            action: 'ro.create',
+            dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
+            technicianId: session.technicianId,
+            entityType: 'repairOrder',
+            entityId: created.id,
+            // S2: audit stores roNumber as operational identifier (not customer PII) — see schema migration plan.
+            metadata: { roNumber: readRoNumberFromDb(created) },
+            ipAddress: getRequestIp(request),
+          },
+          { rls: { ...rlsContextFromSession(session), enforced: true } }
+        );
 
         return { repairOrder: dbToRepairOrder(created) };
       } catch (error) {
@@ -279,6 +285,10 @@ export async function POST(request: Request) {
         return handleRouteError(error, 'ros.create');
       }
     },
-    { rateLimitKey: 'ros.create', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.create',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }

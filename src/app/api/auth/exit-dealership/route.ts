@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { issueApexSessionCookies } from '@/lib/apex/apexSession';
 import { buildOwnerNationalSession } from '@/lib/apex/ownerDealershipContext';
-import { auditDealerIdFromSession, writeAuditLog } from '@/lib/audit';
+import { rlsContextFromSession } from '@/lib/apex/rlsContext';
+import { auditDealerIdFromSession } from '@/lib/audit';
+import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
 import { apiError, handleRouteError } from '@/lib/errors';
@@ -37,21 +39,24 @@ export async function POST(request: Request) {
           return apiError('Unable to exit dealership context.', 403);
         }
 
-        await writeAuditLog({
-          action: 'owner.dealership_exit',
-          dealershipId: previousDealershipId,
-          dealerId: auditDealerIdFromSession(session),
-          technicianId: session.technicianId,
-          entityType: 'dealership',
-          entityId: previousDealershipId,
-          ipAddress: getRequestIp(request),
-          authSource: 'legacy',
-          scopeMode: 'national',
-          metadata: {
-            previousDealershipId,
-            previousDealershipName: session.dealershipName,
+        await writeAuditedAccess(
+          {
+            action: 'owner.dealership_exit',
+            dealershipId: previousDealershipId,
+            dealerId: auditDealerIdFromSession(session),
+            technicianId: session.technicianId,
+            entityType: 'dealership',
+            entityId: previousDealershipId,
+            ipAddress: getRequestIp(request),
+            authSource: 'legacy',
+            scopeMode: 'national',
+            metadata: {
+              previousDealershipId,
+              previousDealershipName: session.dealershipName,
+            },
           },
-        });
+          { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }
+        );
 
         const response = NextResponse.json({
           session: toTechnicianSession(ownerSession),

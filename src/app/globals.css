@@ -1,8 +1,9 @@
-@import '../styles/apex-platform.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Apex platform tokens/surfaces — after Tailwind layers; file has no @layer (Next/PostCSS isolates imports). */
+@import '../styles/apex-platform.css';
 
 :root {
   --benz-bg: #08080a;

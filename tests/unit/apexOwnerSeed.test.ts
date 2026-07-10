@@ -22,6 +22,9 @@ describe('Apex owner seed (Phase 5.10)', () => {
     assert.match(src, /APEX_NATIONAL_DEALERSHIP_ID/);
     assert.match(src, /role: 'owner'/);
     assert.match(src, /d7Number: null/);
+    assert.match(src, /where: \{ email: config\.ownerEmail \}/);
+    assert.match(src, /where: \{ email: multiEmail \}/);
+    assert.doesNotMatch(src, /where: \{ apexUsername:/);
   });
 
   it('seedDatabase wires optional apex owner seed', () => {

@@ -180,16 +180,21 @@ export async function resolveUnifiedLogin(
 
   if (memberships.length === 1) {
     const membership = memberships[0];
+    const base = buildSessionPayloadFromTechnician(
+      toTechnicianForSession(tech, {
+        id: membership.dealership.id,
+        name: membership.dealership.name,
+        dealerId: membership.dealership.dealerId,
+      })
+    );
     return {
       status: 'success',
       credentialType,
-      session: buildSessionPayloadFromTechnician(
-        toTechnicianForSession(tech, {
-          id: membership.dealership.id,
-          name: membership.dealership.name,
-          dealerId: membership.dealership.dealerId,
-        })
-      ),
+      session: {
+        ...base,
+        scopeMode: 'dealership',
+        activeDealershipId: membership.dealership.id,
+      },
     };
   }
 

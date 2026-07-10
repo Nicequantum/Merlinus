@@ -48,17 +48,38 @@ export function enrichSessionWithTenantScope(session: SessionPayload): SessionPa
   };
 }
 
-/** True when session may access dealership-scoped customer PII and RO data. */
+/** True when the id is a real rooftop (not empty / national sentinel). */
+export function isUsableDealershipId(dealershipId: string | null | undefined): boolean {
+  const id = dealershipId?.trim() || '';
+  return Boolean(id) && id !== APEX_NATIONAL_DEALERSHIP_ID;
+}
+
+/**
+ * True when session may access dealership-scoped customer PII and RO data.
+ * Phase 6.1: owners must be in dealership scope with a non-sentinel active rooftop.
+ */
 export function canAccessDealershipPii(session: TenantScopedSession): boolean {
   if (!isApexPlatformMode()) return true;
   if (!isOwnerRole(session.role)) return true;
-  return resolveSessionScopeMode(session) === 'dealership';
+  if (resolveSessionScopeMode(session) !== 'dealership') return false;
+  const active = session.activeDealershipId?.trim() || session.dealershipId?.trim() || '';
+  return isUsableDealershipId(active);
 }
 
 /** Owner in national scope — allowed on /api/owner/* only. */
 export function canAccessNationalConsole(session: TenantScopedSession): boolean {
   if (!isApexPlatformMode()) return false;
   return isOwnerRole(session.role) && resolveSessionScopeMode(session) === 'national';
+}
+
+/**
+ * Phase 6.1 owner least-privilege: national-scope owners cannot exercise
+ * dealership admin/manager capabilities (isAdmin seed flag is not enough).
+ */
+export function ownerMayExerciseDealershipPrivilege(session: TenantScopedSession): boolean {
+  if (!isOwnerRole(session.role)) return true;
+  if (!isApexPlatformMode()) return true;
+  return canAccessDealershipPii(session);
 }
 
 /**
@@ -72,7 +93,15 @@ export function requireDealershipScope(session: TenantScopedSession): {
     throw new DealershipScopeRequiredError();
   }
 
-  const dealershipId = session.activeDealershipId?.trim() || session.dealershipId;
+  const dealershipId = (
+    session.activeDealershipId?.trim() ||
+    session.dealershipId?.trim() ||
+    ''
+  );
+  if (!isUsableDealershipId(dealershipId)) {
+    throw new DealershipScopeRequiredError('Dealership context required — national sentinel is not a rooftop');
+  }
+
   return {
     dealershipId,
     dealerId: session.dealerId?.trim() || null,

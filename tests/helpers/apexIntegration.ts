@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { APEX_ACCESS_COOKIE } from '../../src/lib/apex/apexSession';
 
 export const INTEGRATION_OWNER_EMAIL = 'owner.integration@apex.seed.local';
@@ -49,8 +49,10 @@ export function buildApexAuthenticatedRequest(
   });
 }
 
-export function extractApexAccessCookie(response: Response): string | undefined {
-  const cookies = response.cookies;
+export function extractApexAccessCookie(
+  response: NextResponse | Response
+): string | undefined {
+  const cookies = (response as NextResponse).cookies;
   if (cookies?.get) {
     return cookies.get(APEX_ACCESS_COOKIE)?.value;
   }

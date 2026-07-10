@@ -96,3 +96,21 @@ Integration coverage: `tests/integration/apex-owner-flows.test.ts`
 | 5.8 | Dealership selector UX |
 | 5.9 | Owner national console |
 | 5.10 | Owner seed accounts, integration tests, docs |
+
+---
+
+## Phase 6.1 — RLS foundation + mandatory auditing
+
+| Piece | Location |
+|-------|----------|
+| RLS ENABLE + FORCE policies | `prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/` |
+| Transaction-local session vars | `src/lib/apex/rlsContext.ts` (`setRlsContext`, `withRlsContext`, `withRlsBypass`) |
+| Fail-closed access audit | `src/lib/auditedAccess.ts` (`writeAuditedAccess`) |
+| Owner least-privilege | `tenantScope.ts` + `apiRoute` admin/manager guards |
+
+```env
+# Optional defense-in-depth — policies soft-open when enforced is off
+RLS_ENABLED="true"
+```
+
+Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess` — audit failure aborts the operation.

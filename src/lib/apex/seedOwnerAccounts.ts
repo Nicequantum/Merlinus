@@ -121,10 +121,19 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     const multiEmail = `multi-rooftop+${config.multiRooftopUsername}@apex.seed.local`;
     const multiHash = await bcrypt.hash(config.multiRooftopPassword, 12);
 
+    // apexUsername is a partial unique index — upsert must target email (@unique).
+    await prisma.technician.updateMany({
+      where: {
+        apexUsername: config.multiRooftopUsername,
+        email: { not: multiEmail },
+      },
+      data: { apexUsername: null, isActive: false, deletedAt: new Date() },
+    });
+
     const multi = await prisma.technician.upsert({
-      where: { apexUsername: config.multiRooftopUsername },
+      where: { email: multiEmail },
       update: {
-        email: multiEmail,
+        apexUsername: config.multiRooftopUsername,
         name: config.multiRooftopName ?? 'Multi-Rooftop Technician',
         passwordHash: multiHash,
         role: 'technician',

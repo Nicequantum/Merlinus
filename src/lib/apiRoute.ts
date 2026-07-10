@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   DealershipScopeRequiredError,
   enrichSessionWithTenantScope,
+  ownerMayExerciseDealershipPrivilege,
   requireDealershipScope,
 } from '@/lib/apex/tenantScope';
 import { isApexPlatformMode } from '@/lib/platformMode';
@@ -45,6 +46,11 @@ interface RouteOptions {
   requireOwner?: boolean;
   /** APEX Phase 5.5 — PII routes; blocks owners in national scope until enter-dealership. */
   requireDealershipContext?: boolean;
+  /**
+   * Phase 6.1 — sensitive PII path. Enforces dealership context and documents that
+   * handlers must call writeAuditedAccess() (fail-closed) for durable compliance.
+   */
+  requireAuditedAccess?: boolean;
   /** Emit structured perf log for the route handler duration. */
   perfEvent?: string;
   /** Manager health and similar probes — skip rate limiting so monitoring is not blocked by KV. */
@@ -84,7 +90,11 @@ export async function withAuth<T>(
     }
   }
 
-  if (options.requireDealershipContext) {
+  // Phase 6.1: audited-access routes always require dealership PII context.
+  const needsDealershipContext =
+    options.requireDealershipContext || options.requireAuditedAccess;
+
+  if (needsDealershipContext) {
     try {
       requireDealershipScope(session);
     } catch (error) {
@@ -98,12 +108,36 @@ export async function withAuth<T>(
     }
   }
 
-  if (options.requireManager && session.role !== 'manager') {
-    return apiError(FORBIDDEN_ERROR, 403);
+  if (options.requireManager) {
+    if (session.role !== 'manager') {
+      return apiError(FORBIDDEN_ERROR, 403);
+    }
+    // Owners are never managers; belt-and-suspenders for mis-issued sessions.
+    if (!ownerMayExerciseDealershipPrivilege(session)) {
+      return NextResponse.json(
+        {
+          error: 'Dealership context required',
+          code: 'DEALERSHIP_CONTEXT_REQUIRED',
+        },
+        { status: 403 }
+      );
+    }
   }
 
-  if (options.requireAdmin && !session.isAdmin) {
-    return apiError(FORBIDDEN_ERROR, 403);
+  if (options.requireAdmin) {
+    if (!session.isAdmin) {
+      return apiError(FORBIDDEN_ERROR, 403);
+    }
+    // Phase 6.1: national-scope owners cannot use dealership admin APIs via isAdmin seed flag.
+    if (!options.requireOwner && !ownerMayExerciseDealershipPrivilege(session)) {
+      return NextResponse.json(
+        {
+          error: 'Dealership context required for admin operations',
+          code: 'DEALERSHIP_CONTEXT_REQUIRED',
+        },
+        { status: 403 }
+      );
+    }
   }
 
   if (!options.skipConsent) {
