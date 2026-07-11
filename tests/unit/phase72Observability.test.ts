@@ -116,11 +116,14 @@ describe('Phase 7.2 observability (H8–H11)', () => {
 
   test('H8 — Sentry init scrubs and client uses beforeSend', () => {
     const server = readSrc('src/lib/sentryInit.ts');
-    assert.match(server, /scrubSentryEvent/);
+    assert.match(server, /scrubSentryEventInPlace|scrubSentryEvent/);
     assert.match(server, /redactForLog/);
     assert.match(server, /Authorization|cookie/i);
+    assert.match(server, /beforeSend\s*\(/);
     const client = readSrc('src/instrumentation-client.ts');
-    assert.match(client, /beforeSend:\s*scrubSentryEventForClient/);
+    // Method form (not property shorthand) so scrub runs and event is returned.
+    assert.match(client, /beforeSend\s*\(/);
+    assert.match(client, /scrubSentryEventForClient/);
   });
 
   test('logger redacts and attaches requestId field', () => {
