@@ -10,29 +10,73 @@ import {
   isHttpProvisionEnabled,
   normalizeDealerCode,
   ProvisionDealerError,
+  resolveProvisionDisplayNames,
   toSafeProvisionHttpResponse,
   validateDealerName,
   validateRooftopDisplayName,
   PROVISION_DENY_DEALERSHIP_IDS,
 } from '@/lib/apex/provisionDealer';
-import { getDealerTemplate, isDealerTemplateId, listDealerTemplates } from '@/lib/apex/dealerTemplates';
+import {
+  assertTemplateHasNoHardcodedIdentity,
+  getDealerTemplate,
+  getTemplateInheritanceChain,
+  isDealerTemplateId,
+  listDealerTemplates,
+} from '@/lib/apex/dealerTemplates';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { parseBody, provisionDealerHttpSchema } from '@/lib/validation';
 
 const root = resolve(process.cwd());
 
 describe('dealerTemplates', () => {
-  it('exposes mercedes and generic rooftop templates', () => {
+  it('exposes clean base plus mercedes and generic rooftop templates', () => {
     const list = listDealerTemplates();
-    assert.ok(list.length >= 2);
+    assert.ok(list.length >= 3);
+    assert.ok(isDealerTemplateId('base-rooftop-v1'));
     assert.ok(isDealerTemplateId('mercedes-rooftop-v1'));
     assert.ok(isDealerTemplateId('generic-rooftop-v1'));
-    const m = getDealerTemplate('mercedes-rooftop-v1');
-    assert.equal(m?.loginStrategy, 'd7');
-    assert.equal(m?.features.xentry, true);
-    const g = getDealerTemplate('generic-rooftop-v1');
-    assert.equal(g?.loginStrategy, 'apex_username');
-    assert.equal(g?.features.xentry, false);
+
+    const base = getDealerTemplate('base-rooftop-v1')!;
+    assert.equal(base.extends, null);
+    assert.equal(base.brand, 'none');
+    assert.equal(base.loginStrategy, 'email');
+    assert.equal(base.branding.logo, 'none');
+    assert.equal(base.branding.theme, 'neutral');
+    assert.equal(base.branding.hardcodedDisplayName, null);
+    assert.equal(base.seed.copyPilotDealership, false);
+    assert.equal(base.features.xentry, false);
+    assertTemplateHasNoHardcodedIdentity(base);
+
+    const m = getDealerTemplate('mercedes-rooftop-v1')!;
+    assert.equal(m.extends, 'base-rooftop-v1');
+    assert.equal(m.loginStrategy, 'd7');
+    assert.equal(m.features.xentry, true);
+    assert.equal(m.branding.logo, 'mercedes');
+    assert.equal(m.branding.hardcodedDisplayName, null);
+    assert.equal(m.seed.copyPilotDealership, false);
+    assert.deepEqual(getTemplateInheritanceChain('mercedes-rooftop-v1'), ['base-rooftop-v1']);
+    assertTemplateHasNoHardcodedIdentity(m);
+
+    const g = getDealerTemplate('generic-rooftop-v1')!;
+    assert.equal(g.extends, 'base-rooftop-v1');
+    assert.equal(g.loginStrategy, 'apex_username');
+    assert.equal(g.features.xentry, false);
+    assert.equal(g.branding.logo, 'none');
+    assert.equal(g.branding.hardcodedDisplayName, null);
+    assertTemplateHasNoHardcodedIdentity(g);
+  });
+
+  it('never injects pilot names — provision names come only from input', () => {
+    const template = getDealerTemplate('mercedes-rooftop-v1')!;
+    const names = resolveProvisionDisplayNames({
+      dealerName: 'Coastal MB Group',
+      rooftopName: 'Mercedes-Benz of Newport',
+      template,
+    });
+    assert.equal(names.dealerName, 'Coastal MB Group');
+    assert.equal(names.rooftopName, 'Mercedes-Benz of Newport');
+    assert.notEqual(names.rooftopName, 'Mercedes-Benz of Tiverton');
+    assert.equal(/merlinus/i.test(names.rooftopName), false);
   });
 });
 
@@ -53,12 +97,20 @@ describe('provisionDealer naming + security helpers', () => {
     assert.throws(() => validateRooftopDisplayName('Merlinus'), ProvisionDealerError);
     assert.throws(() => validateRooftopDisplayName('seed-dealership'), ProvisionDealerError);
     assert.throws(() => validateRooftopDisplayName('TODO'), ProvisionDealerError);
+    assert.throws(() => validateRooftopDisplayName('Tiverton'), ProvisionDealerError);
+    // Pilot default storefront must not be re-used as a provisioned rooftop label.
     assert.throws(() => validateRooftopDisplayName('Mercedes-Benz of Tiverton'), ProvisionDealerError);
+    assert.equal(
+      validateRooftopDisplayName('Mercedes-Benz of Newport'),
+      'Mercedes-Benz of Newport'
+    );
   });
 
   it('validates franchise dealer name length', () => {
     assert.equal(validateDealerName('Coastal MB Group'), 'Coastal MB Group');
     assert.throws(() => validateDealerName('ab'), ProvisionDealerError);
+    assert.throws(() => validateDealerName('Merlinus'), ProvisionDealerError);
+    assert.throws(() => validateDealerName('Mercedes-Benz of Tiverton'), ProvisionDealerError);
   });
 
   it('denies pilot and sentinel dealership ids', () => {

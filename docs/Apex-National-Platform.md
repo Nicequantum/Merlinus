@@ -225,7 +225,7 @@ Secure CLI provision creates a **Dealer** (franchise) + **Dealership** (rooftop 
 | Display name | `--rooftop-name` → `Dealership.name` (full storefront string) |
 | First login | `mustChangePassword` blocks PII until change-password |
 | Audit | `dealer.provision` metadata is PII-free (hashed code + ids) |
-| Templates | `mercedes-rooftop-v1` (D7) · `generic-rooftop-v1` (apex username) |
+| Templates | `base-rooftop-v1` (clean/email) · `mercedes-rooftop-v1` (D7, extends base) · `generic-rooftop-v1` (username, extends base) |
 
 ```bash
 npm run provision-dealer -- \

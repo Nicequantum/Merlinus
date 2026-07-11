@@ -1942,8 +1942,20 @@ function checkApexDealerProvisionFinalize(): void {
   const templates = resolve(process.cwd(), 'src/lib/apex/dealerTemplates.ts');
   if (existsSync(templates)) {
     const src = readFileSync(templates, 'utf8');
-    if (src.includes('mercedes-rooftop-v1') && src.includes('generic-rooftop-v1')) {
-      record('APEX Provision', 'Templates', 'pass', 'mercedes + generic rooftop templates');
+    const ok =
+      src.includes('base-rooftop-v1') &&
+      src.includes('mercedes-rooftop-v1') &&
+      src.includes('generic-rooftop-v1') &&
+      src.includes('extendFromBase') &&
+      src.includes('hardcodedDisplayName') &&
+      src.includes('copyPilotDealership');
+    if (ok) {
+      record(
+        'APEX Provision',
+        'Templates',
+        'pass',
+        'base + mercedes + generic rooftop templates (clean inheritance)'
+      );
     } else {
       record('APEX Provision', 'Templates', 'fail', 'dealerTemplates incomplete');
     }

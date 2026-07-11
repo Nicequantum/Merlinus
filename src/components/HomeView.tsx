@@ -1,12 +1,16 @@
 import { Settings } from 'lucide-react';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
 import { ScanROSection } from '@/components/ScanROSection';
+import { isApexPlatformMode } from '@/lib/platformMode';
 import type { PendingImage, RepairOrderSummary } from '../types';
 
 interface HomeViewProps {
   technicianName?: string;
+  /** Session rooftop name from provision (`Dealership.name`). */
+  dealershipName?: string | null;
   searchTerm: string;
   onSearchChange: (value: string) => void;
   searchLoading: boolean;
@@ -38,6 +42,7 @@ interface HomeViewProps {
 
 export function HomeView({
   technicianName,
+  dealershipName,
   searchTerm,
   onSearchChange,
   searchLoading,
@@ -66,6 +71,8 @@ export function HomeView({
   onDeleteRO,
   onOpenSettings,
 }: HomeViewProps) {
+  const apex = isApexPlatformMode();
+
   return (
     <div className="relative min-h-dvh benz-page-compact">
       <button
@@ -78,10 +85,14 @@ export function HomeView({
 
       <div className="pt-10">
         <div className="merlin-brand-hero mb-8">
-          <MerlinLogoMark size="lg" className="mb-1" />
-          <p className="merlin-wordmark text-[1.25rem]">Merlinus</p>
+          {apex ? (
+            <ApexLogoMark size="lg" className="mb-1" />
+          ) : (
+            <MerlinLogoMark size="lg" className="mb-1" />
+          )}
+          {!apex ? <p className="merlin-wordmark text-[1.25rem]">Merlinus</p> : null}
           <div className="merlin-brand-divider" aria-hidden="true" />
-          <DealershipBranding size="lg" className="mb-2" />
+          <DealershipBranding size="lg" className="mb-2" displayName={dealershipName} />
           <p className="text-benz-secondary text-sm font-medium">{technicianName || 'Technician'}</p>
         </div>
 

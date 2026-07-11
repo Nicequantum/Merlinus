@@ -170,16 +170,31 @@ function printHelp(): void {
   console.log(`
 Secure Apex dealer provision
 
-Usage:
+Templates (all inherit clean base — no pilot name/logo bleed):
+  base-rooftop-v1       Clean empty start (email login, no logo/brand)
+  mercedes-rooftop-v1   Extends base + D7 + Xentry (Mercedes-only deltas)
+  generic-rooftop-v1    Extends base + apex username (multi-brand)
+
+Usage (Mercedes):
   npm run provision-dealer -- --code=NEWPORT --dealer-name="..." --rooftop-name="Mercedes-Benz of Newport" \\
     --template=mercedes-rooftop-v1 --manager-name="..." --manager-email=... --manager-d7=D7... \\
     --manager-password-env=NEWPORT_MANAGER_PASSWORD
+
+Usage (clean base):
+  npm run provision-dealer -- --code=METRO01 --dealer-name="Metro Auto Group" --rooftop-name="Metro Auto Downtown" \\
+    --template=base-rooftop-v1 --manager-name="..." --manager-email=... \\
+    --manager-password-env=METRO_MANAGER_PASSWORD
 
 Password (exactly one):
   --manager-password-env=VAR   Read password from env VAR (recommended for CI)
   --password-stdin             Read password from stdin
   --generate-password          CSPRNG temp password (use with --show-credentials)
   (default if TTY)             Interactive hidden prompt
+
+Naming:
+  --rooftop-name is Dealership.name (UI header) — required, never from template
+  --dealer-name is Dealer.name (franchise) — required, never from template
+  Pilot labels (Merlinus / Tiverton pilot / VITI) are rejected
 
 Security:
   Passwords MUST NOT appear on the command line.
@@ -285,8 +300,8 @@ async function main(): Promise<void> {
         throw new Error('Passwords do not match.');
       }
     }
-    if (!password || password.length < 12) {
-      throw new Error('Password must be at least 12 characters.');
+    if (!password || password.length < 8) {
+      throw new Error('Password must be at least 8 characters.');
     }
 
     const dealerCodeNorm = normalizeDealerCode(code);

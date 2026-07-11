@@ -1,6 +1,10 @@
 export { CONSENT_VERSION, WARRANTY_STORY_MAX_CHARS, WARRANTY_STORY_WARN_CHARS } from '@/types';
 
-/** Override per deployment via env — defaults for local dev only. */
+/**
+ * Merlinus single-tenant pilot defaults only.
+ * Apex multi-dealer UI must pass session.dealershipName into DealershipBranding —
+ * never rely on these for provisioned rooftops (see dealerTemplates base-rooftop-v1).
+ */
 export const DEALERSHIP_DISPLAY_NAME =
   process.env.DEALERSHIP_DISPLAY_NAME?.trim() || 'Mercedes-Benz of Tiverton';
 export const DEALERSHIP_CODE = process.env.DEALERSHIP_CODE?.trim() || 'VITI';

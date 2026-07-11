@@ -223,7 +223,11 @@ export function BenzTechAuthenticatedApp({
         ro.view !== 'audit' &&
         ro.view !== 'advisors' &&
         ro.view !== 'technicians' && (
-          <AppHeader technicianName={session.name} onOpenSettings={goToSettings} />
+          <AppHeader
+            technicianName={session.name}
+            dealershipName={session.dealershipName}
+            onOpenSettings={goToSettings}
+          />
         )}
 
       {ro.view === 'home' && isManager && (
@@ -258,6 +262,7 @@ export function BenzTechAuthenticatedApp({
       {ro.view === 'home' && !isManager && (
         <HomeView
           technicianName={session.name}
+          dealershipName={session.dealershipName}
           searchTerm={ro.searchTerm}
           onSearchChange={ro.setSearchTerm}
           searchLoading={ro.searchLoading}

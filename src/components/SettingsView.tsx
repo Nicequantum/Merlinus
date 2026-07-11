@@ -251,7 +251,7 @@ export function SettingsView({
         </div>
         <div className="flex flex-col items-center gap-2 pt-2 benz-divider">
           <Building2 size={14} className="text-benz-muted" />
-          <DealershipBranding size="sm" />
+          <DealershipBranding size="sm" displayName={session.dealershipName} />
         </div>
       </div>
 

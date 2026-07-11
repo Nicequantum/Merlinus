@@ -122,7 +122,7 @@ export function ManagerDashboard({
           <Settings size={22} />
         </button>
         <p className="benz-dashboard-eyebrow">Manager Dashboard</p>
-        <DealershipBranding size="md" />
+        <DealershipBranding size="md" displayName={session.dealershipName} />
         <p className="text-xs text-benz-secondary mt-3 text-center">Signed in as {session.name}</p>
       </div>
 

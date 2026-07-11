@@ -3,7 +3,12 @@ import 'server-only';
 import { createHash, createHmac, randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
-import { getDealerTemplate, type DealerTemplate, type DealerTemplateId } from '@/lib/apex/dealerTemplates';
+import {
+  assertTemplateHasNoHardcodedIdentity,
+  getDealerTemplate,
+  type DealerTemplate,
+  type DealerTemplateId,
+} from '@/lib/apex/dealerTemplates';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { withRlsBypass } from '@/lib/apex/rlsContext';
 import { isValidD7Number, normalizeD7Number } from '@/lib/d7Number';
@@ -20,8 +25,9 @@ export const PROVISION_DENY_DEALERSHIP_IDS = new Set([
   APEX_NATIONAL_DEALERSHIP_ID,
 ]);
 
-const RESERVED_DEALER_CODES = new Set(['NATIONAL', 'MERLINUS', 'SEED', 'TIVERTON', 'APEX', 'ADMIN', 'TEST']);
+const RESERVED_DEALER_CODES = new Set(['NATIONAL', 'MERLINUS', 'SEED', 'TIVERTON', 'APEX', 'ADMIN', 'TEST', 'VITI']);
 
+/** Pilot / placeholder labels that must never be used as provisioned display names. */
 const FORBIDDEN_ROOFTOP_NAME_SNIPPETS = [
   'merlinus',
   'seed-dealership',
@@ -30,6 +36,14 @@ const FORBIDDEN_ROOFTOP_NAME_SNIPPETS = [
   'test dealership',
   'example dealership',
 ];
+
+/** Exact pilot names that must never be re-used as franchise or rooftop labels. */
+const FORBIDDEN_EXACT_DISPLAY_NAMES = new Set([
+  'mercedes-benz of tiverton',
+  'tiverton',
+  'merlinus',
+  'viti',
+]);
 
 export type ProvisionIfExists = 'fail' | 'skip' | 'update-metadata';
 
@@ -109,6 +123,12 @@ export function validateRooftopDisplayName(name: string): string {
     );
   }
   const lower = trimmed.toLowerCase();
+  if (FORBIDDEN_EXACT_DISPLAY_NAMES.has(lower)) {
+    throw new ProvisionDealerError(
+      'FORBIDDEN_ROOFTOP_NAME',
+      'Rooftop name must not reuse the Merlinus pilot storefront label — pass the new storefront name.'
+    );
+  }
   for (const snippet of FORBIDDEN_ROOFTOP_NAME_SNIPPETS) {
     if (lower.includes(snippet)) {
       throw new ProvisionDealerError(
@@ -117,10 +137,10 @@ export function validateRooftopDisplayName(name: string): string {
       );
     }
   }
-  if (lower === 'tiverton' || lower.includes('mercedes-benz of tiverton')) {
+  if (lower === 'tiverton') {
     throw new ProvisionDealerError(
       'FORBIDDEN_ROOFTOP_NAME',
-      'Cannot use the Merlinus pilot rooftop name for a new provision.'
+      'Rooftop name must be the full storefront name, not a bare city placeholder.'
     );
   }
   return trimmed;
@@ -131,7 +151,36 @@ export function validateDealerName(name: string): string {
   if (trimmed.length < 3 || trimmed.length > 120) {
     throw new ProvisionDealerError('INVALID_DEALER_NAME', 'Dealer (franchise) name must be 3–120 characters.');
   }
+  const lower = trimmed.toLowerCase();
+  if (FORBIDDEN_EXACT_DISPLAY_NAMES.has(lower)) {
+    throw new ProvisionDealerError(
+      'FORBIDDEN_DEALER_NAME',
+      'Dealer name must not reuse the Merlinus pilot label — pass the franchise name from provisioning.'
+    );
+  }
+  if (lower.includes('merlinus') || lower.includes('seed-dealership')) {
+    throw new ProvisionDealerError(
+      'FORBIDDEN_DEALER_NAME',
+      'Dealer name must not contain pilot/placeholder labels.'
+    );
+  }
   return trimmed;
+}
+
+/**
+ * Resolve display names strictly from provision input — templates never contribute names.
+ * Returns the validated pair written to Dealer.name / Dealership.name.
+ */
+export function resolveProvisionDisplayNames(input: {
+  dealerName: string;
+  rooftopName: string;
+  template: DealerTemplate;
+}): { dealerName: string; rooftopName: string } {
+  assertTemplateHasNoHardcodedIdentity(input.template);
+  return {
+    dealerName: validateDealerName(input.dealerName),
+    rooftopName: validateRooftopDisplayName(input.rooftopName),
+  };
 }
 
 function getAuditHmacKey(): string {
@@ -203,8 +252,9 @@ export function buildDealerProvisionAuditMetadata(input: {
 }
 
 function assertPasswordPolicy(password: string): void {
-  if (password.length < 12) {
-    throw new ProvisionDealerError('WEAK_PASSWORD', 'Manager password must be at least 12 characters.');
+  // Align with changePasswordSchema (min 8); operators may set short temp passwords for first login.
+  if (password.length < 8) {
+    throw new ProvisionDealerError('WEAK_PASSWORD', 'Manager password must be at least 8 characters.');
   }
   if (password.length > 128) {
     throw new ProvisionDealerError('WEAK_PASSWORD', 'Manager password is too long.');
@@ -258,6 +308,7 @@ function validateManagerForTemplate(template: DealerTemplate, manager: Provision
       );
     }
   }
+  // base-rooftop-v1 (email): manager signs in with email only — no D7 / apex username required.
 
   return { email, name, d7Number, apexUsername };
 }
@@ -303,8 +354,12 @@ export async function provisionDealer(input: ProvisionDealerInput): Promise<Prov
     throw new ProvisionDealerError('RESERVED_DEALER_CODE', `Dealer code "${dealerCode}" is reserved.`);
   }
 
-  const dealerName = validateDealerName(input.dealerName);
-  const rooftopName = validateRooftopDisplayName(input.rooftopName);
+  // Names always from provision input — template branding never supplies storefront/pilot labels.
+  const { dealerName, rooftopName } = resolveProvisionDisplayNames({
+    dealerName: input.dealerName,
+    rooftopName: input.rooftopName,
+    template,
+  });
   if (rooftopName.toUpperCase() === dealerCode) {
     throw new ProvisionDealerError(
       'INVALID_ROOFTOP_NAME',
@@ -618,6 +673,7 @@ export function httpStatusForProvisionError(code: string): number {
     case 'INVALID_DEALER_CODE':
     case 'RESERVED_DEALER_CODE':
     case 'INVALID_DEALER_NAME':
+    case 'FORBIDDEN_DEALER_NAME':
     case 'INVALID_ROOFTOP_NAME':
     case 'FORBIDDEN_ROOFTOP_NAME':
     case 'INVALID_MANAGER_NAME':

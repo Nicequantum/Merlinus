@@ -79,16 +79,25 @@ Seed / pilot rooftops (`seed-dealership`, `__apex_national__`, Tiverton pilot la
 
 ## Templates
 
-Templates control **login strategy and feature defaults** — never display names.
+Templates control **login strategy, feature defaults, and branding chrome** — **never** display names or logos from the Merlinus pilot.
 
-| Template id | Brand | Manager login | Notes |
-|-------------|-------|---------------|--------|
-| `mercedes-rooftop-v1` | mercedes | **D7** (`--manager-d7`) | Customer Pay + voice + Xentry defaults |
-| `generic-rooftop-v1` | generic | **Apex username** (`--manager-username`) | Customer Pay + voice; no Xentry |
+| Template id | Extends | Brand | Manager login | Branding | Notes |
+|-------------|---------|-------|---------------|----------|--------|
+| `base-rooftop-v1` | — | none | **Email** | No logo, neutral theme | Clean empty starting point |
+| `mercedes-rooftop-v1` | `base-rooftop-v1` | mercedes | **D7** (`--manager-d7`) | Mercedes logo/theme metadata | Adds Xentry + D7 only |
+| `generic-rooftop-v1` | `base-rooftop-v1` | generic | **Apex username** (`--manager-username`) | No logo, neutral | Multi-brand rooftops |
 
 Source: [`src/lib/apex/dealerTemplates.ts`](../src/lib/apex/dealerTemplates.ts).
 
-v1 seed policy: **global catalog only** — does not clone Tiverton user templates.
+**Invariants**
+
+- `--rooftop-name` → `Dealership.name` (UI header / national list) — **only** source of storefront label  
+- `--dealer-name` → `Dealer.name` — **only** source of franchise label  
+- Templates set `branding.hardcodedDisplayName: null` and `seed.copyPilotDealership: false`  
+- Pilot labels (`Merlinus`, bare `Tiverton`, `Mercedes-Benz of Tiverton`, `VITI`) are rejected at provision time  
+- UI chrome uses **session** `dealershipName`, not env `DEALERSHIP_DISPLAY_NAME` (Tiverton pilot default)
+
+Seed policy: **no pilot clone** — does not copy Tiverton/Merlinus dealership rows, logos, or user templates.
 
 ---
 
@@ -144,7 +153,23 @@ npm run provision-dealer -- \
 
 Confirm by typing the dealer code when prompted.
 
-### Generic rooftop
+### Clean base rooftop (no brand / no logo)
+
+```bash
+npm run provision-dealer -- \
+  --code=METRO01 \
+  --dealer-name="Metro Auto Group" \
+  --rooftop-name="Metro Auto Downtown" \
+  --template=base-rooftop-v1 \
+  --manager-name="Sam Lee" \
+  --manager-email=sam.lee@example-dealer.com \
+  --generate-password \
+  --show-credentials
+```
+
+Manager signs in with **email** + temporary password (no D7 / username).
+
+### Generic multi-brand rooftop
 
 ```bash
 npm run provision-dealer -- \

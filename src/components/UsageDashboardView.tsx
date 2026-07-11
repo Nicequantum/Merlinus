@@ -63,7 +63,7 @@ export function UsageDashboardView({ dealershipName, onBackHref = '/' }: UsageDa
           <ArrowLeft size={22} />
         </Link>
         <p className="benz-dashboard-eyebrow">Usage Analytics</p>
-        <DealershipBranding size="md" />
+        <DealershipBranding size="md" displayName={dealershipName} />
         <p className="text-xs text-benz-secondary mt-3 text-center">{dealershipName}</p>
       </div>
 
