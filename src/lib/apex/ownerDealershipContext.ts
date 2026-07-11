@@ -19,10 +19,8 @@ import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
 function ownerTechnicianForSession(
-  tech: TechnicianForSession & {
-    dealership: { id: string; name: string; dealerId: string | null };
-  },
-  dealership: { id: string; name: string; dealerId: string | null },
+  tech: TechnicianForSession,
+  dealership: { id: string; name: string; dealerId: string | null; timezone?: string | null },
   scopeMode: AuditScopeMode,
   group?: { id: string; name: string } | null
 ): SessionPayload {
@@ -41,7 +39,11 @@ function ownerTechnicianForSession(
     legalDisclaimerAt: tech.legalDisclaimerAt,
     legalDisclaimerVersion: tech.legalDisclaimerVersion,
     mustChangePassword: tech.mustChangePassword,
-    dealership: { name: dealership.name, dealerId: dealership.dealerId },
+    dealership: {
+      name: dealership.name,
+      dealerId: dealership.dealerId,
+      timezone: dealership.timezone,
+    },
   });
 
   return {
@@ -51,6 +53,8 @@ function ownerTechnicianForSession(
     activeDealershipId: scopeMode === 'dealership' ? dealership.id : undefined,
     activeDealerGroupId: scopeMode === 'group' ? group?.id : undefined,
     dealerGroupName: scopeMode === 'group' ? group?.name : undefined,
+    dealershipTimezone:
+      scopeMode === 'dealership' ? dealership.timezone?.trim() || base.dealershipTimezone : undefined,
   };
 }
 
@@ -135,7 +139,6 @@ function nationalPayload(tech: OwnerTechRow, scopeMode: 'national' | 'group', gr
       legalDisclaimerVersion: tech.legalDisclaimerVersion,
       mustChangePassword: tech.mustChangePassword,
       dealership: {
-        id: APEX_NATIONAL_DEALERSHIP_ID,
         name: scopeMode === 'group' && group ? group.name : APEX_NATIONAL_DEALERSHIP_NAME,
         dealerId: null,
       },
@@ -236,6 +239,7 @@ export async function buildOwnerDealershipSession(
         id: true,
         name: true,
         dealerId: true,
+        timezone: true,
         dealer: { select: { dealerGroupId: true, dealerGroup: { select: { id: true, name: true } } } },
       },
     });
@@ -243,10 +247,33 @@ export async function buildOwnerDealershipSession(
     if (!dealership || dealership.id === APEX_NATIONAL_DEALERSHIP_ID) return null;
 
     const payload = ownerTechnicianForSession(
-      tech as TechnicianForSession & {
-        dealership: { id: string; name: string; dealerId: string | null };
+      {
+        id: tech.id,
+        d7Number: tech.d7Number,
+        name: tech.name,
+        role: tech.role,
+        isAdmin: tech.isAdmin,
+        dealershipId: tech.dealershipId,
+        dealerId: tech.dealerId,
+        serviceAdvisorId: tech.serviceAdvisorId,
+        sessionVersion: tech.sessionVersion,
+        consentAt: tech.consentAt,
+        consentVersion: tech.consentVersion,
+        legalDisclaimerAt: tech.legalDisclaimerAt,
+        legalDisclaimerVersion: tech.legalDisclaimerVersion,
+        mustChangePassword: tech.mustChangePassword,
+        dealership: {
+          name: dealership.name,
+          dealerId: dealership.dealerId,
+          timezone: dealership.timezone,
+        },
       },
-      dealership,
+      {
+        id: dealership.id,
+        name: dealership.name,
+        dealerId: dealership.dealerId,
+        timezone: dealership.timezone,
+      },
       'dealership'
     );
 
@@ -255,6 +282,7 @@ export async function buildOwnerDealershipSession(
     if (group) {
       return {
         ...payload,
+        dealershipTimezone: dealership.timezone || payload.dealershipTimezone,
         activeDealerGroupId: group.id,
         dealerGroupName: group.name,
       };

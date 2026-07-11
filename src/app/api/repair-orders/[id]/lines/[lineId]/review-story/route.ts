@@ -1,23 +1,20 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
+import { apiError, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { reviewWarrantyStory } from '@/lib/grok';
 import { PROMPT_VERSION } from '@/prompts/version';
-import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
-import { dbToRepairOrder } from '@/lib/roMapper';
+import { scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
-import { reportMappedRouteError } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { logger } from '@/lib/logger';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
-import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
+import { withStoryAiRoute } from '@/lib/storyAiRoute';
+import { parseRequestBody, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_REVIEW_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 120;
@@ -26,40 +23,25 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
-  if ('error' in routeParams) return routeParams.error;
-  const { id, lineId } = routeParams.data;
-
-  return withAuth(
+  return withStoryAiRoute(
     request,
-    async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
-      }
-
-      const parsed = await parseRequestBody(request, reviewStorySchema);
+    params,
+    {
+      rateLimitKey: 'story.review',
+      rateLimit: RATE_LIMITS.generate,
+      trackUsage: true,
+      blockInMaintenance: true,
+      perfEvent: 'route.story.review',
+      customerPayMessage:
+        'Customer Pay stories do not require AI quality review. Edit the text directly if needed.',
+    },
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
+      const parsed = await parseRequestBody(req, reviewStorySchema);
       if ('error' in parsed) return parsed.error;
 
       const warrantyStory = parsed.data.warrantyStory.trim();
       if (!warrantyStory) {
         return apiError('Warranty story text is required for review.', 400);
-      }
-
-      const ro = await loadStoryRouteRepairOrder(session, id);
-      if (!ro) {
-        return apiError(NOT_FOUND_ERROR, 404);
-      }
-
-      const mapped = dbToRepairOrder(ro);
-      const line = mapped.repairLines.find((l) => l.id === lineId);
-      if (!line) return apiError(NOT_FOUND_ERROR, 404);
-
-      const dbLine = ro.repairLines.find((l) => l.id === lineId);
-      if (isCustomerPayRepairLine(dbLine)) {
-        return apiError(
-          'Customer Pay stories do not require AI quality review. Edit the text directly if needed.',
-          400
-        );
       }
 
       let review;
@@ -78,8 +60,8 @@ export async function POST(
           );
         }
       } catch (error) {
-        const mapped = mapGrokRouteError(error, 'Story review');
-        return reportMappedRouteError(mapped, error, 'story.review');
+        const mappedErr = mapGrokRouteError(error, 'Story review');
+        return reportMappedRouteError(mappedErr, error, 'story.review');
       }
 
       const quality = { ...review, scoredAgainstStory: warrantyStory };
@@ -107,13 +89,12 @@ export async function POST(
                   storyHash,
                   reviewMode: 'coaching',
                 },
-                ipAddress: getRequestIp(request),
+                ipAddress: getRequestIp(req),
               },
               {
                 where: scopedRepairLineWhereForSession(lineId, id, session),
                 data: {
                   storyQualityAuditEncrypted: encryptJsonObject(quality),
-                  // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
                   ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
                 },
               }
@@ -148,15 +129,6 @@ export async function POST(
       });
 
       return { review: quality };
-    },
-    {
-      rateLimitKey: 'story.review',
-      rateLimit: RATE_LIMITS.generate,
-      trackUsage: true,
-      blockInMaintenance: true,
-      perfEvent: 'route.story.review',
-      requireDealershipContext: true,
-      requireAuditedAccess: true,
     }
   );
 }

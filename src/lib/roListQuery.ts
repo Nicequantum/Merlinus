@@ -3,7 +3,10 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
-import { getStartOfDealershipDay } from '@/lib/dealershipDayBoundary';
+import {
+  getStartOfDealershipDay,
+  resolveDealershipTimezone,
+} from '@/lib/dealershipDayBoundary';
 import { buildRoNumberSearchQueryTokens } from '@/lib/piiSearchToken';
 import { repairOrderListQuerySchema } from '@/lib/validation';
 
@@ -26,6 +29,7 @@ export function buildRepairOrderListWhere(
   session: TenantScopedSession & {
     technicianId: string;
     serviceAdvisorId?: string | null;
+    dealershipTimezone?: string | null;
   },
   params: RepairOrderListParams
 ): Prisma.RepairOrderWhereInput {
@@ -61,7 +65,8 @@ export function buildRepairOrderListWhere(
     };
   }
 
-  const startOfToday = getStartOfDealershipDay();
+  const tz = resolveDealershipTimezone(session.dealershipTimezone);
+  const startOfToday = getStartOfDealershipDay(new Date(), tz);
   if (params.scope === 'previous') {
     return {
       ...roleWhere,
@@ -76,6 +81,6 @@ export function buildRepairOrderListWhere(
   };
 }
 
-export function getTodayStartIso(): string {
-  return getStartOfDealershipDay().toISOString();
+export function getTodayStartIso(timeZone?: string | null): string {
+  return getStartOfDealershipDay(new Date(), resolveDealershipTimezone(timeZone)).toISOString();
 }

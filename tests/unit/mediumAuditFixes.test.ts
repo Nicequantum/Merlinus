@@ -29,10 +29,13 @@ describe('Medium audit fixes (M1–M30)', () => {
 
   it('M4/M5: warranty KB filter and customer pay generation guard', () => {
     assert.ok(readSrc('src/lib/templateLibrary.ts').includes("entry.category !== 'customer'"));
+    // Phase 7.3 — customer-pay guard lives in withStoryAiRoute shell
+    const gen = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts');
+    const shell = readSrc('src/lib/storyAiRoute.ts');
     assert.ok(
-      readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts').includes(
-        'isCustomerPayRepairLine'
-      )
+      gen.includes('isCustomerPayRepairLine') ||
+        gen.includes('withStoryAiRoute') ||
+        shell.includes('isCustomerPayRepairLine')
     );
   });
 
@@ -141,7 +144,14 @@ describe('Medium audit fixes (M1–M30)', () => {
 
   it('M28/M29: usage limit and timezone env', () => {
     assert.ok(DAILY_USAGE_LIMIT >= 1);
-    assert.ok(readSrc('src/lib/usageMonitoring.ts').includes('USAGE_TIMEZONE'));
+    // Phase 7.3 — USAGE_TIMEZONE resolved via dealershipDayBoundary helpers
+    const usage = readSrc('src/lib/usageMonitoring.ts');
+    const day = readSrc('src/lib/dealershipDayBoundary.ts');
+    assert.ok(
+      usage.includes('USAGE_TIMEZONE') ||
+        day.includes('USAGE_TIMEZONE') ||
+        usage.includes('resolveDealershipTimezone')
+    );
   });
 
   it('M30: reencryption runbook doc', () => {

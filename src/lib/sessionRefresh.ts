@@ -52,6 +52,7 @@ export function toTechnicianSession(payload: SessionPayload): TechnicianSession 
     activeDealerGroupId: payload.activeDealerGroupId,
     dealerGroupName: payload.dealerGroupName,
     mustChangePassword: payload.mustChangePassword,
+    dealershipTimezone: payload.dealershipTimezone,
   };
 }
 

@@ -1,5 +1,10 @@
 import { dealerIdWriteFields, scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { getRlsDb } from '@/lib/apex/rlsContext';
+import {
+  getDefaultDealershipTimezone,
+  getStartOfDealershipDay,
+  resolveDealershipTimezone,
+} from '@/lib/dealershipDayBoundary';
 
 /** M28: configurable daily AI usage cap per technician. */
 function parseDailyLimit(): number {
@@ -9,70 +14,41 @@ function parseDailyLimit(): number {
 
 export const DAILY_USAGE_LIMIT = parseDailyLimit();
 
-/** M29: dealership-local midnight for usage boundaries (IANA timezone). */
-function getUsageTimezone(): string {
-  return process.env.USAGE_TIMEZONE?.trim() || 'America/New_York';
+/** Phase 7.3 — prefer rooftop timezone from session, then env default. */
+function getUsageTimezone(preferred?: string | null): string {
+  return resolveDealershipTimezone(preferred, getDefaultDealershipTimezone());
 }
 
-function zonedParts(date: Date, timeZone: string) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = formatter.formatToParts(date);
-  const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-    second: Number(map.second),
-  };
+function startOfZonedDay(date = new Date(), timeZone?: string | null): Date {
+  return getStartOfDealershipDay(date, getUsageTimezone(timeZone));
 }
 
-function startOfZonedDay(date = new Date()): Date {
-  const tz = getUsageTimezone();
-  const { year, month, day } = zonedParts(date, tz);
-  // Walk UTC offsets until the formatted zoned calendar date matches target midnight.
-  for (let offsetHours = -14; offsetHours <= 14; offsetHours++) {
-    const candidate = new Date(Date.UTC(year, month - 1, day, -offsetHours, 0, 0, 0));
-    const parts = zonedParts(candidate, tz);
-    if (parts.year === year && parts.month === month && parts.day === day && parts.hour === 0) {
-      return candidate;
-    }
-  }
-  const fallback = new Date();
-  fallback.setHours(0, 0, 0, 0);
-  return fallback;
-}
-
-function startOfZonedWeek(date = new Date()): Date {
-  const dayStart = startOfZonedDay(date);
-  const tz = getUsageTimezone();
+function startOfZonedWeek(date = new Date(), timeZone?: string | null): Date {
+  const tz = getUsageTimezone(timeZone);
+  const dayStart = startOfZonedDay(date, tz);
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(dayStart);
   const map: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
   const daysFromMonday = map[weekday] ?? 0;
   return new Date(dayStart.getTime() - daysFromMonday * 24 * 60 * 60 * 1000);
 }
 
-export async function getTechnicianDailyUsageCount(technicianId: string): Promise<number> {
+export async function getTechnicianDailyUsageCount(
+  technicianId: string,
+  timeZone?: string | null
+): Promise<number> {
   return getRlsDb().usageLog.count({
     where: {
       technicianId,
-      createdAt: { gte: startOfZonedDay() },
+      createdAt: { gte: startOfZonedDay(new Date(), timeZone) },
     },
   });
 }
 
-export async function isDailyUsageLimitReached(technicianId: string): Promise<boolean> {
-  const count = await getTechnicianDailyUsageCount(technicianId);
+export async function isDailyUsageLimitReached(
+  technicianId: string,
+  timeZone?: string | null
+): Promise<boolean> {
+  const count = await getTechnicianDailyUsageCount(technicianId, timeZone);
   return count >= DAILY_USAGE_LIMIT;
 }
 

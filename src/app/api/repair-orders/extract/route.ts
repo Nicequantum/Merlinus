@@ -1,6 +1,6 @@
 import { fetchPrivateBlobAsVisionDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
-import { blockServiceAdvisorAi } from '@/lib/roleGuards';
+
 import { extractROFromImages } from '@/lib/grok';
 import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
 import { reportMappedRouteError } from '@/lib/errors';
@@ -20,8 +20,6 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const blocked = blockServiceAdvisorAi(session);
-      if (blocked) return blocked;
 
       const parsed = await parseRequestBody(request, imagePathnamesSchema);
       if ('error' in parsed) return parsed.error;
@@ -100,6 +98,7 @@ export async function POST(request: Request) {
       rateLimit: RATE_LIMITS.generate,
       trackUsage: true,
       blockInMaintenance: true,
+      blockServiceAdvisorAi: true,
       perfEvent: 'route.ro.extract',
       requireDealershipContext: true,
       requireAuditedAccess: true,

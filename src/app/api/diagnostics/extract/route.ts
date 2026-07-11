@@ -1,9 +1,7 @@
 import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
-import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractDiagnosticsFromImage } from '@/lib/grok';
-import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
-import { reportMappedRouteError } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
@@ -20,9 +18,6 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const blocked = blockServiceAdvisorAi(session);
-      if (blocked) return blocked;
-
       const parsed = await parseRequestBody(request, imagePathnamesSchema);
       if ('error' in parsed) return parsed.error;
 
@@ -86,6 +81,7 @@ export async function POST(request: Request) {
       rateLimit: RATE_LIMITS.generate,
       trackUsage: true,
       blockInMaintenance: true,
+      blockServiceAdvisorAi: true,
       perfEvent: 'route.diagnostics.extract',
       requireDealershipContext: true,
       requireAuditedAccess: true,

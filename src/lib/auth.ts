@@ -59,6 +59,11 @@ export interface SessionPayload {
   dealerGroupName?: string;
   /** Provisioned / reset accounts must change password before PII routes. */
   mustChangePassword?: boolean;
+  /**
+   * Phase 7.3 (H7) — IANA timezone for the active rooftop (usage caps + "today" RO lists).
+   * Absent on national/group owner home; set in dealership scope.
+   */
+  dealershipTimezone?: string;
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
@@ -84,11 +89,12 @@ export type TechnicianForSession = {
   legalDisclaimerAt: Date | null;
   legalDisclaimerVersion: string | null;
   mustChangePassword?: boolean;
-  dealership: { name: string; dealerId?: string | null };
+  dealership: { name: string; dealerId?: string | null; timezone?: string | null };
 };
 
 /** Build API session payload from an active technician row (legacy JWT or Clerk bridge). */
 export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): SessionPayload {
+  const timezone = tech.dealership.timezone?.trim() || undefined;
   return {
     technicianId: tech.id,
     d7Number: tech.d7Number,
@@ -105,6 +111,7 @@ export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): S
     legalDisclaimerVersion: tech.legalDisclaimerVersion ?? null,
     sessionVersion: tech.sessionVersion,
     mustChangePassword: Boolean(tech.mustChangePassword),
+    dealershipTimezone: timezone,
   };
 }
 

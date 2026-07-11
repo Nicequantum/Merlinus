@@ -1,16 +1,13 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
+import { apiError, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { isStoryQualityParseFailure } from '@/prompts/storyQuality';
 import type { StoryQualityResult } from '@/types';
-import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
-import { dbToRepairOrder } from '@/lib/roMapper';
+import { scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { mapGrokRouteError } from '@/lib/grokErrors';
@@ -19,7 +16,8 @@ import { hashWarrantyStory } from '@/lib/storyHash';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
-import { parseRequestBody, parseRouteParams, repairOrderLineParamsSchema, reviewStorySchema } from '@/lib/validation';
+import { withStoryAiRoute } from '@/lib/storyAiRoute';
+import { parseRequestBody, reviewStorySchema } from '@/lib/validation';
 
 /** Must match STORY_SCORE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 100;
@@ -28,37 +26,24 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
-  if ('error' in routeParams) return routeParams.error;
-  const { id, lineId } = routeParams.data;
-
-  return withAuth(
+  return withStoryAiRoute(
     request,
-    async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
-      }
-
-      const parsed = await parseRequestBody(request, reviewStorySchema);
+    params,
+    {
+      rateLimitKey: 'story.score',
+      rateLimit: RATE_LIMITS.generate,
+      trackUsage: true,
+      blockInMaintenance: true,
+      perfEvent: 'route.story.score',
+      customerPayMessage: 'Customer Pay stories do not require AI quality scoring.',
+    },
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
+      const parsed = await parseRequestBody(req, reviewStorySchema);
       if ('error' in parsed) return parsed.error;
 
       const warrantyStory = parsed.data.warrantyStory.trim();
       if (!warrantyStory) {
         return apiError('Warranty story text is required for scoring.', 400);
-      }
-
-      const ro = await loadStoryRouteRepairOrder(session, id);
-      if (!ro) {
-        return apiError(NOT_FOUND_ERROR, 404);
-      }
-
-      const mapped = dbToRepairOrder(ro);
-      const line = mapped.repairLines.find((l) => l.id === lineId);
-      if (!line) return apiError(NOT_FOUND_ERROR, 404);
-
-      const dbLine = ro.repairLines.find((l) => l.id === lineId);
-      if (isCustomerPayRepairLine(dbLine)) {
-        return apiError('Customer Pay stories do not require AI quality scoring.', 400);
       }
 
       let quality: StoryQualityResult;
@@ -117,7 +102,7 @@ export async function POST(
                   qualityGrade: quality.grade,
                   storyHash,
                 },
-                ipAddress: getRequestIp(request),
+                ipAddress: getRequestIp(req),
               },
               {
                 where: scopedRepairLineWhereForSession(lineId, id, session),
@@ -170,15 +155,6 @@ export async function POST(
       });
 
       return { quality };
-    },
-    {
-      rateLimitKey: 'story.score',
-      rateLimit: RATE_LIMITS.generate,
-      trackUsage: true,
-      blockInMaintenance: true,
-      perfEvent: 'route.story.score',
-      requireDealershipContext: true,
-      requireAuditedAccess: true,
     }
   );
 }

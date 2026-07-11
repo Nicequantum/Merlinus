@@ -3,7 +3,7 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { applyCustomerPayTemplate } from '@/lib/customerPayTemplate';
 import { apiError, NOT_FOUND_ERROR, VALIDATION_ERROR } from '@/lib/errors';
-import { blockServiceAdvisorAi } from '@/lib/roleGuards';
+
 import { getRequestIp } from '@/lib/rate-limit';
 import { loadStoryRouteRepairOrder } from '@/lib/repairOrderAccess';
 import {
@@ -28,9 +28,6 @@ export async function POST(
   return withAuth(
     request,
     async (session) => {
-      const blocked = blockServiceAdvisorAi(session);
-      if (blocked) return blocked;
-
       const parsed = await parseRequestBody(request, applyCustomerPayTemplateSchema);
       if ('error' in parsed) return parsed.error;
 
@@ -66,6 +63,7 @@ export async function POST(
     },
     {
       rateLimitKey: 'repair-orders.apply-customer-pay-template',
+      blockServiceAdvisorAi: true,
       requireDealershipContext: true,
       requireAuditedAccess: true,
     }

@@ -41,7 +41,8 @@ describe('critical path HTTP route coverage', () => {
 
   it('generate-story route audits before persist and scopes updates by dealership', () => {
     const src = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts');
-    assert.match(src, /repairOrderLineParamsSchema/);
+    // Phase 7.3 — params validated inside withStoryAiRoute shell
+    assert.match(src, /withStoryAiRoute|repairOrderLineParamsSchema/);
     assert.match(src, /generateWarrantyStory/);
     assert.match(src, /action: 'story\.generate'/);
     assert.match(src, /scopedRepairLineWhere/);

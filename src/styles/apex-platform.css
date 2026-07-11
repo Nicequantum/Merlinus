@@ -796,6 +796,32 @@
   flex-shrink: 0;
 }
 
+/* Phase 7.3 — multi-group portfolio switcher */
+[data-platform='apex'] .apex-group-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 10rem;
+}
+
+[data-platform='apex'] .apex-group-switcher .apex-hint {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+[data-platform='apex'] .apex-group-switcher-select {
+  height: 2.35rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--apex-border, #3a4558) 80%, transparent);
+  background: color-mix(in srgb, var(--apex-surface, #1a2233) 90%, #000);
+  color: var(--apex-text, #e8eef8);
+  font-size: 0.8125rem;
+  padding: 0 0.65rem;
+  max-width: 14rem;
+}
+
 [data-platform='apex'] .apex-national-signout {
   height: 2.35rem;
   padding: 0 1rem;

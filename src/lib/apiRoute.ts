@@ -31,6 +31,7 @@ import {
 } from './requestContext';
 import { logApiWriteRequest } from './requestLogging';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
+import { blockServiceAdvisorAi as blockServiceAdvisorAiGuard } from './roleGuards';
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
 
 type Session = NonNullable<Awaited<ReturnType<typeof resolveAppSession>>>;
@@ -78,6 +79,10 @@ interface RouteOptions {
   perfEvent?: string;
   /** Manager health and similar probes — skip rate limiting so monitoring is not blocked by KV. */
   skipRateLimit?: boolean;
+  /**
+   * Phase 7.3 (H14) — block service_advisor role from Grok/story mutation routes.
+   */
+  blockServiceAdvisorAi?: boolean;
 }
 
 export async function withAuth<T>(
@@ -234,8 +239,18 @@ async function withAuthInner<T>(
     }
   }
 
+  // Phase 7.3 H14 — consistent service_advisor AI block
+  if (options.blockServiceAdvisorAi) {
+    const blocked = blockServiceAdvisorAiGuard(session);
+    if (blocked) return blocked;
+  }
+
   if (options.trackUsage) {
-    const limitReached = await isDailyUsageLimitReached(session.technicianId);
+    // Phase 7.3 H7 — daily cap uses rooftop timezone when present on session
+    const limitReached = await isDailyUsageLimitReached(
+      session.technicianId,
+      session.dealershipTimezone
+    );
     if (limitReached) {
       return apiError(DAILY_USAGE_LIMIT_ERROR, 429);
     }

@@ -7,7 +7,13 @@ import {
   formatOwnerActivityAction,
   formatOwnerActivityTime,
 } from '@/components/apex/formatOwnerActivity';
-import { enterOwnerDealership, fetchOwnerDealerships } from '@/lib/apexLoginSession';
+import {
+  enterOwnerDealership,
+  fetchOwnerDealerGroups,
+  fetchOwnerDealerships,
+  selectOwnerDealerGroup,
+  type OwnerDealerGroupOption,
+} from '@/lib/apexLoginSession';
 import type { ApexDealershipOption } from '@/lib/apexDealershipOptions';
 import type {
   OwnerNationalSummary,
@@ -221,12 +227,15 @@ export function ApexOwnerNationalShell({
   const [actionLoading, setActionLoading] = useState(false);
   const [dealerships, setDealerships] = useState<ApexDealershipOption[]>([]);
   const [loadingDealerships, setLoadingDealerships] = useState(false);
+  const [dealerGroups, setDealerGroups] = useState<OwnerDealerGroupOption[]>([]);
+  const [switchingGroup, setSwitchingGroup] = useState(false);
 
   const isGroupHome = session.scopeMode === 'group';
   const homeTitle = isGroupHome
     ? session.dealerGroupName || 'Group operations'
     : 'National Operations';
   const scopeBadge = isGroupHome ? 'Group' : 'National';
+  const showGroupSwitcher = dealerGroups.length > 1;
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
@@ -245,6 +254,42 @@ export function ApexOwnerNationalShell({
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  // Phase 7.3 — multi-group switcher options
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { groups } = await fetchOwnerDealerGroups();
+        if (!cancelled) setDealerGroups(groups);
+      } catch (error) {
+        clientLog.error('owner.dealer_groups_load_failed', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onSwitchGroup = useCallback(
+    async (dealerGroupId: string) => {
+      if (switchingGroup) return;
+      if (dealerGroupId === (session.activeDealerGroupId || '')) return;
+      setSwitchingGroup(true);
+      try {
+        await selectOwnerDealerGroup(dealerGroupId);
+        toast.success('Switched dealer group portfolio');
+        await onSessionRefresh();
+        await loadSummary();
+      } catch (error: unknown) {
+        clientLog.error('owner.select_group_failed', error);
+        toast.error(error instanceof Error ? error.message : 'Could not switch group');
+      } finally {
+        setSwitchingGroup(false);
+      }
+    },
+    [switchingGroup, session.activeDealerGroupId, onSessionRefresh, loadSummary]
+  );
 
   const openEnterDealership = useCallback(async () => {
     setView('enter-dealership');
@@ -296,6 +341,25 @@ export function ApexOwnerNationalShell({
             </div>
           </div>
           <div className="apex-national-header-actions">
+            {showGroupSwitcher ? (
+              <label className="apex-group-switcher">
+                <span className="apex-hint">Portfolio</span>
+                <select
+                  className="apex-group-switcher-select touch-target"
+                  disabled={switchingGroup || actionLoading}
+                  value={session.activeDealerGroupId || ''}
+                  aria-label="Switch dealer group portfolio"
+                  onChange={(e) => void onSwitchGroup(e.target.value)}
+                >
+                  {dealerGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                      {g.isPrimary ? ' (primary)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <div className="apex-scope-badge" aria-label="Current scope">
               <span aria-hidden="true">◆</span>
               {scopeBadge}

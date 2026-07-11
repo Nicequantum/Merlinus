@@ -110,6 +110,62 @@ export async function fetchOwnerDealerships(): Promise<ApexDealershipOption[]> {
   return data.dealerships ?? [];
 }
 
+export type OwnerDealerGroupOption = {
+  id: string;
+  code: string;
+  name: string;
+  legalName: string | null;
+  role: string;
+  isPrimary: boolean;
+};
+
+export async function fetchOwnerDealerGroups(): Promise<{
+  groups: OwnerDealerGroupOption[];
+  activeDealerGroupId: string | null;
+}> {
+  const res = await fetch('/api/owner/dealer-groups', {
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    groups?: OwnerDealerGroupOption[];
+    activeDealerGroupId?: string | null;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Could not load dealer groups');
+  }
+  return {
+    groups: data.groups ?? [],
+    activeDealerGroupId: data.activeDealerGroupId ?? null,
+  };
+}
+
+/** Switch owner portfolio to a DealerGroup, or null for national (platform operators). */
+export async function selectOwnerDealerGroup(
+  dealerGroupId: string | null
+): Promise<TechnicianSession> {
+  const res = await fetch('/api/owner/select-dealer-group', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ dealerGroupId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    session?: TechnicianSession;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Could not switch dealer group');
+  }
+  if (!data.session) {
+    throw new Error('Group selected but no session was returned');
+  }
+  return data.session;
+}
+
 export async function enterOwnerDealership(dealershipId: string): Promise<TechnicianSession> {
   const res = await fetch('/api/auth/enter-dealership', {
     method: 'POST',

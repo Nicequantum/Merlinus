@@ -383,6 +383,8 @@ export interface TechnicianSession {
   dealerGroupName?: string;
   /** True until first successful password change after provision/admin reset. */
   mustChangePassword?: boolean;
+  /** Phase 7.3 — IANA timezone for active rooftop day boundaries / usage. */
+  dealershipTimezone?: string;
 }
 
 export interface TechnicianUsageSummary {

@@ -53,6 +53,11 @@ model DealerGroup {
   name        String
   /** Legal entity (e.g. Viti, Inc.). */
   legalName   String?  @map("legal_name")
+  /**
+   * Phase 7.3 — optional default IANA timezone for rooftops in this group
+   * (rooftop Dealership.timezone wins when set).
+   */
+  timezone    String?  @default("America/New_York")
   status      String   @default("active")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -118,6 +123,11 @@ model Dealership {
   name            String
   dealerId        String?                       @map("dealer_id")
   dealer          Dealer?                       @relation(fields: [dealerId], references: [id], onDelete: SetNull)
+  /**
+   * Phase 7.3 (H7) — IANA timezone for "today" RO lists and daily AI usage caps
+   * (e.g. America/New_York, America/Los_Angeles). Falls back to USAGE_TIMEZONE env.
+   */
+  timezone        String                        @default("America/New_York")
   createdAt       DateTime                      @default(now())
   technicians     Technician[]
   repairOrders    RepairOrder[]
@@ -185,6 +195,8 @@ model Technician {
   @@index([deletedAt])
   @@index([serviceAdvisorId])
   @@index([apexUsername])
+  /** Phase 7.3 — active staff lists / owner summary staff depth */
+  @@index([dealershipId, isActive, deletedAt])
 }
 
 /** APEX Phase 5.2 — multi-rooftop membership; source of truth for dealership access scoping. */
@@ -246,6 +258,10 @@ model RepairOrder {
   @@index([dealerId, dealershipId])
   /** RLS prep — composite tenant + recency for national platform list queries. */
   @@index([dealershipId, dealerId, updatedAt])
+  /** Phase 7.3 — today/previous RO list + advisor metrics window by rooftop */
+  @@index([dealershipId, updatedAt])
+  /** Phase 7.3 — advisor-scoped lists */
+  @@index([dealershipId, serviceAdvisorId, updatedAt])
 }
 
 // ─── Advisor Intelligence (Phase 1) ─────────────────────────────────────────
@@ -454,6 +470,10 @@ model AuditLog {
   @@index([dealershipId, createdAt])
   @@index([dealerId, createdAt])
   @@index([dealershipId, dealerId, action, createdAt])
+  /** Phase 7.3 — owner summary / image.upload recent path without dealerId filter */
+  @@index([dealershipId, action, createdAt])
+  /** Phase 7.3 — technician recent upload grants */
+  @@index([dealershipId, technicianId, action, createdAt])
 }
 
 /** APEX Phase 5 — rotating refresh tokens for fortress session model (apex PLATFORM_MODE). */

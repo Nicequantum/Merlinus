@@ -1,14 +1,11 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
-import { withAuth } from '@/lib/apiRoute';
 import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
-import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
-import { dbToRepairOrder } from '@/lib/roMapper';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
+import { scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
+import { apiError, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -19,7 +16,7 @@ import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
-import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
+import { withStoryAiRoute } from '@/lib/storyAiRoute';
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;
@@ -28,34 +25,20 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
-  if ('error' in routeParams) return routeParams.error;
-  const { id, lineId } = routeParams.data;
-
-  return withAuth(
+  // Phase 7.3 H14 — shared shell (blockServiceAdvisorAi + load + customer-pay guard)
+  return withStoryAiRoute(
     request,
-    async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
-      }
-
-      const ro = await loadStoryRouteRepairOrder(session, id);
-      if (!ro) {
-        return apiError(NOT_FOUND_ERROR, 404);
-      }
-
-      const mapped = dbToRepairOrder(ro);
-      const line = mapped.repairLines.find((l) => l.id === lineId);
-      if (!line) return apiError(NOT_FOUND_ERROR, 404);
-
-      const dbLine = ro.repairLines.find((l) => l.id === lineId);
-      if (isCustomerPayRepairLine(dbLine)) {
-        return apiError(
-          'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
-          400
-        );
-      }
-
+    params,
+    {
+      rateLimitKey: 'story.generate',
+      rateLimit: RATE_LIMITS.generate,
+      trackUsage: true,
+      blockInMaintenance: true,
+      perfEvent: 'route.story.generate',
+      customerPayMessage:
+        'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
+    },
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
       const pipelineAudit = auditStoryGenerationPipeline(mapped, line);
       logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
 
@@ -72,13 +55,11 @@ export async function POST(
         warrantyStory = cleaned.text;
         cdkSanitized = cleaned.wasModified;
       } catch (error) {
-        const mapped = mapGrokRouteError(error, 'Story generation');
-        // Phase 7.2 H11 — log + Sentry for 5xx mapped AI failures
-        return reportMappedRouteError(mapped, error, 'story.generate');
+        const mappedErr = mapGrokRouteError(error, 'Story generation');
+        return reportMappedRouteError(mappedErr, error, 'story.generate');
       }
 
       try {
-        // Phase 6.2 — persist under enforced RLS (outside AI call; no ambient wrap)
         await rlsTransaction(
           async (tx) => {
             await persistRepairLineStoryInTransaction(
@@ -101,7 +82,7 @@ export async function POST(
                   qualityGrade: null,
                   serviceAdvisorId: null,
                 }),
-                ipAddress: getRequestIp(request),
+                ipAddress: getRequestIp(req),
               },
               {
                 where: scopedRepairLineWhereForSession(lineId, id, session),
@@ -109,7 +90,6 @@ export async function POST(
                   warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
                   storyQualityAuditEncrypted: '',
                   ...CLEAR_STORY_CERTIFICATION_DB,
-                  // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
                   ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
                 },
               }
@@ -155,15 +135,6 @@ export async function POST(
       });
 
       return { warrantyStory, quality: null, cdkSanitized };
-    },
-    {
-      rateLimitKey: 'story.generate',
-      rateLimit: RATE_LIMITS.generate,
-      trackUsage: true,
-      blockInMaintenance: true,
-      perfEvent: 'route.story.generate',
-      requireDealershipContext: true,
-      requireAuditedAccess: true,
     }
   );
 }

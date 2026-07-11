@@ -31,6 +31,7 @@ const sessionPayloadObjectSchema = z.object({
   activeDealerGroupId: z.string().optional(),
   dealerGroupName: z.string().optional(),
   mustChangePassword: z.boolean().optional(),
+  dealershipTimezone: z.string().optional(),
 });
 
 export type ParsedSessionPayload = {
@@ -54,6 +55,7 @@ export type ParsedSessionPayload = {
   activeDealerGroupId?: string;
   dealerGroupName?: string;
   mustChangePassword?: boolean;
+  dealershipTimezone?: string;
 };
 
 export type ParsedApexAccessClaims = ParsedSessionPayload & {
@@ -94,6 +96,7 @@ function normalizeSessionPayload(
     activeDealerGroupId: raw.activeDealerGroupId?.trim() || undefined,
     dealerGroupName: raw.dealerGroupName,
     mustChangePassword: raw.mustChangePassword,
+    dealershipTimezone: raw.dealershipTimezone?.trim() || undefined,
   };
 }
 

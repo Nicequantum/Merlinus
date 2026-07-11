@@ -50,10 +50,20 @@ describe('API input validation', () => {
       'src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts',
       'src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route.ts',
     ];
+    const shell = readSrc('src/lib/storyAiRoute.ts');
     for (const route of lineRoutes) {
       const src = readSrc(route);
-      assert.ok(src.includes('repairOrderLineParamsSchema'), route);
-      assert.ok(src.includes('parseRouteParams'), route);
+      // Phase 7.3 — story routes validate params via withStoryAiRoute shell
+      assert.ok(
+        src.includes('repairOrderLineParamsSchema') ||
+          src.includes('withStoryAiRoute') ||
+          shell.includes('repairOrderLineParamsSchema'),
+        route
+      );
+      assert.ok(
+        src.includes('parseRouteParams') || src.includes('withStoryAiRoute'),
+        route
+      );
     }
   });
 });

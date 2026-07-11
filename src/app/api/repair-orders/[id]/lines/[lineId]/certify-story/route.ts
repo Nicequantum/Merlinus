@@ -1,13 +1,10 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
-import { withAuth } from '@/lib/apiRoute';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
-import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
-import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
-import { dbToRepairOrder } from '@/lib/roMapper';
+import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
+import { scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 import { buildStoryCertificationDbFields } from '@/lib/storyCertification';
@@ -22,7 +19,8 @@ import { PROMPT_VERSION } from '@/prompts/version';
 import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { recordTechnicianCertifiedStory } from '@/lib/technicianCertifiedStory';
-import { certifyStorySchema, parseRequestBody, parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
+import { withStoryAiRoute } from '@/lib/storyAiRoute';
+import { certifyStorySchema, parseRequestBody } from '@/lib/validation';
 
 function namesMatchForCertification(sessionName: string, certifiedByName: string): boolean {
   const normalize = (value: string) =>
@@ -37,18 +35,19 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; lineId: string }> }
 ) {
-  const routeParams = await parseRouteParams(repairOrderLineParamsSchema, params);
-  if ('error' in routeParams) return routeParams.error;
-  const { id, lineId } = routeParams.data;
-
-  return withAuth(
+  return withStoryAiRoute(
     request,
-    async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
-      }
-
-      const parsed = await parseRequestBody(request, certifyStorySchema);
+    params,
+    {
+      rateLimitKey: 'story.certify',
+      rateLimit: RATE_LIMITS.default,
+      trackUsage: false,
+      blockInMaintenance: true,
+      perfEvent: 'route.story.certify',
+      customerPayMessage: 'Customer Pay stories do not use warranty certification.',
+    },
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
+      const parsed = await parseRequestBody(req, certifyStorySchema);
       if ('error' in parsed) return parsed.error;
 
       const certifiedByName = parsed.data.certifiedByName.trim();
@@ -64,20 +63,6 @@ export async function POST(
           'Certification name must match your signed-in technician profile name exactly.',
           400
         );
-      }
-
-      const ro = await loadStoryRouteRepairOrder(session, id);
-      if (!ro) {
-        return apiError(NOT_FOUND_ERROR, 404);
-      }
-
-      const mapped = dbToRepairOrder(ro);
-      const line = mapped.repairLines.find((l) => l.id === lineId);
-      if (!line) return apiError(NOT_FOUND_ERROR, 404);
-
-      const dbLine = ro.repairLines.find((l) => l.id === lineId);
-      if (isCustomerPayRepairLine(dbLine)) {
-        return apiError('Customer Pay stories do not require technician certification.', 400);
       }
 
       const { text: warrantyStory } = sanitizeForCDKWithMeta(rawStory);
@@ -126,7 +111,7 @@ export async function POST(
               promptVersion: PROMPT_VERSION,
               storyHash,
             },
-            ipAddress: getRequestIp(request),
+            ipAddress: getRequestIp(req),
           });
 
           const lineUpdated = await tx.repairLine.updateMany({
@@ -222,14 +207,6 @@ export async function POST(
         certifiedByName,
         storyHash: storyHash!,
       };
-    },
-    {
-      rateLimitKey: 'story.certify',
-      rateLimit: RATE_LIMITS.generate,
-      blockInMaintenance: true,
-      perfEvent: 'route.story.certify',
-      requireDealershipContext: true,
-      requireAuditedAccess: true,
     }
   );
 }
