@@ -13,7 +13,10 @@ if (dsn) {
       replaysOnErrorSampleRate: 0,
       debug: false,
       // Phase 7.2 H8 — client scrubber parity with server
-      beforeSend: scrubSentryEventForClient,
+      beforeSend(event) {
+        scrubSentryEventForClient(event);
+        return event;
+      },
     });
   } catch (error) {
     clientLog.error('telemetry.sentry_init_failed', error);
