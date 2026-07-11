@@ -7,7 +7,7 @@ import {
   type TechnicianForSession,
 } from '@/lib/auth';
 import { assertDealershipMembership } from '@/lib/apex/membershipGuard';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
 type TechnicianWithDealership = Prisma.TechnicianGetPayload<{
@@ -38,32 +38,34 @@ function toTechnicianForSession(
 
 /**
  * Finalize login after multi-dealership selection — verifies membership and optional primary flag.
+ * Phase 7.1 H1 — control-plane RLS bypass (auth path).
  */
 export async function resolveSelectDealershipSession(input: {
   technicianId: string;
   dealershipId: string;
   rememberAsDefault?: boolean;
 }): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { id: input.technicianId.trim() },
-    include: { dealership: true },
-  });
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id: input.technicianId.trim() },
+      include: { dealership: true },
+    });
 
-  if (!tech || !isTechnicianAccountActive(tech)) return null;
-  if (tech.role === 'owner') return null;
-  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
+    if (!tech || !isTechnicianAccountActive(tech)) return null;
+    if (tech.role === 'owner') return null;
+    if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
 
-  const membership = await assertDealershipMembership(tech.id, input.dealershipId, {
-    includeDealership: true,
-  });
+    const membership = await assertDealershipMembership(tech.id, input.dealershipId, {
+      includeDealership: true,
+    });
 
-  if (input.rememberAsDefault) {
-    await prisma.$transaction([
-      prisma.technicianDealership.updateMany({
+    if (input.rememberAsDefault) {
+      const db = getRlsDb();
+      await db.technicianDealership.updateMany({
         where: { technicianId: tech.id },
         data: { isPrimary: false },
-      }),
-      prisma.technicianDealership.update({
+      });
+      await db.technicianDealership.update({
         where: {
           technicianId_dealershipId: {
             technicianId: tech.id,
@@ -71,30 +73,29 @@ export async function resolveSelectDealershipSession(input: {
           },
         },
         data: { isPrimary: true },
-      }),
-    ]);
-  }
+      });
+    }
 
-  const dealership =
-    'dealership' in membership
-      ? membership.dealership
-      : await prisma.dealership.findUniqueOrThrow({
-          where: { id: membership.dealershipId },
-          select: { id: true, name: true, dealerId: true },
-        });
+    const dealership =
+      'dealership' in membership
+        ? membership.dealership
+        : await getRlsDb().dealership.findUniqueOrThrow({
+            where: { id: membership.dealershipId },
+            select: { id: true, name: true, dealerId: true },
+          });
 
-  const base = buildSessionPayloadFromTechnician(
-    toTechnicianForSession(tech, {
-      id: dealership.id,
-      name: dealership.name,
-      dealerId: dealership.dealerId,
-    })
-  );
+    const base = buildSessionPayloadFromTechnician(
+      toTechnicianForSession(tech, {
+        id: dealership.id,
+        name: dealership.name,
+        dealerId: dealership.dealerId,
+      })
+    );
 
-  // Multi-rooftop selection always lands in dealership scope with an active rooftop.
-  return {
-    ...base,
-    scopeMode: 'dealership',
-    activeDealershipId: dealership.id,
-  };
+    return {
+      ...base,
+      scopeMode: 'dealership',
+      activeDealershipId: dealership.id,
+    };
+  });
 }

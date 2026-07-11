@@ -5,7 +5,7 @@ import {
   encryptOptionalSensitiveText,
   encryptSensitiveText,
 } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { buildTemplateTags } from '@/lib/templateTags';
 import { GLOBAL_DEALERSHIP_ID, mapKnowledgeBase, mapTemplate } from '@/lib/templateLibrary';
 
@@ -31,7 +31,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
 
   const dealerFields = dealerIdWriteFields(input.dealerId);
 
-  const template = await prisma.template.upsert({
+  const template = await getRlsDb().template.upsert({
     where: {
       dealershipId_title: {
         dealershipId: input.dealershipId,
@@ -63,7 +63,7 @@ export async function saveTemplateFromStory(input: SaveTemplateFromStoryInput) {
   // M4: Customer Pay templates live in the template table only — not the warranty KB.
   let knowledgeBase = null;
   if (input.category !== 'customer') {
-  knowledgeBase = await prisma.knowledgeBase.upsert({
+  knowledgeBase = await getRlsDb().knowledgeBase.upsert({
     where: {
       dealershipId_title: {
         dealershipId: input.dealershipId,

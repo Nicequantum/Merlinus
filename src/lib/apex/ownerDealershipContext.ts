@@ -9,6 +9,7 @@ import {
   APEX_NATIONAL_DEALERSHIP_NAME,
 } from '@/lib/apex/platformConstants';
 import type { AuditScopeMode } from '@/lib/apex/platformConstants';
+import { isPlatformOperator } from '@/lib/apex/platformOperator';
 import {
   buildSessionPayloadFromTechnician,
   type SessionPayload,
@@ -150,12 +151,14 @@ function nationalPayload(tech: OwnerTechRow, scopeMode: 'national' | 'group', gr
 }
 
 /**
- * Platform-wide national owner session (no DealerGroup membership).
+ * Platform-wide national owner session.
+ * Phase 7.1 H5 — only explicit platform operators (env allowlist), never "empty membership".
  * Prefer {@link buildOwnerHomeSession} for login / exit-dealership.
  */
 export async function buildOwnerNationalSession(technicianId: string): Promise<SessionPayload | null> {
   const tech = await loadOwnerTech(technicianId);
   if (!tech) return null;
+  if (!(await isPlatformOperator(tech.id))) return null;
   await healOwnerNationalFk(tech);
   return nationalPayload(tech, 'national');
 }
@@ -188,9 +191,10 @@ export async function buildOwnerGroupSession(
 }
 
 /**
- * Login / exit home session:
+ * Login / exit home session (Phase 7.1 H5):
  * - Active DealerGroup membership → scopeMode group
- * - Otherwise → platform national
+ * - Explicit platform operator (no group) → scopeMode national
+ * - Otherwise → null (no implicit national superuser)
  */
 export async function buildOwnerHomeSession(technicianId: string): Promise<SessionPayload | null> {
   const tech = await loadOwnerTech(technicianId);
@@ -200,7 +204,10 @@ export async function buildOwnerHomeSession(technicianId: string): Promise<Sessi
   if (primaryGroup) {
     return buildOwnerGroupSession(tech.id, primaryGroup.dealerGroupId);
   }
-  return buildOwnerNationalSession(tech.id);
+  if (await isPlatformOperator(tech.id)) {
+    return buildOwnerNationalSession(tech.id);
+  }
+  return null;
 }
 
 export async function buildOwnerDealershipSession(

@@ -2,9 +2,9 @@ import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
 import { clearSessionCookie, hashPassword, verifyPassword } from '@/lib/auth';
-import { prisma } from '@/lib/db';
 import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { revokeAllSessionsForTechnician } from '@/lib/sessionRevocation';
@@ -17,9 +17,12 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, changePasswordSchema);
       if ('error' in parsed) return parsed.error;
 
-      const tech = await prisma.technician.findFirst({
-        where: { id: session.technicianId, dealershipId: session.dealershipId },
-      });
+      // Phase 7.1 H1 — control-plane bypass for credential change (Technician RLS)
+      const tech = await withRlsBypass(async () =>
+        getRlsDb().technician.findFirst({
+          where: { id: session.technicianId, dealershipId: session.dealershipId },
+        })
+      );
       if (!tech) {
         return apiError('Account not found.', 404);
       }
@@ -34,15 +37,17 @@ export async function POST(request: Request) {
 
       const forced = Boolean(tech.mustChangePassword);
 
-      await prisma.technician.updateMany({
-        where: { id: session.technicianId, dealershipId: session.dealershipId },
-        data: {
-          passwordHash,
-          mustChangePassword: false,
-          passwordChangedAt: new Date(),
-          ...dealerFields,
-        },
-      });
+      await withRlsBypass(async () =>
+        getRlsDb().technician.updateMany({
+          where: { id: session.technicianId, dealershipId: session.dealershipId },
+          data: {
+            passwordHash,
+            mustChangePassword: false,
+            passwordChangedAt: new Date(),
+            ...dealerFields,
+          },
+        })
+      );
 
       // Phase 6.2 — full fortress revocation (JWT version + apex refresh + Clerk)
       await revokeAllSessionsForTechnician(session.technicianId);

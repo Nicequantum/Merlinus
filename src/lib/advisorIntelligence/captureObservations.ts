@@ -1,9 +1,8 @@
 import 'server-only';
 
-import type { Prisma } from '@prisma/client';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
+import { getRlsDb, type RlsDbClient } from '@/lib/apex/rlsContext';
 import { encryptPII } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
 import { complaintLineLabel, inferVehicleFamily } from './nameUtils';
 import { recomputeAdvisorProfile } from './recomputeProfile';
 import { resolveServiceAdvisor, type ResolvedServiceAdvisor } from './resolveAdvisor';
@@ -28,11 +27,11 @@ export interface CaptureAdvisorIntelligenceResult {
   serviceAdvisor: ResolvedServiceAdvisor | null;
 }
 
-type DbClient = Prisma.TransactionClient;
+type DbClient = RlsDbClient;
 
 export async function captureAdvisorIntelligence(
   input: CaptureAdvisorIntelligenceInput,
-  client: DbClient = prisma
+  client: DbClient = getRlsDb()
 ): Promise<CaptureAdvisorIntelligenceResult> {
   const complaints = input.complaints.map((c) => c.trim()).filter((c) => c.length >= 3);
   const advisorName = input.serviceAdvisorName?.trim();

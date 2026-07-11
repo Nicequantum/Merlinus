@@ -1,6 +1,6 @@
 import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { computeAuditEntryHash, verifyAuditChain, type AuditChainPayload } from './auditChain';
-import { prisma } from './db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 
 export interface AuditSummaryScope {
   dealershipId: string;
@@ -52,14 +52,14 @@ async function loadChainLogsForVerification(
 ) {
   const where = { ...scopedDealershipWhere(scope.dealershipId, scope.dealerId), entryHash: { not: '' } };
   if (verifyFullChain) {
-    return prisma.auditLog.findMany({
+    return getRlsDb().auditLog.findMany({
       where,
       orderBy: { createdAt: 'asc' },
       select: chainLogSelect,
     });
   }
 
-  const recent = await prisma.auditLog.findMany({
+  const recent = await getRlsDb().auditLog.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: DEFAULT_CHAIN_VERIFY_LIMIT,
@@ -107,23 +107,23 @@ export async function getAuditDashboardSummary(
 
   const [totalEntries, last24Hours, last7Days, grouped, recent, hashedEntryCount, legacyEntries, chainLogs] =
     await Promise.all([
-    prisma.auditLog.count({ where: auditWhere }),
-    prisma.auditLog.count({ where: { ...auditWhere, createdAt: { gte: dayAgo } } }),
-    prisma.auditLog.count({ where: { ...auditWhere, createdAt: { gte: weekAgo } } }),
-    prisma.auditLog.groupBy({
+    getRlsDb().auditLog.count({ where: auditWhere }),
+    getRlsDb().auditLog.count({ where: { ...auditWhere, createdAt: { gte: dayAgo } } }),
+    getRlsDb().auditLog.count({ where: { ...auditWhere, createdAt: { gte: weekAgo } } }),
+    getRlsDb().auditLog.groupBy({
       by: ['action'],
       where: { ...auditWhere, createdAt: { gte: weekAgo } },
       _count: { action: true },
       orderBy: { _count: { action: 'desc' } },
     }),
-    prisma.auditLog.findMany({
+    getRlsDb().auditLog.findMany({
       where: auditWhere,
       include: { technician: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 8,
     }),
-    prisma.auditLog.count({ where: { ...auditWhere, entryHash: { not: '' } } }),
-    prisma.auditLog.count({
+    getRlsDb().auditLog.count({ where: { ...auditWhere, entryHash: { not: '' } } }),
+    getRlsDb().auditLog.count({
       where: {
         ...auditWhere,
         entryHash: '',

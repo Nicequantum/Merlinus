@@ -1,4 +1,4 @@
-import { prisma } from './db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { extractPathnameFromImageRef } from './imageUrls';
 import { logger } from './logger';
 
@@ -11,6 +11,9 @@ export type ImageAccessSession = {
 
 /** How long a freshly uploaded blob stays accessible before RO attachment. */
 export const RECENT_UPLOAD_ACCESS_MS = 60 * 60 * 1000;
+
+/** Bound RO scan for image attachment checks (Phase 7.1 H4). */
+const IMAGE_ACCESS_RO_SCAN_LIMIT = 150;
 
 function pathnamesFromImageJson(raw: string): string[] {
   try {
@@ -48,78 +51,101 @@ export function auditMetadataHasPathname(metadataRaw: string, pathname: string):
   }
 }
 
-function imageJsonContainsPathname(raw: string, pathname: string): boolean {
-  return pathnamesFromImageJson(raw).includes(pathname);
-}
-
-/** H9: targeted lookup — avoid scanning every RO in the dealership. */
-async function repairOrderContainsPathname(
-  session: ImageAccessSession,
-  pathname: string
-): Promise<boolean> {
-  const roWhere = {
+function roleScopedRoWhere(session: ImageAccessSession) {
+  return {
     dealershipId: session.dealershipId,
     ...(session.role === 'manager'
       ? {}
       : session.role === 'service_advisor' && session.serviceAdvisorId
         ? { serviceAdvisorId: session.serviceAdvisorId }
         : { technicianId: session.technicianId }),
-    OR: [
-      { xentryImageUrls: { contains: pathname } },
-      { repairLines: { some: { xentryImageUrls: { contains: pathname } } } },
-    ],
   };
+}
 
-  const candidates = await prisma.repairOrder.findMany({
-    where: roWhere,
+/**
+ * Phase 7.1 H4 — one RO query, build attached pathname set in memory (no per-path N+1).
+ */
+async function loadAttachedPathnames(session: ImageAccessSession): Promise<Set<string>> {
+  const db = getRlsDb();
+  const candidates = await db.repairOrder.findMany({
+    where: roleScopedRoWhere(session),
     select: {
       xentryImageUrls: true,
       repairLines: { select: { xentryImageUrls: true } },
     },
-    take: 25,
+    orderBy: { updatedAt: 'desc' },
+    take: IMAGE_ACCESS_RO_SCAN_LIMIT,
   });
 
+  const attached = new Set<string>();
   for (const ro of candidates) {
-    if (imageJsonContainsPathname(ro.xentryImageUrls, pathname)) return true;
+    for (const p of pathnamesFromImageJson(ro.xentryImageUrls)) {
+      attached.add(p);
+    }
     for (const line of ro.repairLines) {
-      if (imageJsonContainsPathname(line.xentryImageUrls, pathname)) return true;
+      for (const p of pathnamesFromImageJson(line.xentryImageUrls)) {
+        attached.add(p);
+      }
     }
   }
-
-  return false;
+  return attached;
 }
 
-async function recentUploadGrantsAccess(
+/**
+ * Phase 7.1 H4 — batch recent-upload grants for a set of pathnames (2 queries max).
+ */
+async function loadRecentUploadPathnames(
   session: ImageAccessSession,
-  pathname: string
-): Promise<boolean> {
+  pathnames: string[]
+): Promise<Set<string>> {
+  if (pathnames.length === 0) return new Set();
   const since = new Date(Date.now() - RECENT_UPLOAD_ACCESS_MS);
+  const db = getRlsDb();
+  const allowed = new Set<string>();
 
-  const byEntityId = await prisma.auditLog.findFirst({
+  const byEntityId = await db.auditLog.findMany({
     where: {
       action: 'image.upload',
       dealershipId: session.dealershipId,
       technicianId: session.technicianId,
-      entityId: pathname,
+      entityId: { in: pathnames },
       createdAt: { gte: since },
     },
-    select: { id: true },
+    select: { entityId: true },
   });
-  if (byEntityId) return true;
+  for (const row of byEntityId) {
+    if (row.entityId) allowed.add(row.entityId);
+  }
 
-  const recentUploads = await prisma.auditLog.findMany({
+  const remaining = pathnames.filter((p) => !allowed.has(p));
+  if (remaining.length === 0) return allowed;
+
+  const recentUploads = await db.auditLog.findMany({
     where: {
       action: 'image.upload',
       dealershipId: session.dealershipId,
       technicianId: session.technicianId,
       createdAt: { gte: since },
     },
-    select: { metadata: true },
+    select: { metadata: true, entityId: true },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
 
-  return recentUploads.some((entry) => auditMetadataHasPathname(entry.metadata, pathname));
+  const remainingSet = new Set(remaining);
+  for (const entry of recentUploads) {
+    if (entry.entityId && remainingSet.has(entry.entityId)) {
+      allowed.add(entry.entityId);
+      continue;
+    }
+    for (const p of remainingSet) {
+      if (auditMetadataHasPathname(entry.metadata, p)) {
+        allowed.add(p);
+      }
+    }
+  }
+
+  return allowed;
 }
 
 /** True when the session may read this private blob (RO attachment or recent own upload). */
@@ -127,11 +153,11 @@ export async function userCanAccessImage(
   session: ImageAccessSession,
   pathname: string
 ): Promise<boolean> {
-  if (await repairOrderContainsPathname(session, pathname)) {
-    return true;
-  }
-
-  return recentUploadGrantsAccess(session, pathname);
+  if (!pathname) return false;
+  const attached = await loadAttachedPathnames(session);
+  if (attached.has(pathname)) return true;
+  const recent = await loadRecentUploadPathnames(session, [pathname]);
+  return recent.has(pathname);
 }
 
 /** Returns the first pathname the session may not attach, or null when all are allowed. */
@@ -140,16 +166,22 @@ export async function findForbiddenImagePathname(
   pathnames: string[]
 ): Promise<string | null> {
   const unique = [...new Set(pathnames.filter(Boolean))];
+  if (unique.length === 0) return null;
+
+  // Phase 7.1 H4 — batch: one RO scan + batch upload audit, then O(n) set checks
+  const [attached, recent] = await Promise.all([
+    loadAttachedPathnames(session),
+    loadRecentUploadPathnames(session, unique),
+  ]);
+
   for (const pathname of unique) {
-    const allowed = await userCanAccessImage(session, pathname);
-    if (!allowed) {
-      logger.warn('image.access_denied', {
-        pathname,
-        technicianId: session.technicianId,
-        dealershipId: session.dealershipId,
-      });
-      return pathname;
-    }
+    if (attached.has(pathname) || recent.has(pathname)) continue;
+    logger.warn('image.access_denied', {
+      pathname,
+      technicianId: session.technicianId,
+      dealershipId: session.dealershipId,
+    });
+    return pathname;
   }
   return null;
 }

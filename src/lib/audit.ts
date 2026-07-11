@@ -3,8 +3,8 @@ import type { Prisma } from '@prisma/client';
 import { resolveDealerIdForWrite, type DealerAwareSession } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { PROMPT_VERSION } from '@/prompts/version';
+import { withRlsBypass } from '@/lib/apex/rlsContext';
 import { sanitizeAuditMetadata } from './auditMetadataSanitize';
-import { prisma } from './db';
 import {
   AUDIT_CUSTOMER_PAY_SENTINEL,
   AUDIT_GENESIS_HASH,
@@ -292,7 +292,8 @@ export async function appendAuditLogInTransaction(
 
 export async function writeAuditLog(input: AuditLogInput): Promise<string | void> {
   try {
-    return await prisma.$transaction(async (tx) => {
+    // Phase 7.1 H1 — RLS-bypass transaction (no bare prisma)
+    return await withRlsBypass(async (tx) => {
       return appendAuditLogInTransaction(tx, input);
     });
   } catch (error) {

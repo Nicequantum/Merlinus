@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { prisma } from './db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { logger } from './logger';
 import { readRoNumberFromDb } from './piiFieldRead';
 
@@ -22,14 +22,14 @@ export interface RecordCertifiedStoryInput {
 
 export async function recordTechnicianCertifiedStory(input: RecordCertifiedStoryInput): Promise<void> {
   if (input.auditLogId) {
-    const existing = await prisma.technicianCertifiedStory.findFirst({
+    const existing = await getRlsDb().technicianCertifiedStory.findFirst({
       where: { auditLogId: input.auditLogId },
       select: { id: true },
     });
     if (existing) return;
   }
 
-  await prisma.technicianCertifiedStory.create({
+  await getRlsDb().technicianCertifiedStory.create({
     data: {
       dealershipId: input.dealershipId,
       ...dealerIdWriteFields(input.dealerId),
@@ -58,7 +58,7 @@ function parseAuditMetadata(raw: string): Record<string, unknown> {
 /** Idempotent backfill from story.certify audit rows for dealerships with legacy data. */
 export async function backfillCertifiedStoriesFromAudit(dealershipId: string): Promise<void> {
   try {
-    const certifyLogs = await prisma.auditLog.findMany({
+    const certifyLogs = await getRlsDb().auditLog.findMany({
       where: {
         dealershipId,
         action: 'story.certify',
@@ -78,7 +78,7 @@ export async function backfillCertifiedStoriesFromAudit(dealershipId: string): P
 
     if (certifyLogs.length === 0) return;
 
-    const existing = await prisma.technicianCertifiedStory.findMany({
+    const existing = await getRlsDb().technicianCertifiedStory.findMany({
       where: { dealershipId, auditLogId: { in: certifyLogs.map((log) => log.id) } },
       select: { auditLogId: true },
     });
@@ -94,7 +94,7 @@ export async function backfillCertifiedStoriesFromAudit(dealershipId: string): P
 
     const repairOrders =
       repairOrderIds.length > 0
-        ? await prisma.repairOrder.findMany({
+        ? await getRlsDb().repairOrder.findMany({
             where: { id: { in: repairOrderIds }, dealershipId },
             select: { id: true, roNumberEncrypted: true },
           })
@@ -121,7 +121,7 @@ export async function backfillCertifiedStoriesFromAudit(dealershipId: string): P
       const certifiedAt =
         typeof meta.certifiedAt === 'string' ? new Date(meta.certifiedAt) : log.createdAt;
 
-      await prisma.technicianCertifiedStory.create({
+      await getRlsDb().technicianCertifiedStory.create({
         data: {
           dealershipId,
           technicianId: log.technicianId,

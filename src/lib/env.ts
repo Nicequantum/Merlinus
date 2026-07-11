@@ -113,31 +113,44 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
   }
 
   const dataEncryptionKey = process.env.DATA_ENCRYPTION_KEY?.trim();
+  const searchHmacKey = process.env.SEARCH_HMAC_KEY?.trim();
+  const sessionSecret = process.env.SESSION_SECRET?.trim();
+  // Phase 7.1 H6 — weak / duplicate secrets fail hard in production (especially Apex).
+  const hardFailSecretQuality = isProduction;
+
   if (dataEncryptionKey) {
     if (dataEncryptionKey.length < 32) {
-      warnings.push('DATA_ENCRYPTION_KEY is shorter than 32 characters');
-    }
-    if (!/^[0-9a-fA-F]{64}$/.test(dataEncryptionKey)) {
-      warnings.push('DATA_ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)');
+      const msg = 'DATA_ENCRYPTION_KEY is shorter than 32 characters';
+      if (hardFailSecretQuality) missing.push('DATA_ENCRYPTION_KEY (too short)');
+      else warnings.push(msg);
+    } else if (!/^[0-9a-fA-F]{64}$/.test(dataEncryptionKey)) {
+      const msg = 'DATA_ENCRYPTION_KEY should be 64 hex characters (openssl rand -hex 32)';
+      if (hardFailSecretQuality) missing.push('DATA_ENCRYPTION_KEY (invalid format)');
+      else warnings.push(msg);
     }
   }
 
-  const searchHmacKey = process.env.SEARCH_HMAC_KEY?.trim();
   if (searchHmacKey) {
     if (searchHmacKey.length < 32) {
-      warnings.push('SEARCH_HMAC_KEY is shorter than 32 characters');
-    }
-    if (!/^[0-9a-fA-F]{64}$/.test(searchHmacKey)) {
-      warnings.push('SEARCH_HMAC_KEY should be 64 hex characters (openssl rand -hex 32)');
+      const msg = 'SEARCH_HMAC_KEY is shorter than 32 characters';
+      if (hardFailSecretQuality) missing.push('SEARCH_HMAC_KEY (too short)');
+      else warnings.push(msg);
+    } else if (!/^[0-9a-fA-F]{64}$/.test(searchHmacKey)) {
+      const msg = 'SEARCH_HMAC_KEY should be 64 hex characters (openssl rand -hex 32)';
+      if (hardFailSecretQuality) missing.push('SEARCH_HMAC_KEY (invalid format)');
+      else warnings.push(msg);
     }
     if (dataEncryptionKey && searchHmacKey === dataEncryptionKey) {
-      warnings.push('SEARCH_HMAC_KEY must differ from DATA_ENCRYPTION_KEY');
+      const msg = 'SEARCH_HMAC_KEY must differ from DATA_ENCRYPTION_KEY';
+      if (hardFailSecretQuality) missing.push('SEARCH_HMAC_KEY (must differ from DATA_ENCRYPTION_KEY)');
+      else warnings.push(msg);
     }
   }
 
-  const sessionSecret = process.env.SESSION_SECRET?.trim();
   if (sessionSecret && sessionSecret.length < 32) {
-    warnings.push('SESSION_SECRET is shorter than the recommended 32 characters');
+    const msg = 'SESSION_SECRET is shorter than the recommended 32 characters';
+    if (hardFailSecretQuality) missing.push('SESSION_SECRET (too short)');
+    else warnings.push(msg);
   }
 
   for (const key of PRODUCTION_SCANNING_REQUIRED_ENV_VARS) {

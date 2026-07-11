@@ -1,6 +1,6 @@
+import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 
 import { getRequestIp } from '@/lib/rate-limit';
 import { jsonWithFreshSessionCookie, toTechnicianSession } from '@/lib/sessionRefresh';
@@ -12,23 +12,27 @@ export async function POST(request: Request) {
     async (session) => {
       const now = new Date();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.technician.update({
-          where: { id: session.technicianId },
-          data: { consentAt: now, consentVersion: CONSENT_VERSION },
-        });
+      // Phase 7.1 H1 — ambient/session RLS transaction (no bare prisma)
+      await rlsTransaction(
+        async (tx) => {
+          await tx.technician.update({
+            where: { id: session.technicianId },
+            data: { consentAt: now, consentVersion: CONSENT_VERSION },
+          });
 
-        await appendAuditLogInTransaction(tx, {
-          action: 'consent.accept',
-          dealershipId: session.dealershipId,
-          dealerId: auditDealerIdFromSession(session),
-          technicianId: session.technicianId,
-          entityType: 'technician',
-          entityId: session.technicianId,
-          metadata: { consentVersion: CONSENT_VERSION },
-          ipAddress: getRequestIp(request),
-        });
-      });
+          await appendAuditLogInTransaction(tx, {
+            action: 'consent.accept',
+            dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
+            technicianId: session.technicianId,
+            entityType: 'technician',
+            entityId: session.technicianId,
+            metadata: { consentVersion: CONSENT_VERSION },
+            ipAddress: getRequestIp(request),
+          });
+        },
+        rlsContextFromSession(session)
+      );
 
       const refreshedSession = {
         ...session,

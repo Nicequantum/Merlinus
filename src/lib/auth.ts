@@ -6,8 +6,8 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import type { NextResponse } from 'next/server';
 import { normalizeD7Number } from './d7Number';
+import { parseSessionPayloadClaims } from './sessionClaims';
 import { isTechnicianAccountActive } from './technicianAccounts';
-import { prisma } from './db';
 import { logger } from './logger';
 
 /**
@@ -139,7 +139,9 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     });
-    return payload as unknown as SessionPayload;
+    // Phase 7.1 H13 — validate claim shape (no blind cast)
+    const claims = parseSessionPayloadClaims(payload);
+    return claims as SessionPayload | null;
   } catch {
     return null;
   }

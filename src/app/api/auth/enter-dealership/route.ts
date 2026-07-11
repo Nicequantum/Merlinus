@@ -3,12 +3,11 @@ import { issueApexSessionCookies } from '@/lib/apex/apexSession';
 import { ownerMayEnterDealership } from '@/lib/apex/dealerGroupAccess';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { buildOwnerDealershipSession } from '@/lib/apex/ownerDealershipContext';
-import { rlsContextFromSession } from '@/lib/apex/rlsContext';
+import { getRlsDb, rlsContextFromSession, withRlsBypass } from '@/lib/apex/rlsContext';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { isLegacyAuthPathEnabled } from '@/lib/authMode';
-import { prisma } from '@/lib/db';
 import { apiError, handleRouteError } from '@/lib/errors';
 import { isApexPlatformMode } from '@/lib/platformMode';
 import { checkRateLimit, getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
@@ -47,10 +46,12 @@ export async function POST(request: Request) {
           return apiError('Cannot enter national sentinel as a dealership context.', 403);
         }
 
-        const dealership = await prisma.dealership.findUnique({
-          where: { id: dealershipId },
-          select: { id: true, name: true },
-        });
+        const dealership = await withRlsBypass(async () =>
+          getRlsDb().dealership.findUnique({
+            where: { id: dealershipId },
+            select: { id: true, name: true },
+          })
+        );
 
         if (!dealership) {
           return apiError('Dealership not found.', 404);

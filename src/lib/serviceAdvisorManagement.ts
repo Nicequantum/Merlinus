@@ -1,8 +1,7 @@
 import 'server-only';
 
-import type { Prisma } from '@prisma/client';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { prisma } from '@/lib/db';
+import { getRlsDb, type RlsDbClient } from '@/lib/apex/rlsContext';
 import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import {
   fingerprintAdvisorName,
@@ -35,12 +34,12 @@ export interface ManualAdvisorInput {
   advisorCode?: string | null;
 }
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
+type DbClient = RlsDbClient;
 
 export async function createManualServiceAdvisor(
   dealershipId: string,
   input: ManualAdvisorInput,
-  client: DbClient = prisma,
+  client: DbClient = getRlsDb(),
   dealerId?: string | null
 ) {
   const dealerFields = dealerIdWriteFields(dealerId);

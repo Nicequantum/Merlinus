@@ -17,6 +17,10 @@ import {
   type TechnicianForSession,
 } from '@/lib/auth';
 import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
+import {
+  parseApexAccessClaims,
+  parsePendingSelectionClaims,
+} from '@/lib/sessionClaims';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -173,9 +177,10 @@ export async function verifyApexAccessToken(token: string): Promise<ApexAccessCl
       issuer: APEX_JWT_ISSUER,
       audience: APEX_JWT_AUDIENCE_ACCESS,
     });
-    const claims = payload as unknown as ApexAccessClaims;
-    if (claims.tokenType !== 'access') return null;
-    return claims;
+    // Phase 7.1 H13 — Zod claim validation
+    const claims = parseApexAccessClaims(payload);
+    if (!claims || claims.tokenType !== 'access') return null;
+    return claims as ApexAccessClaims;
   } catch {
     return null;
   }
@@ -189,9 +194,9 @@ export async function verifyApexAccessTokenLenient(token: string): Promise<ApexA
       audience: APEX_JWT_AUDIENCE_ACCESS,
       clockTolerance: `${getRefreshTokenTtlSeconds()}s`,
     });
-    const claims = payload as unknown as ApexAccessClaims;
-    if (claims.tokenType !== 'access') return null;
-    return claims;
+    const claims = parseApexAccessClaims(payload);
+    if (!claims || claims.tokenType !== 'access') return null;
+    return claims as ApexAccessClaims;
   } catch {
     return null;
   }
@@ -241,8 +246,8 @@ export async function verifyPendingSelectionToken(
       issuer: APEX_JWT_ISSUER,
       audience: APEX_JWT_AUDIENCE_PENDING,
     });
-    const claims = payload as unknown as PendingSelectionClaims;
-    if (claims.tokenType !== 'pending_selection') return null;
+    const claims = parsePendingSelectionClaims(payload);
+    if (!claims || claims.tokenType !== 'pending_selection') return null;
 
     const row = await withRlsBypass(async () =>
       getRlsDb().sessionRefreshToken.findUnique({

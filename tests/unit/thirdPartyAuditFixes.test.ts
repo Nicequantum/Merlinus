@@ -148,9 +148,10 @@ describe('Third-party audit hardening', () => {
     const disclaimer = readSrc('src/app/api/legal-disclaimer/route.ts');
     const certify = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/certify-story/route.ts');
     const roPut = readSrc('src/app/api/repair-orders/[id]/route.ts');
-    assert.ok(consent.includes('prisma.$transaction'));
+    // Phase 7.1 — consent/legal use rlsTransaction (not bare prisma.$transaction)
+    assert.ok(consent.includes('rlsTransaction') || consent.includes('prisma.$transaction'));
     assert.ok(consent.includes('appendAuditLogInTransaction'));
-    assert.ok(disclaimer.includes('prisma.$transaction'));
+    assert.ok(disclaimer.includes('rlsTransaction') || disclaimer.includes('prisma.$transaction'));
     assert.ok(disclaimer.includes('appendAuditLogInTransaction'));
     // Phase 6: certify-story uses rlsTransaction (RLS-scoped atomic tx)
     assert.ok(certify.includes('rlsTransaction') || certify.includes('prisma.$transaction'));
@@ -191,9 +192,10 @@ describe('Third-party audit hardening', () => {
 
   it('image access verifies exact pathname matches', () => {
     const src = readSrc('src/lib/imageAccess.ts');
-    assert.ok(src.includes('imageJsonContainsPathname'));
+    // Phase 7.1 H4 — batched load + exact pathname set membership
+    assert.ok(src.includes('pathnamesFromImageJson') || src.includes('loadAttachedPathnames'));
     assert.ok(src.includes('auditMetadataHasPathname'));
-    assert.ok(src.includes('recentUploadGrantsAccess'));
+    assert.ok(src.includes('loadRecentUploadPathnames') || src.includes('recentUploadGrantsAccess'));
   });
 
   it('encryption and PII modules are server-only', () => {

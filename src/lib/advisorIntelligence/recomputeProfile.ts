@@ -1,10 +1,9 @@
 import 'server-only';
 
-import type { Prisma } from '@prisma/client';
 import { decryptPII, encryptJsonObject } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
+import { getRlsDb, type RlsDbClient } from '@/lib/apex/rlsContext';
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
+type DbClient = RlsDbClient;
 
 interface PhraseCount {
   text: string;
@@ -41,7 +40,10 @@ function vehicleAffinity(observations: Array<{ family: string | null }>): Record
   return out;
 }
 
-export async function recomputeAdvisorProfile(serviceAdvisorId: string, client: DbClient = prisma) {
+export async function recomputeAdvisorProfile(
+  serviceAdvisorId: string,
+  client: DbClient = getRlsDb()
+) {
   const observations = await client.advisorComplaintObservation.findMany({
     where: { serviceAdvisorId },
     orderBy: { observedAt: 'desc' },

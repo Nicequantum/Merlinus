@@ -1,6 +1,6 @@
+import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
 import { appendAuditLogInTransaction, auditDealerIdFromSession } from '@/lib/audit';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { getRequestIp } from '@/lib/rate-limit';
 import { jsonWithFreshSessionCookie, toTechnicianSession } from '@/lib/sessionRefresh';
 import { LEGAL_DISCLAIMER_VERSION } from '@/types';
@@ -11,26 +11,30 @@ export async function POST(request: Request) {
     async (session) => {
       const now = new Date();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.technician.update({
-          where: { id: session.technicianId },
-          data: {
-            legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
-            legalDisclaimerAt: now,
-          },
-        });
+      // Phase 7.1 H1 — ambient/session RLS transaction (no bare prisma)
+      await rlsTransaction(
+        async (tx) => {
+          await tx.technician.update({
+            where: { id: session.technicianId },
+            data: {
+              legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION,
+              legalDisclaimerAt: now,
+            },
+          });
 
-        await appendAuditLogInTransaction(tx, {
-          action: 'legalDisclaimer.accept',
-          dealershipId: session.dealershipId,
-          dealerId: auditDealerIdFromSession(session),
-          technicianId: session.technicianId,
-          entityType: 'technician',
-          entityId: session.technicianId,
-          metadata: { legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION },
-          ipAddress: getRequestIp(request),
-        });
-      });
+          await appendAuditLogInTransaction(tx, {
+            action: 'legalDisclaimer.accept',
+            dealershipId: session.dealershipId,
+            dealerId: auditDealerIdFromSession(session),
+            technicianId: session.technicianId,
+            entityType: 'technician',
+            entityId: session.technicianId,
+            metadata: { legalDisclaimerVersion: LEGAL_DISCLAIMER_VERSION },
+            ipAddress: getRequestIp(request),
+          });
+        },
+        rlsContextFromSession(session)
+      );
 
       const refreshedSession = {
         ...session,

@@ -12,7 +12,7 @@ import {
   extractClerkPrimaryEmail,
   normalizeAuthEmail,
 } from '@/lib/clerkEmail';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { logger } from '@/lib/logger';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
@@ -24,6 +24,7 @@ export type ClerkLinkResult =
 
 export { emailsMatchForClerkLink, extractClerkPrimaryEmail, normalizeAuthEmail } from '@/lib/clerkEmail';
 
+/** Phase 7.1 H1 — Clerk identity is control-plane (RLS bypass). */
 export async function linkTechnicianToClerkUser(params: {
   technicianId: string;
   clerkUserId: string;
@@ -31,48 +32,50 @@ export async function linkTechnicianToClerkUser(params: {
 }): Promise<ClerkLinkResult> {
   const { technicianId, clerkUserId, source } = params;
 
-  const existingByClerk = await prisma.technician.findUnique({
-    where: { clerkUserId },
-    select: { id: true, email: true },
-  });
-  if (existingByClerk && existingByClerk.id !== technicianId) {
-    return { linked: false, reason: 'Clerk account is already linked to another technician' };
-  }
+  return withRlsBypass(async () => {
+    const existingByClerk = await getRlsDb().technician.findUnique({
+      where: { clerkUserId },
+      select: { id: true, email: true },
+    });
+    if (existingByClerk && existingByClerk.id !== technicianId) {
+      return { linked: false, reason: 'Clerk account is already linked to another technician' };
+    }
 
-  const technician = await prisma.technician.findUnique({
-    where: { id: technicianId },
-    include: { dealership: true },
-  });
+    const technician = await getRlsDb().technician.findUnique({
+      where: { id: technicianId },
+      include: { dealership: true },
+    });
 
-  if (!technician || !isTechnicianAccountActive(technician)) {
-    return { linked: false, reason: 'Technician account is not active' };
-  }
+    if (!technician || !isTechnicianAccountActive(technician)) {
+      return { linked: false, reason: 'Technician account is not active' };
+    }
 
-  if (technician.clerkUserId && technician.clerkUserId !== clerkUserId) {
-    return { linked: false, reason: 'Technician is already linked to a different Clerk account' };
-  }
+    if (technician.clerkUserId && technician.clerkUserId !== clerkUserId) {
+      return { linked: false, reason: 'Technician is already linked to a different Clerk account' };
+    }
 
-  if (technician.clerkUserId === clerkUserId) {
-    return { linked: true, technician };
-  }
+    if (technician.clerkUserId === clerkUserId) {
+      return { linked: true, technician };
+    }
 
-  const updated = await prisma.technician.update({
-    where: { id: technicianId },
-    data: {
+    const updated = await getRlsDb().technician.update({
+      where: { id: technicianId },
+      data: {
+        clerkUserId,
+        authProvider: 'clerk',
+      },
+      include: { dealership: true },
+    });
+
+    logger.info('auth.clerk_linked', {
+      technicianId,
       clerkUserId,
-      authProvider: 'clerk',
-    },
-    include: { dealership: true },
-  });
+      source,
+      email: updated.email,
+    });
 
-  logger.info('auth.clerk_linked', {
-    technicianId,
-    clerkUserId,
-    source,
-    email: updated.email,
+    return { linked: true, technician: updated };
   });
-
-  return { linked: true, technician: updated };
 }
 
 export async function tryLinkClerkUserByEmail(params: {
@@ -83,15 +86,17 @@ export async function tryLinkClerkUserByEmail(params: {
   const normalizedEmail = normalizeAuthEmail(params.email);
   if (!normalizedEmail) return null;
 
-  const technician = await prisma.technician.findFirst({
-    where: {
-      email: { equals: normalizedEmail, mode: 'insensitive' },
-      clerkUserId: null,
-      deletedAt: null,
-      isActive: true,
-    },
-    include: { dealership: true },
-  });
+  const technician = await withRlsBypass(async () =>
+    getRlsDb().technician.findFirst({
+      where: {
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+        clerkUserId: null,
+        deletedAt: null,
+        isActive: true,
+      },
+      include: { dealership: true },
+    })
+  );
 
   if (!technician || !isTechnicianAccountActive(technician)) return null;
   if (technician.role === 'service_advisor' && !technician.serviceAdvisorId) return null;
@@ -106,21 +111,23 @@ export async function tryLinkClerkUserByEmail(params: {
 }
 
 export async function unlinkClerkUser(clerkUserId: string): Promise<void> {
-  const technician = await prisma.technician.findUnique({
-    where: { clerkUserId },
-    select: { id: true },
-  });
-  if (!technician) return;
+  await withRlsBypass(async () => {
+    const technician = await getRlsDb().technician.findUnique({
+      where: { clerkUserId },
+      select: { id: true },
+    });
+    if (!technician) return;
 
-  await prisma.technician.update({
-    where: { id: technician.id },
-    data: {
-      clerkUserId: null,
-      authProvider: 'legacy',
-    },
-  });
+    await getRlsDb().technician.update({
+      where: { id: technician.id },
+      data: {
+        clerkUserId: null,
+        authProvider: 'legacy',
+      },
+    });
 
-  logger.info('auth.clerk_unlinked', { technicianId: technician.id, clerkUserId });
+    logger.info('auth.clerk_unlinked', { technicianId: technician.id, clerkUserId });
+  });
 }
 
 export async function resolveClerkUserEmail(clerkUserId: string): Promise<string | null> {
@@ -196,10 +203,12 @@ export async function getTechnicianClerkLinkState(technicianId: string): Promise
   clerkUserId: string | null;
   email: string;
 }> {
-  const technician = await prisma.technician.findUnique({
-    where: { id: technicianId },
-    select: { clerkUserId: true, email: true },
-  });
+  const technician = await withRlsBypass(async () =>
+    getRlsDb().technician.findUnique({
+      where: { id: technicianId },
+      select: { clerkUserId: true, email: true },
+    })
+  );
 
   if (!technician) {
     return { linked: false, clerkUserId: null, email: '' };
@@ -221,10 +230,12 @@ export async function manualLinkLegacySessionToClerk(params: {
     return { linked: false, reason: 'Clerk account has no verified email' };
   }
 
-  const technician = await prisma.technician.findUnique({
-    where: { id: params.technicianId },
-    select: { email: true },
-  });
+  const technician = await withRlsBypass(async () =>
+    getRlsDb().technician.findUnique({
+      where: { id: params.technicianId },
+      select: { email: true },
+    })
+  );
 
   if (!technician) {
     return { linked: false, reason: 'Technician not found' };
@@ -247,10 +258,12 @@ export async function manualLinkLegacySessionToClerk(params: {
 export async function loadLinkedTechnicianSession(
   clerkUserId: string
 ): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { clerkUserId },
-    include: { dealership: true },
-  });
+  const tech = await withRlsBypass(async () =>
+    getRlsDb().technician.findUnique({
+      where: { clerkUserId },
+      include: { dealership: true },
+    })
+  );
 
   if (!tech || !isTechnicianAccountActive(tech)) return null;
   if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;

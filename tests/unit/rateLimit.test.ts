@@ -30,6 +30,8 @@ function saveRateLimitEnv() {
     githubActions: process.env.GITHUB_ACTIONS,
     kvUrl: process.env.KV_REST_API_URL,
     kvToken: process.env.KV_REST_API_TOKEN,
+    platformMode: process.env.PLATFORM_MODE,
+    publicPlatformMode: process.env.NEXT_PUBLIC_PLATFORM_MODE,
   };
 }
 
@@ -53,14 +55,26 @@ function restoreRateLimitEnv(saved: ReturnType<typeof saveRateLimitEnv>): void {
   }
   process.env.KV_REST_API_URL = saved.kvUrl;
   process.env.KV_REST_API_TOKEN = saved.kvToken;
+  if (saved.platformMode === undefined) delete process.env.PLATFORM_MODE;
+  else process.env.PLATFORM_MODE = saved.platformMode;
+  if (saved.publicPlatformMode === undefined) delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
+  else process.env.NEXT_PUBLIC_PLATFORM_MODE = saved.publicPlatformMode;
 }
 
-function setVercelProductionEnv(): void {
+function setVercelProductionEnv(opts?: { apex?: boolean }): void {
   process.env.NODE_ENV = 'production';
   process.env.VERCEL = '1';
   process.env.VERCEL_ENV = 'production';
   delete process.env.CI;
   delete process.env.GITHUB_ACTIONS;
+  // Phase 7.1 — Merlinus memory-fallback tests must not run under Apex fail-closed
+  if (opts?.apex) {
+    process.env.PLATFORM_MODE = 'apex';
+    process.env.NEXT_PUBLIC_PLATFORM_MODE = 'apex';
+  } else {
+    process.env.PLATFORM_MODE = 'merlinus';
+    process.env.NEXT_PUBLIC_PLATFORM_MODE = 'merlinus';
+  }
 }
 
 describe('rate limiting', () => {

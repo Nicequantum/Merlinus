@@ -1,9 +1,9 @@
 import 'server-only';
 
 import type { AdvisorPerformanceMetrics, StoryQualityResult } from '@/types';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { lineSoldTotal } from '@/lib/repairLineSoldMetrics';
 import { decryptJsonObject } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
 
 export {
   formatMetricCurrency,
@@ -14,6 +14,9 @@ export {
 /** MI audit scores at or above this threshold count as warranty "approved" quality. */
 export const ADVISOR_APPROVAL_SCORE_THRESHOLD = 75;
 
+/** Phase 7.1 H2 — bound metrics to recent activity (avoid full-history scan). */
+export const ADVISOR_METRICS_WINDOW_DAYS = 90;
+
 const EMPTY_METRICS: AdvisorPerformanceMetrics = {
   rosWritten: 0,
   approvalRate: null,
@@ -23,6 +26,10 @@ const EMPTY_METRICS: AdvisorPerformanceMetrics = {
   upsellRate: null,
   csiScore: null,
 };
+
+function metricsWindowStart(now = Date.now()): Date {
+  return new Date(now - ADVISOR_METRICS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
 
 function parseAuditScore(raw: string): number | null {
   if (!raw.trim()) return null;
@@ -119,10 +126,15 @@ export async function computeAdvisorMetricsBatch(
     result.set(id, { ...EMPTY_METRICS, csiScore: csiByAdvisorId.get(id) ?? null });
   }
 
-  const repairOrders = await prisma.repairOrder.findMany({
+  const since = metricsWindowStart();
+  const db = getRlsDb();
+
+  // Phase 7.1 H2 — last 90 days only; drop full warranty story body from select
+  const repairOrders = await db.repairOrder.findMany({
     where: {
       dealershipId,
       serviceAdvisorId: { in: advisorIds },
+      updatedAt: { gte: since },
     },
     select: {
       id: true,
@@ -199,14 +211,18 @@ export async function computeAdvisorMetricsBatch(
     }
   }
 
-  const certifiedStories = await prisma.technicianCertifiedStory.findMany({
-    where: { dealershipId },
+  // Certified stories in the same window, joined to advisors via a single RO lookup
+  const certifiedStories = await db.technicianCertifiedStory.findMany({
+    where: {
+      dealershipId,
+      certifiedAt: { gte: since },
+    },
     select: { repairOrderId: true },
   });
 
   if (certifiedStories.length > 0) {
     const certifiedRoIds = [...new Set(certifiedStories.map((story) => story.repairOrderId))];
-    const certifiedRos = await prisma.repairOrder.findMany({
+    const certifiedRos = await db.repairOrder.findMany({
       where: {
         id: { in: certifiedRoIds },
         serviceAdvisorId: { in: advisorIds },

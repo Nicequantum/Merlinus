@@ -1,6 +1,6 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { writeTechnicianActivityLog } from '@/lib/technicianActivityLog';
 
 import { parseRequestBody, technicianAppStartLogSchema } from '@/lib/validation';
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         },
       });
 
-      await prisma.technician.updateMany({
+      await getRlsDb().technician.updateMany({
         where: { id: session.technicianId, firstAppLaunchAt: null },
         data: {
           firstAppLaunchAt: launchedAt,

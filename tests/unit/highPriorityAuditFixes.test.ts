@@ -68,9 +68,10 @@ describe('High priority audit fixes (H1–H15)', () => {
 
   it('H9: image access uses targeted query with exact pathname verification', () => {
     const src = readSrc('src/lib/imageAccess.ts');
+    // Phase 7.1 H4 — batched RO scan + pathname set (no per-path N+1)
     assert.ok(src.includes('findMany'));
-    assert.ok(src.includes('imageJsonContainsPathname'));
-    assert.equal(src.includes('findMany({\n    where: {\n      dealershipId'), false);
+    assert.ok(src.includes('loadAttachedPathnames') || src.includes('pathnamesFromImageJson'));
+    assert.ok(src.includes('findForbiddenImagePathname'));
   });
 
   it('H10: repair order list pagination', () => {

@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { decryptJsonObject } from '@/lib/encryption';
 import { hashWarrantyStory } from '@/lib/storyHash';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
-import { prisma } from '@/lib/db';
+import { getRlsDb, type RlsDbClient } from '@/lib/apex/rlsContext';
 import type { StoryQualityResult } from '@/types';
 
 /** Durable audit actions that prove an MI score was run for a specific story version. */
@@ -67,7 +67,7 @@ export function auditMetadataMatchesStoryHash(
 }
 
 async function findMatchingMiScoreAuditLog(
-  client: Prisma.TransactionClient | typeof prisma,
+  client: RlsDbClient,
   dealershipId: string,
   repairLineId: string,
   storyHash: string
@@ -85,7 +85,9 @@ async function findMatchingMiScoreAuditLog(
     select: { metadata: true },
   });
 
-  return logs.some((log) => auditMetadataMatchesStoryHash(log.metadata, storyHash));
+  return logs.some((log: { metadata: string }) =>
+    auditMetadataMatchesStoryHash(log.metadata, storyHash)
+  );
 }
 
 function evaluateStoryCertificationPrerequisites(input: {
@@ -251,7 +253,7 @@ export async function validateStoryCertificationPrerequisites(input: {
 }): Promise<StoryCertificationGateResult> {
   const storyHash = hashWarrantyStory(input.warrantyStory);
 
-  const hasGenerateAudit = await prisma.auditLog.findFirst({
+  const hasGenerateAudit = await getRlsDb().auditLog.findFirst({
     where: {
       dealershipId: input.dealershipId,
       entityType: 'repairLine',
@@ -262,7 +264,7 @@ export async function validateStoryCertificationPrerequisites(input: {
     select: { id: true },
   });
 
-  const dbLine = await prisma.repairLine.findFirst({
+  const dbLine = await getRlsDb().repairLine.findFirst({
     where: {
       id: input.repairLineId,
       repairOrder: { dealershipId: input.dealershipId },
@@ -271,7 +273,7 @@ export async function validateStoryCertificationPrerequisites(input: {
   });
 
   const hasScoreAuditLog = await findMatchingMiScoreAuditLog(
-    prisma,
+    getRlsDb(),
     input.dealershipId,
     input.repairLineId,
     storyHash

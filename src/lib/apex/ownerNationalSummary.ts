@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { Prisma } from '@prisma/client';
 import { listDealerIdsForOwnerGroups } from '@/lib/apex/dealerGroupAccess';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
@@ -172,6 +173,78 @@ export async function getOwnerNationalSummary(
   return withRlsBypass(async () => computeOwnerNationalSummary(context));
 }
 
+/**
+ * Phase 7.1 H5 — align summary scope with platform operator / group membership.
+ * Platform operator → national (null dealer filter). Group → dealer ids. Else empty.
+ * Prefer session scopeMode when provided and consistent with rights.
+ */
+async function resolveOwnerSummaryDealerScope(
+  context?: OwnerSummaryContext
+): Promise<{ isGroupScoped: boolean; dealerIdList: string[] | null; scopeMode: 'national' | 'group' }> {
+  if (!context?.technicianId) {
+    return { isGroupScoped: false, dealerIdList: null, scopeMode: 'national' };
+  }
+
+  const scopedDealerIds = await listDealerIdsForOwnerGroups(context.technicianId);
+  // null = platform operator (national); array = group-scoped (possibly empty)
+  const isNationalOperator = scopedDealerIds === null;
+
+  if (isNationalOperator) {
+    // Platform operators always see national portfolio (enter/list unrestricted).
+    return { isGroupScoped: false, dealerIdList: null, scopeMode: 'national' };
+  }
+
+  const dealerIdList =
+    scopedDealerIds.length > 0 ? scopedDealerIds : (['__none__'] as string[]);
+  return { isGroupScoped: true, dealerIdList, scopeMode: 'group' };
+}
+
+/** Phase 7.1 H3 — daily buckets via SQL (no full-row materialization). */
+async function loadDailyActivityBuckets(
+  rooftopIds: string[],
+  since: Date
+): Promise<{
+  roRows: Array<{ dealershipId: string; day: string; count: number }>;
+  certRows: Array<{ dealershipId: string; day: string; count: number }>;
+}> {
+  if (rooftopIds.length === 0 || rooftopIds[0] === '__none__') {
+    return { roRows: [], certRows: [] };
+  }
+
+  const db = getRlsDb();
+  const idList = Prisma.join(rooftopIds.map((id) => Prisma.sql`${id}`));
+
+  const [roBuckets, certBuckets] = await Promise.all([
+    db.$queryRaw<Array<{ dealershipId: string; day: Date; count: number }>>`
+      SELECT "dealershipId",
+             (date_trunc('day', "updatedAt" AT TIME ZONE 'UTC'))::date AS day,
+             COUNT(*)::int AS count
+      FROM "RepairOrder"
+      WHERE "dealershipId" IN (${idList})
+        AND "updatedAt" >= ${since}
+      GROUP BY 1, 2
+    `,
+    db.$queryRaw<Array<{ dealershipId: string; day: Date; count: number }>>`
+      SELECT "dealershipId",
+             (date_trunc('day', "certifiedAt" AT TIME ZONE 'UTC'))::date AS day,
+             COUNT(*)::int AS count
+      FROM "TechnicianCertifiedStory"
+      WHERE "dealershipId" IN (${idList})
+        AND "certifiedAt" >= ${since}
+      GROUP BY 1, 2
+    `,
+  ]);
+
+  const toRows = (rows: Array<{ dealershipId: string; day: Date; count: number }>) =>
+    rows.map((r) => ({
+      dealershipId: r.dealershipId,
+      day: dayKey(r.day instanceof Date ? r.day : new Date(r.day)),
+      count: Number(r.count) || 0,
+    }));
+
+  return { roRows: toRows(roBuckets), certRows: toRows(certBuckets) };
+}
+
 async function computeOwnerNationalSummary(
   context?: OwnerSummaryContext
 ): Promise<OwnerNationalSummary> {
@@ -181,13 +254,11 @@ async function computeOwnerNationalSummary(
   const twoWeeksAgo = new Date(now - FOURTEEN_DAYS_MS);
   const monthAgo = new Date(now - THIRTY_DAYS_MS);
 
-  const scopedDealerIds = context?.technicianId
-    ? await listDealerIdsForOwnerGroups(context.technicianId)
-    : null;
-
-  const isGroupScoped = Array.isArray(scopedDealerIds);
-  const dealerIdList =
-    isGroupScoped && scopedDealerIds.length > 0 ? scopedDealerIds : isGroupScoped ? ['__none__'] : null;
+  const {
+    isGroupScoped,
+    dealerIdList,
+    scopeMode: resolvedScopeMode,
+  } = await resolveOwnerSummaryDealerScope(context);
 
   const rooftops = await loadRooftopRows(dealerIdList);
   const rooftopIds = rooftops.map((r) => r.id);
@@ -214,8 +285,7 @@ async function computeOwnerNationalSummary(
     cert7ByRooftop,
     cert30ByRooftop,
     activeStaffByRooftop7d,
-    roRows14d,
-    certRows14d,
+    dailyBuckets,
     aiUsage7d,
     aiByRooftop,
     logins7d,
@@ -348,20 +418,7 @@ async function computeOwnerNationalSummary(
         action: { in: ['auth.login', 'auth.refresh', 'ro.create', 'story.certify', 'story.generate'] },
       },
     }),
-    getRlsDb().repairOrder.findMany({
-      where: {
-        dealershipId: { in: effectiveRooftopIds },
-        updatedAt: { gte: twoWeeksAgo },
-      },
-      select: { dealershipId: true, updatedAt: true },
-    }),
-    getRlsDb().technicianCertifiedStory.findMany({
-      where: {
-        dealershipId: { in: effectiveRooftopIds },
-        certifiedAt: { gte: twoWeeksAgo },
-      },
-      select: { dealershipId: true, certifiedAt: true },
-    }),
+    loadDailyActivityBuckets(effectiveRooftopIds, twoWeeksAgo),
     getRlsDb().usageLog.count({
       where: { dealershipId: { in: effectiveRooftopIds }, createdAt: { gte: weekAgo } },
     }),
@@ -430,20 +487,18 @@ async function computeOwnerNationalSummary(
   }
   const medianTimeToCertifyHours = median(hoursToCert);
 
-  // Portfolio daily series
+  // Portfolio daily series (Phase 7.1 H3 — SQL day buckets, not full row lists)
   const roDayCounts = new Map<string, number>();
   const certDayCounts = new Map<string, number>();
   const roDayByRooftop = new Map<string, Map<string, number>>();
-  for (const row of roRows14d) {
-    const k = dayKey(row.updatedAt);
-    roDayCounts.set(k, (roDayCounts.get(k) ?? 0) + 1);
+  for (const row of dailyBuckets.roRows) {
+    roDayCounts.set(row.day, (roDayCounts.get(row.day) ?? 0) + row.count);
     const m = roDayByRooftop.get(row.dealershipId) ?? new Map();
-    m.set(k, (m.get(k) ?? 0) + 1);
+    m.set(row.day, (m.get(row.day) ?? 0) + row.count);
     roDayByRooftop.set(row.dealershipId, m);
   }
-  for (const row of certRows14d) {
-    const k = dayKey(row.certifiedAt);
-    certDayCounts.set(k, (certDayCounts.get(k) ?? 0) + 1);
+  for (const row of dailyBuckets.certRows) {
+    certDayCounts.set(row.day, (certDayCounts.get(row.day) ?? 0) + row.count);
   }
   const volumeTrend = seriesFromDaily(dayKeys14, roDayCounts);
   const certificationTrend = seriesFromDaily(dayKeys14, certDayCounts);
@@ -713,7 +768,7 @@ async function computeOwnerNationalSummary(
       createdAt: row.createdAt.toISOString(),
     })),
     generatedAt: new Date().toISOString(),
-    scopeMode: isGroupScoped ? 'group' : 'national',
+    scopeMode: resolvedScopeMode,
     dealerGroupId: context?.activeDealerGroupId ?? null,
     dealerGroupName: context?.dealerGroupName ?? null,
     volumeTrend: {

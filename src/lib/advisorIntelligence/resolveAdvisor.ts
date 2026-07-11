@@ -1,8 +1,7 @@
 import 'server-only';
 
-import type { Prisma } from '@prisma/client';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { prisma } from '@/lib/db';
+import { getRlsDb, type RlsDbClient } from '@/lib/apex/rlsContext';
 import { encryptJsonObject, encryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import {
@@ -20,7 +19,7 @@ export interface ResolvedServiceAdvisor {
   matchedViaAlias: boolean;
 }
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
+type DbClient = RlsDbClient;
 
 function confidenceForMatch(opts: { exact: boolean; alias: boolean }): number {
   if (opts.exact) return 0.98;
@@ -67,7 +66,7 @@ export interface ResolveServiceAdvisorOptions {
 export async function resolveServiceAdvisor(
   dealershipId: string,
   rawName: string,
-  client: DbClient = prisma,
+  client: DbClient = getRlsDb(),
   options: ResolveServiceAdvisorOptions = {}
 ): Promise<ResolvedServiceAdvisor | null> {
   const incrementRoCount = options.incrementRoCount !== false;

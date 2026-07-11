@@ -5,13 +5,13 @@ import {
   getRlsTransaction,
   setRlsContext,
   isRlsEnabled,
+  withRlsBypass,
   type RlsContext,
 } from '@/lib/apex/rlsContext';
 import {
   appendAuditLogInTransaction,
   type AuditLogInput,
 } from '@/lib/audit';
-import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 export class AuditedAccessError extends Error {
@@ -76,7 +76,8 @@ export async function writeAuditedAccess(
     if (ambient) {
       return await run(ambient);
     }
-    return await prisma.$transaction(async (tx) => run(tx));
+    // Phase 7.1 H1 — no bare prisma; control-plane bypass when no ambient RLS tx
+    return await withRlsBypass(async (tx) => run(tx));
   } catch (error) {
     logger.error('audit.audited_access_failed', {
       action: input.action,

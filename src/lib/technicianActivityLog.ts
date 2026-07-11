@@ -1,5 +1,5 @@
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { prisma } from '@/lib/db';
+import { rlsTransaction } from '@/lib/apex/rlsContext';
 import { logger } from '@/lib/logger';
 import { sanitizeTechnicianLogMetadata } from '@/lib/technicianLogMetadata';
 
@@ -37,19 +37,21 @@ export async function writeTechnicianActivityLog(
 ): Promise<void> {
   try {
     const metadata = sanitizeTechnicianLogMetadata(input.metadata);
-    await prisma.technicianActivityLog.create({
-      data: {
-        dealershipId: input.dealershipId,
-        ...dealerIdWriteFields(input.dealerId),
-        technicianId: input.technicianId,
-        category: input.category,
-        event: input.event,
-        message: sanitizeActivityLogMessage(input.message).slice(0, 500),
-        repairOrderId: input.repairOrderId,
-        repairLineId: input.repairLineId,
-        clientSessionId: input.clientSessionId,
-        metadata: JSON.stringify(metadata),
-      },
+    await rlsTransaction(async (tx) => {
+      await tx.technicianActivityLog.create({
+        data: {
+          dealershipId: input.dealershipId,
+          ...dealerIdWriteFields(input.dealerId),
+          technicianId: input.technicianId,
+          category: input.category,
+          event: input.event,
+          message: sanitizeActivityLogMessage(input.message).slice(0, 500),
+          repairOrderId: input.repairOrderId,
+          repairLineId: input.repairLineId,
+          clientSessionId: input.clientSessionId,
+          metadata: JSON.stringify(metadata),
+        },
+      });
     });
   } catch (error) {
     logger.warn('technician_activity_log.write_failed', {

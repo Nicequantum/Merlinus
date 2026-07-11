@@ -2,7 +2,7 @@ import 'server-only';
 
 import { decryptJsonObject, decryptPII } from '@/lib/encryption';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
-import { prisma } from '@/lib/db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 
 export interface AdvisorProfileData {
   formatting: {
@@ -117,7 +117,7 @@ export function formatAdvisorContextForPrompt(ctx: AdvisorPromptContext): string
 export async function loadAdvisorPromptContext(
   serviceAdvisorId: string
 ): Promise<AdvisorPromptContext | null> {
-  const advisor = await prisma.serviceAdvisor.findUnique({
+  const advisor = await getRlsDb().serviceAdvisor.findUnique({
     where: { id: serviceAdvisorId, status: 'active' },
     include: {
       profile: true,
@@ -149,7 +149,7 @@ export async function loadAdvisorPromptContext(
 export async function loadAdvisorPromptContextForRepairOrder(
   repairOrderId: string
 ): Promise<AdvisorPromptContext | null> {
-  const ro = await prisma.repairOrder.findUnique({
+  const ro = await getRlsDb().repairOrder.findUnique({
     where: { id: repairOrderId },
     select: { serviceAdvisorId: true },
   });

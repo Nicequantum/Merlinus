@@ -2,7 +2,7 @@ import 'server-only';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { isClerkAuthPathEnabled } from '@/lib/authMode';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { logger } from '@/lib/logger';
 
 /** Revoke the active Clerk browser session when present. */
@@ -62,10 +62,12 @@ export async function revokeTechnicianAuthSessions(
 ): Promise<void> {
   await revokeLegacy();
 
-  const technician = await prisma.technician.findUnique({
-    where: { id: technicianId },
-    select: { clerkUserId: true },
-  });
+  const technician = await withRlsBypass(async () =>
+    getRlsDb().technician.findUnique({
+      where: { id: technicianId },
+      select: { clerkUserId: true },
+    })
+  );
 
   if (technician?.clerkUserId) {
     await revokeAllClerkSessionsForUser(technician.clerkUserId);

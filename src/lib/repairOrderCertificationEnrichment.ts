@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { prisma } from './db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { hashWarrantyStory } from './storyHash';
 import type { RepairOrder } from '@/types';
 
@@ -14,7 +14,7 @@ export async function enrichRepairOrderCertification(
   );
   if (!needsEnrichment) return ro;
 
-  const certifiedStories = await prisma.technicianCertifiedStory.findMany({
+  const certifiedStories = await getRlsDb().technicianCertifiedStory.findMany({
     where: { repairOrderId: ro.id, dealershipId },
     orderBy: { certifiedAt: 'desc' },
     select: {

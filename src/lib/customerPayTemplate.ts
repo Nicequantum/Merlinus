@@ -1,11 +1,10 @@
 import 'server-only';
 
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
-import { rlsTransaction } from '@/lib/apex/rlsContext';
+import { getRlsDb, rlsTransaction } from '@/lib/apex/rlsContext';
 import { appendAuditLogInTransaction } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { encryptOptionalSensitiveText, decryptSensitiveText, decryptOptionalSensitiveText } from '@/lib/encryption';
-import { prisma } from '@/lib/db';
 import { GLOBAL_DEALERSHIP_ID } from '@/lib/templateLibrary';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
 
@@ -44,7 +43,9 @@ export interface ClearCustomerPayModeInput {
  * M1: Explicitly clear Customer Pay mode so warranty AI generation can resume.
  */
 export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Promise<void> {
-  const ro = await prisma.repairOrder.findFirst({
+  // Phase 7.1 H1 — RLS-aware client (ambient withSessionRls when called from routes)
+  const db = getRlsDb();
+  const ro = await db.repairOrder.findFirst({
     where: { id: input.repairOrderId, dealershipId: input.dealershipId },
     include: { repairLines: true },
   });
@@ -52,16 +53,17 @@ export async function clearCustomerPayMode(input: ClearCustomerPayModeInput): Pr
   const line = ro.repairLines.find((l) => l.id === input.repairLineId);
   if (!line) throw new Error('Repair line not found');
 
-  await prisma.repairLine.updateMany({
-    where: {
-      id: input.repairLineId,
-      repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
-    },
-    data: {
-      isCustomerPay: false,
-      // APEX NATIONAL PLATFORM — stamp dealerId from authenticated session when present.
-      ...dealerIdWriteFields(input.dealerId),
-    },
+  await rlsTransaction(async (tx) => {
+    await tx.repairLine.updateMany({
+      where: {
+        id: input.repairLineId,
+        repairOrder: { id: input.repairOrderId, dealershipId: input.dealershipId },
+      },
+      data: {
+        isCustomerPay: false,
+        ...dealerIdWriteFields(input.dealerId),
+      },
+    });
   });
 
   // Phase 6.3 — fail-closed clear audit
@@ -89,7 +91,7 @@ async function isDuplicateTemplateApply(
   const existingStory = decryptOptionalSensitiveText(line.warrantyStoryEncrypted);
   if (existingStory !== preWrittenStory) return false;
 
-  const recent = await prisma.auditLog.findFirst({
+  const recent = await getRlsDb().auditLog.findFirst({
     where: {
       action: 'customerPayTemplateApplied',
       entityId: repairLineId,
@@ -111,7 +113,8 @@ async function isDuplicateTemplateApply(
 export async function applyCustomerPayTemplate(
   input: ApplyCustomerPayTemplateInput
 ): Promise<ApplyCustomerPayTemplateResult> {
-  const template = await prisma.template.findFirst({
+  const db = getRlsDb();
+  const template = await db.template.findFirst({
     where: {
       id: input.templateId,
       OR: [{ dealershipId: input.dealershipId }, { dealershipId: GLOBAL_DEALERSHIP_ID }],
@@ -126,7 +129,7 @@ export async function applyCustomerPayTemplate(
     throw new Error('This template is not a Customer Pay template');
   }
 
-  const ro = await prisma.repairOrder.findFirst({
+  const ro = await db.repairOrder.findFirst({
     where: { id: input.repairOrderId, dealershipId: input.dealershipId },
     include: { repairLines: true },
   });
