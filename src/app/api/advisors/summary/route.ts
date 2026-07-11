@@ -1,6 +1,6 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
-import { prisma } from '@/lib/db';
 
 /** Manager-only snapshot for verifying Phase 1 advisor capture during live testing. */
 export async function GET(request: Request) {
@@ -11,15 +11,15 @@ export async function GET(request: Request) {
 
       const [advisorCount, observationCount, profileCount, linkedRos, recentAdvisors, recentCaptures] =
         await Promise.all([
-          prisma.serviceAdvisor.count({ where: { dealershipId, status: 'active', deletedAt: null } }),
-          prisma.advisorComplaintObservation.count({ where: { dealershipId } }),
-          prisma.advisorWritingProfile.count({
+          getRlsDb().serviceAdvisor.count({ where: { dealershipId, status: 'active', deletedAt: null } }),
+          getRlsDb().advisorComplaintObservation.count({ where: { dealershipId } }),
+          getRlsDb().advisorWritingProfile.count({
             where: { serviceAdvisor: { dealershipId } },
           }),
-          prisma.repairOrder.count({
+          getRlsDb().repairOrder.count({
             where: { dealershipId, serviceAdvisorId: { not: null } },
           }),
-          prisma.serviceAdvisor.findMany({
+          getRlsDb().serviceAdvisor.findMany({
             where: { dealershipId, status: 'active', deletedAt: null },
             orderBy: { lastSeenAt: 'desc' },
             take: 8,
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
               },
             },
           }),
-          prisma.auditLog.findMany({
+          getRlsDb().auditLog.findMany({
             where: { dealershipId, action: 'advisor.capture' },
             orderBy: { createdAt: 'desc' },
             take: 8,

@@ -1,6 +1,6 @@
 import { scopedDealershipWhere } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { parseQueryParams, parseRouteParams, routeIdParamsSchema, technicianLogQuerySchema } from '@/lib/validation';
 
@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      const technician = await prisma.technician.findFirst({
+      const technician = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId, deletedAt: null },
         select: { id: true },
       });
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const logs = await prisma.technicianActivityLog.findMany({
+      const logs = await getRlsDb().technicianActivityLog.findMany({
         where: {
           technicianId: id,
           ...scopedDealershipWhere(session.dealershipId, session.dealerId),

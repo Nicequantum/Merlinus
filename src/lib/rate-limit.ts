@@ -30,9 +30,25 @@ export const RATE_LIMITS = {
   /** Grok-backed routes: story generate/review/score, RO + diagnostic vision extract. */
   generate: { limit: 20, windowMs: 60_000 },
   grok: { limit: 20, windowMs: 60_000 },
+  /** Desktop companion publish (navigation/status/activity). */
+  companionPublish: { limit: 90, windowMs: 60_000 },
+  /** Companion poll / SSE connect (chatty but authenticated). */
+  companion: { limit: 180, windowMs: 60_000 },
   /** General authenticated API traffic. */
   default: { limit: 60, windowMs: 60_000 },
 } as const;
+
+/** Auth-sensitive route keys that require distributed KV limits in production. */
+export function isAuthRateLimitRoute(routeKey: string): boolean {
+  const key = routeKey.trim().toLowerCase();
+  return (
+    key === 'auth' ||
+    key.startsWith('auth.') ||
+    key.includes('login') ||
+    key.includes('password') ||
+    key.includes('seed')
+  );
+}
 
 /** Legacy message kept for API compatibility; KV outages no longer return HTTP 503. */
 export const RATE_LIMIT_UNAVAILABLE_MESSAGE =
@@ -171,8 +187,17 @@ export async function checkRateLimit(
 ): Promise<Response | null> {
   const ip = getClientIp(request);
   const key = `ratelimit:${routeKey}:${ip === 'unknown' ? 'unknown' : ip}`;
+  const authSensitive = isAuthRateLimitRoute(routeKey);
+  const production = isProductionEnv();
 
   if (!isKvConfigured()) {
+    if (production && authSensitive) {
+      logger.error('rate_limit.auth_kv_required', {
+        message:
+          'KV not configured for auth rate limits in production — falling back to in-memory (weaker multi-instance protection). Set KV_REST_API_URL + KV_REST_API_TOKEN.',
+        ...getRateLimitRuntimeSnapshot(request, routeKey),
+      });
+    }
     logRateLimitDecision(routeKey, request, 'memory');
     return checkMemoryRateLimit(key, memoryRateLimitConfig(config));
   }
@@ -183,6 +208,14 @@ export async function checkRateLimit(
     return result;
   } catch (error) {
     logKvRateLimitError(routeKey, request, ip, error);
+    if (production && authSensitive) {
+      logger.error('rate_limit.auth_kv_unavailable_fallback', {
+        message:
+          'KV unavailable for auth rate limits in production — falling back to in-memory. Investigate Upstash/Vercel KV health.',
+        error: error instanceof Error ? error.message : 'unknown',
+        ...getRateLimitRuntimeSnapshot(request, routeKey),
+      });
+    }
     logRateLimitDecision(routeKey, request, 'kv_fallback_memory');
     return checkMemoryRateLimit(key, memoryRateLimitConfig(config));
   }

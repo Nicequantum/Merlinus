@@ -1,6 +1,7 @@
 import { withAuth } from '@/lib/apiRoute';
 import { drainKvCompanionEvents, subscribeCompanionEvents } from '@/lib/companionHub';
 import type { CompanionEvent } from '@/lib/companionSyncTypes';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -93,6 +94,10 @@ export async function GET(request: Request) {
         },
       });
     },
-    { rateLimitKey: 'companion.stream', skipRateLimit: true }
+    {
+      rateLimitKey: 'companion.stream',
+      rateLimit: RATE_LIMITS.companion,
+      requireDealershipContext: true,
+    }
   );
 }

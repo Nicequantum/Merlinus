@@ -2,8 +2,8 @@ import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { revokeAllSessionsForTechnician } from '@/lib/sessionRevocation';
@@ -24,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return apiError('You cannot deactivate your own account.', 400);
       }
 
-      const user = await prisma.technician.findFirst({
+      const user = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId },
       });
 
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
 
-      const updated = await prisma.technician.update({
+      const updated = await getRlsDb().technician.update({
         where: { id },
         data: { isActive: parsed.data.isActive, ...dealerFields },
         select: {
@@ -89,7 +89,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         return apiError('You cannot delete your own account.', 400);
       }
 
-      const user = await prisma.technician.findFirst({
+      const user = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId },
       });
 
@@ -102,15 +102,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
 
       // Previous behavior (hard delete) — preserved for reference; replaced by soft delete below.
-      // await prisma.$transaction([
-      //   prisma.repairOrder.deleteMany({ where: { technicianId: id } }),
-      //   prisma.technician.delete({ where: { id } }),
+      // await getRlsDb().$transaction([
+      //   getRlsDb().repairOrder.deleteMany({ where: { technicianId: id } }),
+      //   getRlsDb().technician.delete({ where: { id } }),
       // ]);
 
       const removedAt = new Date();
       const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
 
-      await prisma.technician.update({
+      await getRlsDb().technician.update({
         where: { id },
         data: { deletedAt: removedAt, isActive: false, ...dealerFields },
       });

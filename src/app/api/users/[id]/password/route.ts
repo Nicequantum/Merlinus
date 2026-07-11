@@ -3,8 +3,8 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { hashPassword } from '@/lib/auth';
-import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
 import { revokeSessionsAfterCredentialChange } from '@/lib/sessionRevocation';
@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const parsed = await parseRequestBody(request, resetPasswordSchema);
       if ('error' in parsed) return parsed.error;
 
-      const user = await prisma.technician.findFirst({
+      const user = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId },
       });
 
@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const passwordHash = await hashPassword(parsed.data.newPassword);
       const dealerFields = dealerIdWriteFields(resolveDealerIdForWrite({ session }));
 
-      await prisma.technician.update({
+      await getRlsDb().technician.update({
         where: { id },
         data: {
           passwordHash,

@@ -25,11 +25,13 @@ describe('desktop companion sync', () => {
     assert.ok(hook.includes('if (!response.ok)'));
   });
 
-  it('configures long-lived companion SSE route', () => {
+  it('configures long-lived companion SSE route with rate limits', () => {
     const route = readSrc('src/app/api/companion/stream/route.ts');
     assert.ok(route.includes('export const maxDuration = 300'));
     assert.ok(route.includes("'X-Accel-Buffering': 'no'"));
-    assert.ok(route.includes('skipRateLimit: true'));
+    // Phase 6.3 — companion routes are rate-limited (no skipRateLimit).
+    assert.ok(route.includes('RATE_LIMITS.companion'));
+    assert.equal(route.includes('skipRateLimit: true'), false);
   });
 
   it('uses stable publish callbacks in CompanionSyncBridge effects', () => {

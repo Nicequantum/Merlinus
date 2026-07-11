@@ -2,6 +2,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { publishCompanionEvent } from '@/lib/companionHub';
 import type { CompanionEvent, CompanionEventType } from '@/lib/companionSyncTypes';
 import { getCompanionDeviceIdFromRequest } from '@/lib/companionPublish';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 import { parseRequestBody } from '@/lib/validation';
 import { z } from 'zod';
 
@@ -41,6 +42,10 @@ export async function POST(request: Request) {
 
       return { ok: true, id: event.id };
     },
-    { rateLimitKey: 'companion.publish', skipRateLimit: true }
+    {
+      rateLimitKey: 'companion.publish',
+      rateLimit: RATE_LIMITS.companionPublish,
+      requireDealershipContext: true,
+    }
   );
 }

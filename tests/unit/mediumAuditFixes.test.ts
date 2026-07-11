@@ -76,10 +76,21 @@ describe('Medium audit fixes (M1–M30)', () => {
     assert.ok(mw.includes('security-policy.mjs'));
   });
 
-  it('M13: audit metadata sanitization', () => {
-    const sanitized = sanitizeAuditMetadata({ name: 'Jane', serviceAdvisorId: 'sa-1' });
+  it('M13/Phase 6.3: audit metadata allowlist-only + RO hash', () => {
+    const sanitized = sanitizeAuditMetadata({
+      name: 'Jane',
+      serviceAdvisorId: 'sa-1',
+      roNumber: 'RO-12345',
+      freeText: 'should drop',
+      certifiedByName: 'Alex',
+    });
     assert.equal('name' in sanitized, false);
+    assert.equal('roNumber' in sanitized, false);
+    assert.equal('freeText' in sanitized, false);
+    assert.equal('certifiedByName' in sanitized, false);
     assert.equal(sanitized.serviceAdvisorId, 'sa-1');
+    assert.equal(typeof sanitized.roNumberHash, 'string');
+    assert.equal((sanitized.roNumberHash as string).length, 32);
   });
 
   it('M14: trusted IP extraction', () => {

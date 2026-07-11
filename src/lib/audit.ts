@@ -28,6 +28,7 @@ export type AuditAction =
   | 'legalDisclaimer.accept'
   | 'ro.create'
   | 'ro.read'
+  | 'ro.list'
   | 'ro.update'
   | 'ro.delete'
   | 'ro.extract'
@@ -91,6 +92,7 @@ export const CRITICAL_AUDIT_ACTIONS: ReadonlySet<AuditAction> = new Set([
   /** Phase 6.x — fail-closed via writeAuditedAccess on sensitive paths. */
   'ro.create',
   'ro.read',
+  'ro.list',
   'ro.update',
   'ro.delete',
   'ro.extract',

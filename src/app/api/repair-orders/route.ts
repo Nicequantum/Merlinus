@@ -60,6 +60,24 @@ export async function GET(request: Request) {
 
       const repairOrders = page.map((ro) => dbToRepairOrderSummary(ro));
 
+      // Phase 6.3 — fail-closed bulk PII list audit (no RO numbers in metadata).
+      await writeAuditedAccess({
+        action: 'ro.list',
+        dealershipId: session.dealershipId,
+        dealerId: auditDealerIdFromSession(session),
+        technicianId: session.technicianId,
+        entityType: 'repair_order_list',
+        entityId: session.dealershipId,
+        metadata: {
+          resultCount: repairOrders.length,
+          limit: params.limit,
+          hasMore,
+          scope: params.q ? 'search' : params.scope,
+          hasCursor: Boolean(params.cursor),
+        },
+        ipAddress: getRequestIp(request),
+      });
+
       return {
         repairOrders,
         nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
@@ -68,7 +86,11 @@ export async function GET(request: Request) {
         todayStart: getTodayStartIso(),
       };
     },
-    { rateLimitKey: 'ros.list', requireDealershipContext: true }
+    {
+      rateLimitKey: 'ros.list',
+      requireDealershipContext: true,
+      requireAuditedAccess: true,
+    }
   );
 }
 

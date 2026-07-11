@@ -485,6 +485,7 @@ export const AUDIT_ACTIONS = [
   'legalDisclaimer.accept',
   'ro.create',
   'ro.read',
+  'ro.list',
   'ro.update',
   'ro.delete',
   'ro.extract',

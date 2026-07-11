@@ -4,8 +4,8 @@ import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { hashPassword } from '@/lib/auth';
+import { getRlsDb, rlsTransaction } from '@/lib/apex/rlsContext';
 import { internalEmailForD7 } from '@/lib/d7Number';
-import { prisma } from '@/lib/db';
 import { readAdvisorDisplayNameFromDb } from '@/lib/piiFieldRead';
 import { apiError } from '@/lib/errors';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      const users = await prisma.technician.findMany({
+      const users = await getRlsDb().technician.findMany({
         where: { dealershipId: session.dealershipId },
         select: {
           id: true,
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
         newAdvisorCode,
       } = parsed.data;
 
-      const existing = await prisma.technician.findUnique({ where: { d7Number } });
+      const existing = await getRlsDb().technician.findUnique({ where: { d7Number } });
       if (existing) {
         return apiError('An account with this D7 number already exists.', 409);
       }
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
       try {
         if (resolvedRole === 'service_advisor' && linkMode === 'existing') {
-          const linkedAdvisor = await prisma.serviceAdvisor.findFirst({
+          const linkedAdvisor = await getRlsDb().serviceAdvisor.findFirst({
             where: {
               id: serviceAdvisorId,
               dealershipId: session.dealershipId,
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             return apiError('Select a valid active service advisor profile to link.', 400);
           }
 
-          const existingLink = await prisma.technician.findFirst({
+          const existingLink = await getRlsDb().technician.findFirst({
             where: {
               serviceAdvisorId,
               deletedAt: null,
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
             return apiError('This service advisor profile already has a login account.', 409);
           }
 
-          const user = await prisma.technician.create({
+          const user = await getRlsDb().technician.create({
             data: {
               d7Number,
               email: internalEmailForD7(d7Number),
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
         }
 
         if (resolvedRole === 'service_advisor' && linkMode === 'create') {
-          const result = await prisma.$transaction(async (tx) => {
+          const result = await rlsTransaction(async (tx) => {
             const { advisor, reactivated } = await createManualServiceAdvisor(
               session.dealershipId,
               {
@@ -240,7 +240,7 @@ export async function POST(request: Request) {
           };
         }
 
-        const user = await prisma.technician.create({
+        const user = await getRlsDb().technician.create({
           data: {
             d7Number,
             email: internalEmailForD7(d7Number),

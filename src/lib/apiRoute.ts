@@ -122,9 +122,15 @@ export async function withAuth<T>(
     }
   }
 
-  // Phase 6.1/6.2: audited-access and PII routes require dealership context.
+  // Phase 6.3: manager/admin rooftop routes always need dealership context + RLS.
+  // requireOwner national routes must set requireDealershipContext: false explicitly if needed.
   const needsDealershipContext =
-    options.requireDealershipContext || options.requireAuditedAccess;
+    options.requireDealershipContext === true ||
+    options.requireAuditedAccess === true ||
+    (options.requireManager === true && options.requireDealershipContext !== false) ||
+    (options.requireAdmin === true &&
+      options.requireDealershipContext !== false &&
+      !options.requireOwner);
 
   if (needsDealershipContext) {
     try {
@@ -140,16 +146,15 @@ export async function withAuth<T>(
     }
   }
 
-  // Phase 6.2: PII-heavy routes default to withSessionRls so getRlsDb() is bound.
+  // Phase 6.2/6.3: PII-heavy and manager routes default to withSessionRls so getRlsDb() is bound.
   // Skip auto-wrap for long AI/maintenance paths (trackUsage / blockInMaintenance) —
   // those routes call rlsTransaction() only around DB work (Grok must not sit in a tx).
   const useRls =
     options.useRls === true ||
     (options.useRls !== false &&
-      (options.requireDealershipContext === true || options.requireAuditedAccess === true) &&
+      needsDealershipContext &&
       !options.trackUsage &&
       !options.blockInMaintenance);
-
   if (options.requireManager) {
     if (session.role !== 'manager') {
       return apiError(FORBIDDEN_ERROR, 403);

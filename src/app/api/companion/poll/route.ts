@@ -1,5 +1,6 @@
 import { withAuth } from '@/lib/apiRoute';
 import { drainKvCompanionEvents } from '@/lib/companionHub';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -20,6 +21,10 @@ export async function GET(request: Request) {
       const events = await drainKvCompanionEvents(session.technicianId, sinceIso);
       return { events, since: sinceIso };
     },
-    { rateLimitKey: 'companion.poll', skipRateLimit: true }
+    {
+      rateLimitKey: 'companion.poll',
+      rateLimit: RATE_LIMITS.companion,
+      requireDealershipContext: true,
+    }
   );
 }

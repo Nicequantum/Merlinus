@@ -1,5 +1,5 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import {
   parseQueryParams,
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      const technician = await prisma.technician.findFirst({
+      const technician = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId, deletedAt: null },
         select: { id: true },
       });
@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return apiError(NOT_FOUND_ERROR, 404);
       }
 
-      const stories = await prisma.technicianCertifiedStory.findMany({
+      const stories = await getRlsDb().technicianCertifiedStory.findMany({
         where: {
           technicianId: id,
           dealershipId: session.dealershipId,

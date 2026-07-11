@@ -1,5 +1,5 @@
+import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
-import { prisma } from '@/lib/db';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { parseRouteParams, routeIdParamsSchema } from '@/lib/validation';
 
@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      const technician = await prisma.technician.findFirst({
+      const technician = await getRlsDb().technician.findFirst({
         where: { id, dealershipId: session.dealershipId, deletedAt: null },
         select: {
           id: true,
@@ -34,10 +34,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
 
       const [certifiedStoryCount, lastCertified] = await Promise.all([
-        prisma.technicianCertifiedStory.count({
+        getRlsDb().technicianCertifiedStory.count({
           where: { technicianId: id, dealershipId: session.dealershipId },
         }),
-        prisma.technicianCertifiedStory.findFirst({
+        getRlsDb().technicianCertifiedStory.findFirst({
           where: { technicianId: id, dealershipId: session.dealershipId },
           orderBy: { certifiedAt: 'desc' },
           select: { certifiedAt: true },
