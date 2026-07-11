@@ -1,6 +1,9 @@
 import 'server-only';
 
-import { resolvePrimaryDealerGroupForOwner } from '@/lib/apex/dealerGroupAccess';
+import {
+  ownerMayEnterDealership,
+  resolvePrimaryDealerGroupForOwner,
+} from '@/lib/apex/dealerGroupAccess';
 import {
   APEX_NATIONAL_DEALERSHIP_ID,
   APEX_NATIONAL_DEALERSHIP_NAME,
@@ -207,8 +210,16 @@ export async function buildOwnerDealershipSession(
 
   if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
 
+  const targetId = dealershipId.trim();
+  if (!targetId || targetId === APEX_NATIONAL_DEALERSHIP_ID) return null;
+
+  // Phase 6.1 — re-validate group/platform enter rights on every session rebuild/refresh.
+  // Prevents stale rooftop access after membership revocation.
+  const allowed = await ownerMayEnterDealership(tech.id, targetId);
+  if (!allowed) return null;
+
   const dealership = await prisma.dealership.findUnique({
-    where: { id: dealershipId.trim() },
+    where: { id: targetId },
     select: {
       id: true,
       name: true,

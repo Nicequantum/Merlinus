@@ -11,8 +11,8 @@ export async function GET(request: Request) {
   return withAuth(
     request,
     async (session) => {
-      // Group owners: only rooftops under their DealerGroup memberships.
-      // Platform national owners (no memberships): all non-sentinel rooftops.
+      // Group owners: rooftops under DealerGroup memberships only.
+      // Platform operators: APEX_PLATFORM_OWNER_EMAILS / OWNER_SEED_EMAIL* allowlist (explicit).
       const dealerships = await listEnterableDealershipsForOwner(session.technicianId);
 
       return {

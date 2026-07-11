@@ -51,7 +51,7 @@ export interface ApexOwnerSeedConfig {
 }
 
 /** Strip optional wrapping quotes from dotenv values (Windows shells sometimes re-quote). */
-function stripEnvQuotes(value: string | undefined): string {
+export function stripEnvQuotes(value: string | undefined): string {
   let v = value?.trim() ?? '';
   if (
     (v.startsWith('"') && v.endsWith('"')) ||
@@ -61,30 +61,6 @@ function stripEnvQuotes(value: string | undefined): string {
   }
   return v;
 }
-
-function isProductionRuntime(): boolean {
-  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-}
-
-/**
- * Platform national operators. Passwords come from env first; non-production falls back
- * to the known local operator passwords so Apex owner login works after seed.
- */
-const PLATFORM_OWNER_SPECS = [
-  {
-    email: 'hombre3536@gmail.com',
-    name: 'Hombre Owner',
-    passwordEnv: 'OWNER_SEED_PASSWORD',
-    /** Dev/staging only — production must set OWNER_SEED_PASSWORD. */
-    devPassword: 'Bressette1735',
-  },
-  {
-    email: 'scollier@getfused.com',
-    name: 'S. Collier',
-    passwordEnv: 'OWNER_SEED_PASSWORD_2',
-    devPassword: 'Getfused123',
-  },
-] as const;
 
 function pushOwnerIfConfigured(
   owners: ApexOwnerAccountSeed[],
@@ -107,19 +83,15 @@ function pushOwnerIfConfigured(
 
 /**
  * Read apex owner + optional multi-rooftop seed credentials.
- * Always includes platform operator emails when a password can be resolved.
+ * Env only — no hard-coded emails or passwords in source.
+ *
+ *   OWNER_SEED_EMAIL / OWNER_SEED_PASSWORD / OWNER_SEED_NAME
+ *   OWNER_SEED_EMAIL_2 / OWNER_SEED_PASSWORD_2 / OWNER_SEED_NAME_2
+ *   MULTI_ROOFTOP_SEED_USERNAME / MULTI_ROOFTOP_SEED_PASSWORD (optional)
  */
 export function readApexOwnerSeedConfig(): ApexOwnerSeedConfig | null {
   const owners: ApexOwnerAccountSeed[] = [];
 
-  // 1) Built-in platform operators (must work for Apex national login)
-  for (const spec of PLATFORM_OWNER_SPECS) {
-    const fromEnv = stripEnvQuotes(process.env[spec.passwordEnv]);
-    const password = fromEnv || (!isProductionRuntime() ? spec.devPassword : '');
-    pushOwnerIfConfigured(owners, spec.email, password, spec.name, spec.name);
-  }
-
-  // 2) Optional extra owners via OWNER_SEED_EMAIL / OWNER_SEED_EMAIL_2 (if different emails)
   pushOwnerIfConfigured(
     owners,
     process.env.OWNER_SEED_EMAIL,
@@ -156,7 +128,7 @@ export interface ApexOwnerSeedResult {
   /** Primary owner email (first seeded) — backward compatible. */
   ownerEmail: string;
   ownerId: string;
-  owners: Array<{ email: string; id: string }>;
+  owners: Array<{ email: string; id: string; created: boolean }>;
   multiRooftopUsername?: string;
   multiRooftopId?: string;
   rooftopIds: string[];
@@ -170,40 +142,53 @@ async function ensureNationalSentinelDealership(): Promise<void> {
   });
 }
 
-/** Upsert a single national owner by email (case-insensitive match, normalize to lowercase). */
-async function upsertNationalOwnerAccount(account: ApexOwnerAccountSeed) {
+/**
+ * Create-only national owner by email.
+ * Existing owners are never password-reset or re-hashed (security: Phase 6.1).
+ */
+async function ensureNationalOwnerAccount(
+  account: ApexOwnerAccountSeed
+): Promise<{ id: string; email: string; created: boolean }> {
   const email = account.email.trim().toLowerCase();
-  // Use bcryptjs directly (same library as verifyPassword in auth.ts)
-  const passwordHash = await bcrypt.hash(account.password, 12);
-  const ownerData = {
-    email,
-    name: account.name,
-    passwordHash,
-    role: 'owner' as const,
-    isAdmin: true,
-    isActive: true,
-    deletedAt: null as Date | null,
-    d7Number: null as string | null,
-    apexUsername: null as string | null,
-    dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
-    dealerId: null as string | null,
-    ...seedCompliance,
-  };
 
   const existing = await prisma.technician.findFirst({
     where: { email: { equals: email, mode: 'insensitive' } },
-    select: { id: true, email: true },
+    select: { id: true, email: true, role: true },
   });
 
   if (existing) {
-    // Normalize email casing + force owner role + refresh password hash
-    return prisma.technician.update({
-      where: { id: existing.id },
-      data: ownerData,
-    });
+    // Do not touch passwordHash, consent, or credentials. Optionally re-assert owner role
+    // only when the account is already an owner and was soft-deactivated incorrectly —
+    // still never rewrite password.
+    if (existing.role === 'owner' && existing.email !== email) {
+      await prisma.technician.update({
+        where: { id: existing.id },
+        data: { email },
+      });
+    }
+    return { id: existing.id, email: existing.email, created: false };
   }
 
-  return prisma.technician.create({ data: ownerData });
+  const passwordHash = await bcrypt.hash(account.password, 12);
+  const created = await prisma.technician.create({
+    data: {
+      email,
+      name: account.name,
+      passwordHash,
+      role: 'owner',
+      isAdmin: true,
+      isActive: true,
+      d7Number: null,
+      apexUsername: null,
+      dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+      dealerId: null,
+      mustChangePassword: true,
+      passwordChangedAt: null,
+      ...seedCompliance,
+    },
+  });
+
+  return { id: created.id, email: created.email, created: true };
 }
 
 export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promise<ApexOwnerSeedResult> {
@@ -232,10 +217,10 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     },
   });
 
-  const seededOwners: Array<{ email: string; id: string }> = [];
+  const seededOwners: Array<{ email: string; id: string; created: boolean }> = [];
   for (const account of config.owners) {
-    const owner = await upsertNationalOwnerAccount(account);
-    seededOwners.push({ email: owner.email, id: owner.id });
+    const owner = await ensureNationalOwnerAccount(account);
+    seededOwners.push(owner);
   }
 
   let multiRooftopId: string | undefined;
@@ -244,54 +229,66 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
   if (config.multiRooftopUsername && config.multiRooftopPassword) {
     multiRooftopUsername = config.multiRooftopUsername;
     const multiEmail = `multi-rooftop+${config.multiRooftopUsername}@apex.seed.local`;
-    const multiHash = await bcrypt.hash(config.multiRooftopPassword, 12);
 
-    await prisma.technician.updateMany({
-      where: {
-        apexUsername: config.multiRooftopUsername,
-        email: { not: multiEmail },
-      },
-      data: { apexUsername: null, isActive: false, deletedAt: new Date() },
-    });
-
-    const multi = await prisma.technician.upsert({
+    const existingMulti = await prisma.technician.findUnique({
       where: { email: multiEmail },
-      update: {
-        apexUsername: config.multiRooftopUsername,
-        name: config.multiRooftopName ?? 'Multi-Rooftop Technician',
-        passwordHash: multiHash,
-        role: 'technician',
-        isAdmin: false,
-        isActive: true,
-        deletedAt: null,
-        d7Number: null,
-        dealershipId: primaryDealership.id,
-        ...seedCompliance,
-      },
-      create: {
-        email: multiEmail,
-        apexUsername: config.multiRooftopUsername,
-        name: config.multiRooftopName ?? 'Multi-Rooftop Technician',
-        passwordHash: multiHash,
-        role: 'technician',
-        isAdmin: false,
-        isActive: true,
-        d7Number: null,
-        dealershipId: primaryDealership.id,
-        ...seedCompliance,
-      },
+      select: { id: true },
     });
-    multiRooftopId = multi.id;
+
+    if (existingMulti) {
+      // Create-only: never reset multi-rooftop password hash.
+      multiRooftopId = existingMulti.id;
+      await prisma.technician.update({
+        where: { id: existingMulti.id },
+        data: {
+          apexUsername: config.multiRooftopUsername,
+          name: config.multiRooftopName ?? 'Multi-Rooftop Technician',
+          role: 'technician',
+          isAdmin: false,
+          isActive: true,
+          deletedAt: null,
+          d7Number: null,
+          dealershipId: primaryDealership.id,
+        },
+      });
+    } else {
+      await prisma.technician.updateMany({
+        where: {
+          apexUsername: config.multiRooftopUsername,
+          email: { not: multiEmail },
+        },
+        data: { apexUsername: null, isActive: false, deletedAt: new Date() },
+      });
+
+      const multiHash = await bcrypt.hash(config.multiRooftopPassword, 12);
+      const multi = await prisma.technician.create({
+        data: {
+          email: multiEmail,
+          apexUsername: config.multiRooftopUsername,
+          name: config.multiRooftopName ?? 'Multi-Rooftop Technician',
+          passwordHash: multiHash,
+          role: 'technician',
+          isAdmin: false,
+          isActive: true,
+          d7Number: null,
+          dealershipId: primaryDealership.id,
+          mustChangePassword: true,
+          passwordChangedAt: null,
+          ...seedCompliance,
+        },
+      });
+      multiRooftopId = multi.id;
+    }
 
     await upsertTechnicianDealershipMembership({
-      technicianId: multi.id,
+      technicianId: multiRooftopId,
       dealershipId: primaryDealership.id,
       role: 'technician',
       isPrimary: true,
       isActive: true,
     });
     await upsertTechnicianDealershipMembership({
-      technicianId: multi.id,
+      technicianId: multiRooftopId,
       dealershipId: secondDealership.id,
       role: 'technician',
       isPrimary: false,
@@ -299,7 +296,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     });
   }
 
-  const primary = seededOwners[0];
+  const primary = seededOwners[0]!;
   return {
     ownerEmail: primary.email,
     ownerId: primary.id,
@@ -310,7 +307,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
   };
 }
 
-/** Idempotent apex owner seed — no-op when no owner passwords can be resolved. */
+/** Idempotent apex owner seed — create missing owners only; no-op when env incomplete. */
 export async function runApexOwnerSeedIfConfigured(): Promise<ApexOwnerSeedResult | null> {
   const config = readApexOwnerSeedConfig();
   if (!config) return null;
@@ -318,15 +315,22 @@ export async function runApexOwnerSeedIfConfigured(): Promise<ApexOwnerSeedResul
 }
 
 /**
- * Ensure platform owners exist with current passwords.
- * Safe to call from instrumentation / login self-heal.
+ * Ensure platform owners from env exist (create-only).
+ * Never rewrites passwords. Safe for instrumentation startup.
+ * Must NOT be called from login failure paths to "heal" wrong passwords.
  */
 export async function ensureApexPlatformOwners(): Promise<ApexOwnerSeedResult | null> {
   try {
     const result = await runApexOwnerSeedIfConfigured();
     if (result) {
+      const created = result.owners.filter((o) => o.created).map((o) => o.email);
+      const existing = result.owners.filter((o) => !o.created).map((o) => o.email);
       logger.info('apex.owner_seed_ensured', {
-        owners: result.owners.map((o) => o.email),
+        createdCount: created.length,
+        existingCount: existing.length,
+        // emails are operational identities for owners — avoid logging full lists in production noise
+        created: created.length,
+        skippedExisting: existing.length,
       });
     }
     return result;

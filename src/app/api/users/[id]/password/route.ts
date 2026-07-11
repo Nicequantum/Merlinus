@@ -34,7 +34,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       await prisma.technician.update({
         where: { id },
-        data: { passwordHash, ...dealerFields },
+        data: {
+          passwordHash,
+          // Phase 6.1 — force rotation on next login (same gate as provisioned managers).
+          mustChangePassword: true,
+          passwordChangedAt: null,
+          ...dealerFields,
+        },
       });
 
       // Phase 6.3 — full fortress revoke after admin password reset

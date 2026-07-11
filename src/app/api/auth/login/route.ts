@@ -11,7 +11,6 @@ import {
   LEGACY_LOGIN_FAILURE_MESSAGE,
   resolveUnifiedLogin,
 } from '@/lib/apex/loginResolver';
-import { ensureApexPlatformOwners } from '@/lib/apex/seedOwnerAccounts';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { applySessionCookieToResponse, createSessionToken, loginTechnician } from '@/lib/auth';
@@ -75,17 +74,8 @@ export async function POST(request: Request) {
       return response;
     }
 
-    let loginResult = await resolveUnifiedLogin(identifier, password);
-
-    // Self-heal: email owner login failed → re-seed platform owners (password/hash refresh) and retry once.
-    if (loginResult.status === 'invalid' && detectCredentialType(identifier) === 'email') {
-      logger.warn('auth.owner_login_heal_attempt', {
-        identifier: identifier.trim().toLowerCase(),
-        apexMode: true,
-      });
-      await ensureApexPlatformOwners();
-      loginResult = await resolveUnifiedLogin(identifier, password);
-    }
+    // Phase 6.1: never re-seed / re-hash owners on failed login (password overwrite vector).
+    const loginResult = await resolveUnifiedLogin(identifier, password);
 
     if (loginResult.status === 'invalid') {
       logger.warn('auth.login_invalid', {

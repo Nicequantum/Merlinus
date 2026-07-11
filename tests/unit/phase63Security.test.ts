@@ -72,6 +72,8 @@ describe('Phase 6.3 security expansion', () => {
 
   it('password reset uses fortress credential revoke', () => {
     const src = readSrc('src/app/api/users/[id]/password/route.ts');
+    assert.match(src, /mustChangePassword:\s*true/);
+    assert.match(src, /passwordChangedAt:\s*null/);
     assert.match(src, /revokeSessionsAfterCredentialChange/);
     assert.match(src, /writeAuditedAccess/);
   });

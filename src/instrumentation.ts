@@ -39,7 +39,7 @@ export async function register() {
     const { warmDatabaseConnectionInBackground } = await import('./lib/db');
     warmDatabaseConnectionInBackground();
 
-    // Ensure national owners exist with current passwords on Apex startup.
+    // Create missing national owners from env only (never rewrites password hashes).
     if (isApexPlatformEnvActive()) {
       void import('./lib/apex/seedOwnerAccounts')
         .then(({ ensureApexPlatformOwners }) => ensureApexPlatformOwners())

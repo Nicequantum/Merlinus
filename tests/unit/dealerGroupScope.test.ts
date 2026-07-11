@@ -97,5 +97,14 @@ describe('PR-G2 group-scoped owner session', () => {
     const access = readFileSync(resolve(root, 'src/lib/apex/dealerGroupAccess.ts'), 'utf8');
     assert.match(access, /listEnterableDealershipsForOwner/);
     assert.match(access, /ownerMayEnterDealership/);
+    assert.match(access, /isPlatformOperator/);
+    assert.doesNotMatch(access, /no memberships\): all/);
+
+    const session = readFileSync(resolve(root, 'src/lib/apex/ownerDealershipContext.ts'), 'utf8');
+    assert.match(session, /ownerMayEnterDealership/);
+
+    const platform = readFileSync(resolve(root, 'src/lib/apex/platformOperator.ts'), 'utf8');
+    assert.match(platform, /APEX_PLATFORM_OWNER_EMAILS/);
+    assert.match(platform, /isPlatformOperator/);
   });
 });

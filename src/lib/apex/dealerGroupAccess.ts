@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { isPlatformOperator } from '@/lib/apex/platformOperator';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { prisma } from '@/lib/db';
 
@@ -53,16 +54,14 @@ export async function resolvePrimaryDealerGroupForOwner(
 
 /**
  * Dealership ids an owner may enter.
+ * - Explicit platform operator (env allowlist): all non-sentinel rooftops
  * - Group member: rooftops under dealers in their active group memberships
- * - Platform owner (no memberships): all non-sentinel rooftops
+ * - Otherwise: none (no implicit "empty membership = superuser")
  */
 export async function listEnterableDealershipsForOwner(technicianId: string): Promise<
   Array<{ id: string; name: string; dealerCode: string | null; dealerGroupId: string | null }>
 > {
-  const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  const groupIds = memberships.map((m) => m.dealerGroupId);
-
-  if (groupIds.length === 0) {
+  if (await isPlatformOperator(technicianId)) {
     const dealerships = await prisma.dealership.findMany({
       where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
       select: {
@@ -79,6 +78,12 @@ export async function listEnterableDealershipsForOwner(technicianId: string): Pr
       dealerCode: d.dealer?.code ?? null,
       dealerGroupId: d.dealer?.dealerGroupId ?? null,
     }));
+  }
+
+  const memberships = await listOwnerDealerGroupMemberships(technicianId);
+  const groupIds = memberships.map((m) => m.dealerGroupId);
+  if (groupIds.length === 0) {
+    return [];
   }
 
   const dealerships = await prisma.dealership.findMany({
@@ -102,7 +107,10 @@ export async function listEnterableDealershipsForOwner(technicianId: string): Pr
   }));
 }
 
-/** True if owner may enter this rooftop (group membership or platform owner). */
+/**
+ * True if owner may enter this rooftop.
+ * Re-checked on enter AND on every owner dealership session rebuild (Phase 6.1).
+ */
 export async function ownerMayEnterDealership(
   technicianId: string,
   dealershipId: string
@@ -110,15 +118,16 @@ export async function ownerMayEnterDealership(
   const id = dealershipId.trim();
   if (!id || id === APEX_NATIONAL_DEALERSHIP_ID) return false;
 
-  const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  if (memberships.length === 0) {
-    // Platform national owner — any real rooftop
+  if (await isPlatformOperator(technicianId)) {
     const exists = await prisma.dealership.findUnique({
       where: { id },
       select: { id: true },
     });
     return Boolean(exists);
   }
+
+  const memberships = await listOwnerDealerGroupMemberships(technicianId);
+  if (memberships.length === 0) return false;
 
   const groupIds = memberships.map((m) => m.dealerGroupId);
   const rooftop = await prisma.dealership.findFirst({
@@ -131,10 +140,19 @@ export async function ownerMayEnterDealership(
   return Boolean(rooftop);
 }
 
-/** Dealer ids in the owner's groups (for summary filters). */
+/**
+ * Dealer ids for owner national summary filters.
+ * - Platform operator → null (unscoped / all active dealers)
+ * - Group member → dealer ids in those groups
+ * - Otherwise → empty array (no dealers)
+ */
 export async function listDealerIdsForOwnerGroups(technicianId: string): Promise<string[] | null> {
+  if (await isPlatformOperator(technicianId)) {
+    return null;
+  }
+
   const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  if (memberships.length === 0) return null; // platform-wide
+  if (memberships.length === 0) return [];
 
   const dealers = await prisma.dealer.findMany({
     where: {
