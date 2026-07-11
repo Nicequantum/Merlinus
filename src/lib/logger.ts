@@ -1,12 +1,10 @@
+import { getRequestId } from '@/lib/requestContext';
+import { redactForLog } from '@/lib/logRedact';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogContext {
   [key: string]: unknown;
-}
-
-function serializeContext(context?: LogContext): LogContext | undefined {
-  if (!context || Object.keys(context).length === 0) return undefined;
-  return context;
 }
 
 const LOG_LEVEL = (process.env.LOG_LEVEL?.trim().toLowerCase() || 'info') as LogLevel;
@@ -19,12 +17,15 @@ function shouldLog(level: LogLevel): boolean {
 function write(level: LogLevel, message: string, context?: LogContext): void {
   if (!shouldLog(level)) return;
 
+  const requestId = getRequestId();
+  const redacted = redactForLog(context);
   const entry = {
     ts: new Date().toISOString(),
     level,
     msg: message,
     service: 'merlin',
-    ...serializeContext(context),
+    ...(requestId ? { requestId } : {}),
+    ...redacted,
   };
 
   const line = JSON.stringify(entry);

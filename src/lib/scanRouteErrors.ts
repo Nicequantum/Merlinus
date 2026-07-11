@@ -74,8 +74,8 @@ export function mapBlobRouteError(error: unknown, operation: 'upload' | 'fetch')
 
   if (raw.includes('BLOB_READ_WRITE_TOKEN')) {
     return {
-      message:
-        'Photo storage is not configured (BLOB_READ_WRITE_TOKEN missing). Contact your service manager.',
+      // Phase 7.2 — no env var names in technician-facing copy
+      message: 'Photo storage is not configured. Contact your service manager.',
       status: 503,
       logDetail,
     };
@@ -163,7 +163,8 @@ export function mapGrokRouteError(error: unknown, featureLabel: string): RouteEr
     /not configured/i.test(message)
   ) {
     return {
-      message: `${featureLabel} is unavailable — ${sanitizeScanErrorDetail(message)}. Contact your service manager.`,
+      // Phase 7.2 — no env var names / key material in technician-facing copy
+      message: `${featureLabel} is unavailable — AI service is not configured. Contact your service manager.`,
       status: 503,
       logDetail,
     };

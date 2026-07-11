@@ -60,7 +60,11 @@ import { getClientIp, getRequestIp } from './requestIp';
 
 export { getClientIp, getRequestIp };
 
-function checkMemoryRateLimit(key: string, config: RateLimitConfig): Response | null {
+function checkMemoryRateLimit(
+  key: string,
+  config: RateLimitConfig,
+  meta?: { routeKey: string; request: Request }
+): Response | null {
   const now = Date.now();
   const entry = memoryStore.get(key);
 
@@ -70,6 +74,7 @@ function checkMemoryRateLimit(key: string, config: RateLimitConfig): Response | 
   }
 
   if (entry.count >= config.limit) {
+    if (meta) logRateLimitDenied(meta.routeKey, meta.request, 'memory');
     return apiError(RATE_LIMIT_ERROR, 429);
   }
 
@@ -77,7 +82,11 @@ function checkMemoryRateLimit(key: string, config: RateLimitConfig): Response | 
   return null;
 }
 
-async function checkKvRateLimit(key: string, config: RateLimitConfig): Promise<Response | null> {
+async function checkKvRateLimit(
+  key: string,
+  config: RateLimitConfig,
+  meta?: { routeKey: string; request: Request }
+): Promise<Response | null> {
   const { kv } = await import('@vercel/kv');
   const count = await kv.incr(key);
 
@@ -86,10 +95,16 @@ async function checkKvRateLimit(key: string, config: RateLimitConfig): Promise<R
   }
 
   if (count > config.limit) {
+    if (meta) logRateLimitDenied(meta.routeKey, meta.request, 'kv');
     return apiError(RATE_LIMIT_ERROR, 429);
   }
 
   return null;
+}
+
+/** Test helper — clear in-memory counters between rate-limit unit tests. */
+export function resetMemoryRateLimitStoreForTests(): void {
+  memoryStore.clear();
 }
 
 export function isKvConfigured(): boolean {
@@ -158,8 +173,17 @@ function logRateLimitDecision(
   request: Request,
   decision: 'kv' | 'memory' | 'kv_fallback_memory'
 ): void {
-  logger.info('rate_limit.check', {
+  // Phase 7.2 H10 — success path is debug-only (was flooding production info logs)
+  logger.debug('rate_limit.check', {
     decision,
+    ...getRateLimitRuntimeSnapshot(request, routeKey),
+  });
+}
+
+/** Phase 7.2 — log denials at warn (signal) without per-request success noise. */
+function logRateLimitDenied(routeKey: string, request: Request, backend: 'kv' | 'memory'): void {
+  logger.warn('rate_limit.denied', {
+    backend,
     ...getRateLimitRuntimeSnapshot(request, routeKey),
   });
 }
@@ -218,11 +242,11 @@ export async function checkRateLimit(
       });
     }
     logRateLimitDecision(routeKey, request, 'memory');
-    return checkMemoryRateLimit(key, memoryRateLimitConfig(config));
+    return checkMemoryRateLimit(key, memoryRateLimitConfig(config), { routeKey, request });
   }
 
   try {
-    const result = await checkKvRateLimit(key, config);
+    const result = await checkKvRateLimit(key, config, { routeKey, request });
     logRateLimitDecision(routeKey, request, 'kv');
     return result;
   } catch (error) {
@@ -245,6 +269,6 @@ export async function checkRateLimit(
       });
     }
     logRateLimitDecision(routeKey, request, 'kv_fallback_memory');
-    return checkMemoryRateLimit(key, memoryRateLimitConfig(config));
+    return checkMemoryRateLimit(key, memoryRateLimitConfig(config), { routeKey, request });
   }
 }

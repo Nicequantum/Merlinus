@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/apiRoute';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import { extractDiagnosticsFromImage } from '@/lib/grok';
 import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR } from '@/lib/errors';
+import { reportMappedRouteError } from '@/lib/errors';
 import { mapBlobRouteError, mapGrokRouteError } from '@/lib/scanRouteErrors';
 import { userCanAccessImage } from '@/lib/imageAccess';
 import { extractPathnameFromImageRef, isAllowedImagePathname } from '@/lib/imageUrls';
@@ -51,13 +52,7 @@ export async function POST(request: Request) {
         imageDataUrl = await fetchPrivateBlobAsDataUrl(pathname);
       } catch (error) {
         const mapped = mapBlobRouteError(error, 'fetch');
-        logger.error('diagnostics.extract.blob_fetch_failed', {
-          pathname,
-          technicianId: session.technicianId,
-          status: mapped.status,
-          error: mapped.logDetail,
-        });
-        return apiError(mapped.message, mapped.status);
+        return reportMappedRouteError(mapped, error, 'diagnostics.extract');
       }
 
       try {
@@ -83,13 +78,7 @@ export async function POST(request: Request) {
         return extracted;
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Diagnostic scan');
-        logger.error('diagnostics.extract.grok_failed', {
-          pathname,
-          technicianId: session.technicianId,
-          status: mapped.status,
-          error: mapped.logDetail,
-        });
-        return apiError(mapped.message, mapped.status);
+        return reportMappedRouteError(mapped, error, 'diagnostics.extract');
       }
     },
     {

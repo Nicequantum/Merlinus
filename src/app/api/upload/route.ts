@@ -2,8 +2,7 @@ import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
 import { uploadImageToBlob } from '@/lib/blob';
-import { apiError, VALIDATION_ERROR } from '@/lib/errors';
-import { logger } from '@/lib/logger';
+import { apiError, reportMappedRouteError, VALIDATION_ERROR } from '@/lib/errors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapAuditRouteError, mapBlobRouteError } from '@/lib/scanRouteErrors';
 
@@ -62,16 +61,8 @@ export async function POST(request: Request) {
         uploaded = await uploadImageToBlob(buffer, file.name, file.type);
       } catch (error) {
         const mapped = mapBlobRouteError(error, 'upload');
-        logger.error('upload.blob_failed', {
-          technicianId: session.technicianId,
-          dealershipId: session.dealershipId,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          status: mapped.status,
-          error: mapped.logDetail,
-        });
-        return apiError(mapped.message, mapped.status);
+        // Phase 7.2 — no raw fileName (may contain RO/customer hints); report via shared path
+        return reportMappedRouteError(mapped, error, 'upload');
       }
 
       try {
@@ -88,14 +79,7 @@ export async function POST(request: Request) {
         });
       } catch (error) {
         const mapped = mapAuditRouteError(error);
-        logger.error('upload.audit_failed', {
-          technicianId: session.technicianId,
-          dealershipId: session.dealershipId,
-          pathname: uploaded.pathname,
-          status: mapped.status,
-          error: mapped.logDetail,
-        });
-        return apiError(mapped.message, mapped.status);
+        return reportMappedRouteError(mapped, error, 'upload');
       }
 
       return { pathname: uploaded.pathname, url: uploaded.url, name: file.name };

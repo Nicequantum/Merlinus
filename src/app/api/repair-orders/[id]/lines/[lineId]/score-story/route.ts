@@ -3,7 +3,7 @@ import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { withAuth } from '@/lib/apiRoute';
 import { encryptJsonObject } from '@/lib/encryption';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { scoreWarrantyStory } from '@/lib/grok';
 import { broadcastCompanionEvent } from '@/lib/companionBroadcast';
 import { isStoryQualityParseFailure } from '@/prompts/storyQuality';
@@ -79,13 +79,19 @@ export async function POST(
         }
       } catch (error) {
         const mappedError = mapGrokRouteError(error, 'Story scoring');
-        const message =
-          error instanceof Error && error.message.includes('unreadable JSON')
-            ? 'Story audit could not read the AI score. AI quality score returned unreadable JSON.'
-            : mappedError.message;
-        const status =
-          error instanceof Error && error.message.includes('unreadable JSON') ? 502 : mappedError.status;
-        return apiError(message, status);
+        if (error instanceof Error && error.message.includes('unreadable JSON')) {
+          return reportMappedRouteError(
+            {
+              message:
+                'Story audit could not read the AI score. AI quality score returned unreadable JSON.',
+              status: 502,
+              logDetail: mappedError.logDetail,
+            },
+            error,
+            'story.score'
+          );
+        }
+        return reportMappedRouteError(mappedError, error, 'story.score');
       }
 
       const storyHash = hashWarrantyStory(warrantyStory);

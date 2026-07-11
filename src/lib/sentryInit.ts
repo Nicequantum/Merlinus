@@ -1,23 +1,49 @@
 import * as Sentry from '@sentry/nextjs';
+import { redactForLog, redactString } from '@/lib/logRedact';
+import { getRequestId } from '@/lib/requestContext';
 
-const PII_KEY_PATTERN =
-  /^(customerName|vin|warrantyStory|storyText|technicianNotes|password|passwordHash|displayName|serviceAdvisorName|complaints?)$/i;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function scrubSentryEvent(event: any): any {
+  if (event.extra && typeof event.extra === 'object') {
+    event.extra = redactForLog(event.extra as Record<string, unknown>);
+  }
 
-function scrubSentryEvent<T extends { request?: { data?: unknown }; extra?: Record<string, unknown> }>(
-  event: T
-): T {
-  if (event.extra) {
-    for (const key of Object.keys(event.extra)) {
-      if (PII_KEY_PATTERN.test(key)) {
-        event.extra[key] = '[Redacted]';
+  if (event.tags && typeof event.tags === 'object') {
+    event.tags = redactForLog(event.tags as Record<string, unknown>);
+  }
+
+  if (event.request) {
+    if (event.request.headers && typeof event.request.headers === 'object') {
+      const headers = { ...event.request.headers } as Record<string, string>;
+      for (const key of Object.keys(headers)) {
+        if (/authorization|cookie|set-cookie|x-api-key/i.test(key)) {
+          headers[key] = '[Redacted]';
+        }
       }
+      event.request.headers = headers;
+    }
+    if (typeof event.request.data === 'string') {
+      event.request.data =
+        event.request.data.length > 200
+          ? `[Redacted body ${event.request.data.length} chars]`
+          : redactString(event.request.data);
+    } else if (event.request.data && typeof event.request.data === 'object') {
+      event.request.data = redactForLog(event.request.data as Record<string, unknown>);
+    }
+    if (event.request.query_string && typeof event.request.query_string === 'string') {
+      event.request.query_string = redactString(event.request.query_string, 200);
     }
   }
 
-  if (event.request?.data && typeof event.request.data === 'string') {
-    if (event.request.data.length > 500) {
-      event.request.data = `[Redacted body ${event.request.data.length} chars]`;
+  if (event.exception?.values) {
+    for (const value of event.exception.values) {
+      if (value.value) value.value = redactString(value.value, 1000);
     }
+  }
+
+  const requestId = getRequestId();
+  if (requestId) {
+    event.tags = { ...event.tags, requestId };
   }
 
   return event;
@@ -32,7 +58,6 @@ export function initSentryServer(): void {
   if (!dsn) return;
 
   // H-5: 0.2 in production — balances latency/error visibility with cost and noise at dealership scale
-  // (full sampling inflated Sentry quota without improving warranty-workflow triage).
   const isProduction =
     process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
   Sentry.init({
@@ -53,4 +78,9 @@ export function initSentryEdge(): void {
     debug: false,
     beforeSend: scrubSentryEvent,
   });
+}
+
+/** Client Sentry scrubber (shared with instrumentation-client). */
+export function scrubSentryEventForClient(event: unknown) {
+  return scrubSentryEvent(event);
 }

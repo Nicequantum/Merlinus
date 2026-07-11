@@ -24,6 +24,11 @@ import {
 } from './errors';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
 import { logPerformance } from './perf';
+import {
+  applyRequestIdHeader,
+  resolveRequestIdFromRequest,
+  runWithRequestContext,
+} from './requestContext';
 import { logApiWriteRequest } from './requestLogging';
 import { checkRateLimit, RATE_LIMITS, type RateLimitConfig } from './rate-limit';
 import { isDailyUsageLimitReached, logApiUsage } from './usageMonitoring';
@@ -81,7 +86,20 @@ export async function withAuth<T>(
   options: RouteOptions = {}
 ): Promise<NextResponse | Response> {
   const routeKey = options.rateLimitKey || 'api';
+  const requestId = resolveRequestIdFromRequest(request);
 
+  return runWithRequestContext({ requestId, routeKey }, () =>
+    withAuthInner(request, handler, options, routeKey, requestId)
+  );
+}
+
+async function withAuthInner<T>(
+  request: Request,
+  handler: (session: Session) => Promise<T>,
+  options: RouteOptions,
+  routeKey: string,
+  requestId: string
+): Promise<NextResponse | Response> {
   if (options.blockInMaintenance && isMaintenanceModeEnabled()) {
     return apiError(MAINTENANCE_MODE_ERROR, 503);
   }
@@ -92,7 +110,10 @@ export async function withAuth<T>(
       routeKey,
       options.rateLimit || (options.trackUsage ? RATE_LIMITS.generate : RATE_LIMITS.default)
     );
-    if (rateLimited) return rateLimited;
+    if (rateLimited) {
+      applyRequestIdHeader(rateLimited, requestId);
+      return rateLimited;
+    }
   }
 
   const rawSession = await resolveAppSession(request);
@@ -253,9 +274,12 @@ export async function withAuth<T>(
       });
     }
     if (result instanceof NextResponse || result instanceof Response) {
+      applyRequestIdHeader(result, requestId);
       return result;
     }
-    return NextResponse.json(result);
+    const json = NextResponse.json(result);
+    applyRequestIdHeader(json, requestId);
+    return json;
   } catch (error) {
     logApiWriteRequest({
       routeKey,
@@ -283,49 +307,58 @@ export async function withPublicRoute<T>(
   options: RouteOptions = {}
 ): Promise<NextResponse | Response> {
   const routeKey = options.rateLimitKey || 'public';
+  const requestId = resolveRequestIdFromRequest(request);
 
-  if (options.blockInMaintenance && isMaintenanceModeEnabled()) {
-    return apiError(MAINTENANCE_MODE_ERROR, 503);
-  }
+  return runWithRequestContext({ requestId, routeKey }, async () => {
+    if (options.blockInMaintenance && isMaintenanceModeEnabled()) {
+      return apiError(MAINTENANCE_MODE_ERROR, 503);
+    }
 
-  const rateLimited = await checkRateLimit(
-    request,
-    routeKey,
-    options.rateLimit || RATE_LIMITS.default
-  );
-  if (rateLimited) return rateLimited;
-
-  const startedAt = Date.now();
-  const method = request.method;
-  try {
-    const result = await handler();
-    const status = result instanceof NextResponse || result instanceof Response ? result.status : 200;
-    logApiWriteRequest({
+    const rateLimited = await checkRateLimit(
+      request,
       routeKey,
-      method,
-      status,
-      durationMs: Date.now() - startedAt,
-    });
-    if (options.perfEvent) {
-      logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, status });
+      options.rateLimit || RATE_LIMITS.default
+    );
+    if (rateLimited) {
+      applyRequestIdHeader(rateLimited, requestId);
+      return rateLimited;
     }
-    if (result instanceof NextResponse || result instanceof Response) {
-      return result;
+
+    const startedAt = Date.now();
+    const method = request.method;
+    try {
+      const result = await handler();
+      const status = result instanceof NextResponse || result instanceof Response ? result.status : 200;
+      logApiWriteRequest({
+        routeKey,
+        method,
+        status,
+        durationMs: Date.now() - startedAt,
+      });
+      if (options.perfEvent) {
+        logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, status });
+      }
+      if (result instanceof NextResponse || result instanceof Response) {
+        applyRequestIdHeader(result, requestId);
+        return result;
+      }
+      const json = NextResponse.json(result);
+      applyRequestIdHeader(json, requestId);
+      return json;
+    } catch (error) {
+      logApiWriteRequest({
+        routeKey,
+        method,
+        status: 500,
+        durationMs: Date.now() - startedAt,
+        failed: true,
+      });
+      if (options.perfEvent) {
+        logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, failed: true });
+      }
+      return handleRouteError(error, routeKey);
     }
-    return NextResponse.json(result);
-  } catch (error) {
-    logApiWriteRequest({
-      routeKey,
-      method,
-      status: 500,
-      durationMs: Date.now() - startedAt,
-      failed: true,
-    });
-    if (options.perfEvent) {
-      logPerformance(options.perfEvent, Date.now() - startedAt, { routeKey, failed: true });
-    }
-    return handleRouteError(error, routeKey);
-  }
+  });
 }
 
 export function jsonError(message: string, status: number): NextResponse {

@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 import { clientLog } from '@/lib/clientLog';
-import { getSentryDsn } from '@/lib/sentryInit';
+import { getSentryDsn, scrubSentryEventForClient } from '@/lib/sentryInit';
 
 const dsn = getSentryDsn();
 
@@ -12,6 +12,8 @@ if (dsn) {
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 0,
       debug: false,
+      // Phase 7.2 H8 — client scrubber parity with server
+      beforeSend: scrubSentryEventForClient,
     });
   } catch (error) {
     clientLog.error('telemetry.sentry_init_failed', error);

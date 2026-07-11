@@ -10,6 +10,7 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { reportMappedRouteError } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { logger } from '@/lib/logger';
 import { hashWarrantyStory } from '@/lib/storyHash';
@@ -78,7 +79,7 @@ export async function POST(
         }
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Story review');
-        return apiError(mapped.message, mapped.status);
+        return reportMappedRouteError(mapped, error, 'story.review');
       }
 
       const quality = { ...review, scoredAgainstStory: warrantyStory };

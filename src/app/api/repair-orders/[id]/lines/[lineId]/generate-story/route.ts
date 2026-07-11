@@ -8,7 +8,7 @@ import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
 import { loadStoryRouteRepairOrder, scopedRepairLineWhereForSession } from '@/lib/repairOrderAccess';
 import { dbToRepairOrder } from '@/lib/roMapper';
-import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR } from '@/lib/errors';
+import { apiError, FORBIDDEN_ERROR, NOT_FOUND_ERROR, reportMappedRouteError } from '@/lib/errors';
 import { mapGrokRouteError } from '@/lib/grokErrors';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -73,7 +73,8 @@ export async function POST(
         cdkSanitized = cleaned.wasModified;
       } catch (error) {
         const mapped = mapGrokRouteError(error, 'Story generation');
-        return apiError(mapped.message, mapped.status);
+        // Phase 7.2 H11 — log + Sentry for 5xx mapped AI failures
+        return reportMappedRouteError(mapped, error, 'story.generate');
       }
 
       try {

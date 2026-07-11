@@ -48,6 +48,7 @@ describe('unified route error mapping', () => {
       'upload'
     );
     assert.equal(mapped.status, 503);
-    assert.match(mapped.message, /BLOB_READ_WRITE_TOKEN/);
+    assert.match(mapped.message, /Photo storage is not configured/i);
+    assert.doesNotMatch(mapped.message, /BLOB_READ_WRITE_TOKEN/);
   });
 });

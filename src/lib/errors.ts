@@ -1,6 +1,9 @@
 import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
+import { publicSafeMessage, redactString } from '@/lib/logRedact';
+import { getRequestId } from '@/lib/requestContext';
 import { logger } from './logger';
+import type { RouteErrorMapping } from './scanRouteErrors';
 import { mapRouteError } from './routeErrorMapper';
 
 export const GENERIC_ERROR = 'Something went wrong. Please try again or contact your administrator.';
@@ -32,7 +35,57 @@ export const CONFLICT_ERROR =
   'This repair order was updated elsewhere. Reload the repair order to get the latest version.';
 
 export function apiError(message: string, status: number): NextResponse {
-  return NextResponse.json({ error: message }, { status });
+  const body: Record<string, unknown> = {
+    error: publicSafeMessage(message),
+  };
+  const requestId = getRequestId();
+  if (requestId) body.requestId = requestId;
+  const response = NextResponse.json(body, { status });
+  if (requestId) {
+    response.headers.set('x-request-id', requestId);
+  }
+  return response;
+}
+
+/** Phase 7.2 H9 — only report server errors to Sentry (skip expected 4xx). */
+export function shouldCaptureRouteError(status: number): boolean {
+  return status >= 500;
+}
+
+/**
+ * Phase 7.2 H11 — report mapped early-return failures (Grok/Blob) with logging + Sentry for 5xx.
+ */
+export function reportMappedRouteError(
+  mapped: RouteErrorMapping,
+  error: unknown,
+  context: string
+): NextResponse {
+  const err = error instanceof Error ? error : new Error(mapped.logDetail || 'mapped route error');
+  const logLevel = mapped.status >= 500 ? 'error' : 'warn';
+  logger[logLevel](mapped.status >= 500 ? 'route.error' : 'route.client_error', {
+    context,
+    error: redactString(err.message),
+    logDetail: mapped.logDetail,
+    status: mapped.status,
+  });
+
+  if (shouldCaptureRouteError(mapped.status)) {
+    Sentry.captureException(err, {
+      tags: {
+        routeContext: context,
+        requestId: getRequestId() ?? 'none',
+        httpStatus: String(mapped.status),
+      },
+      extra: {
+        routeContext: context,
+        logDetail: mapped.logDetail,
+        status: mapped.status,
+        requestId: getRequestId(),
+      },
+    });
+  }
+
+  return apiError(mapped.message, mapped.status);
 }
 
 export function handleRouteError(error: unknown, context: string): NextResponse {
@@ -46,13 +99,27 @@ export function handleRouteError(error: unknown, context: string): NextResponse 
 
   logger.error(mapped.status >= 500 ? 'route.error' : 'route.client_error', {
     context,
-    error: err.message,
+    error: redactString(err.message),
     logDetail: mapped.logDetail,
     status: mapped.status,
   });
-  Sentry.captureException(err, {
-    tags: { routeContext: context },
-    extra: { routeContext: context, logDetail: mapped.logDetail, status: mapped.status },
-  });
+
+  // Phase 7.2 H9 — do not flood Sentry with expected 4xx domain errors
+  if (shouldCaptureRouteError(mapped.status)) {
+    Sentry.captureException(err, {
+      tags: {
+        routeContext: context,
+        requestId: getRequestId() ?? 'none',
+        httpStatus: String(mapped.status),
+      },
+      extra: {
+        routeContext: context,
+        logDetail: mapped.logDetail,
+        status: mapped.status,
+        requestId: getRequestId(),
+      },
+    });
+  }
+
   return apiError(mapped.message, mapped.status);
 }

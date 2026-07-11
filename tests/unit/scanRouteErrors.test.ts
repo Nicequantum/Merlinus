@@ -13,7 +13,10 @@ describe('scan route errors', () => {
   it('surfaces blob token misconfiguration', () => {
     const mapped = mapBlobRouteError(new Error('BLOB_READ_WRITE_TOKEN is not configured'), 'upload');
     assert.equal(mapped.status, 503);
-    assert.match(mapped.message, /BLOB_READ_WRITE_TOKEN/);
+    // Phase 7.2 — public message is technician-safe; logDetail keeps diagnostic text
+    assert.match(mapped.message, /Photo storage is not configured/i);
+    assert.doesNotMatch(mapped.message, /BLOB_READ_WRITE_TOKEN/);
+    assert.match(mapped.logDetail, /BLOB_READ_WRITE_TOKEN/);
   });
 
   it('includes Grok API status and detail in the message', () => {
@@ -41,7 +44,8 @@ describe('scan route errors', () => {
     );
     assert.equal(response.status, 503);
     const body = (await response.json()) as { error: string };
-    assert.match(body.error, /BLOB_READ_WRITE_TOKEN/);
+    assert.match(body.error, /Photo storage is not configured/i);
+    assert.doesNotMatch(body.error, /BLOB_READ_WRITE_TOKEN/);
     assert.doesNotMatch(body.error, /Something went wrong/);
   });
 
