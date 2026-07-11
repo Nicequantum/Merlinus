@@ -2,29 +2,25 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/apiRoute';
 import { blockServiceAdvisorAi } from '@/lib/roleGuards';
 import {
-  getGrokProxyApiKey,
   getGrokProxyUpstreamApiKey,
   isGrokProxyConfigured,
 } from '@/lib/grokApiKey.shared';
+import { isValidGrokProxyBearer } from '@/lib/grokProxyAuth';
 import { logger } from '@/lib/logger';
-import { RATE_LIMITS } from '@/lib/rate-limit';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { parseGrokApiErrorBody } from '@/lib/scanRouteErrors';
 
 const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
-
-/** Apex national platform — shared-secret auth for server-side dealer-node proxy calls. */
-function isValidGrokProxyBearer(request: Request): boolean {
-  const expectedKey = getGrokProxyApiKey();
-  if (!expectedKey) return false;
-  const auth = request.headers.get('authorization')?.trim() ?? '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  return Boolean(token && token === expectedKey);
-}
+const MAX_PROXY_BODY_BYTES = 2_000_000;
 
 async function handleGrokProxyForward(request: Request): Promise<NextResponse> {
   let body: Record<string, unknown>;
   try {
-    const parsed = await request.json();
+    const raw = await request.text();
+    if (raw.length > MAX_PROXY_BODY_BYTES) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 });
+    }
+    const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
@@ -76,18 +72,22 @@ async function handleGrokProxyForward(request: Request): Promise<NextResponse> {
 
 /**
  * Apex national platform — centralized Grok proxy endpoint.
- * Dealer nodes authenticate with GROK_PROXY_API_KEY; upstream calls use GROK_API_KEY
- * (Merlinus/Tiverton direct key) when present, otherwise GROK_PROXY_API_KEY.
  *
- * Merlinus single-dealer deployments typically omit GROK_PROXY_API_KEY — this route
- * returns 503 and all Grok traffic continues to use direct xAI from src/lib/grok.ts.
+ * Dealer nodes authenticate with short-lived HMAC tokens minted via
+ * createGrokProxyAccessToken() (signed with GROK_PROXY_API_KEY).
+ * Static bearer keys require GROK_PROXY_ALLOW_STATIC_BEARER=true (break-glass).
+ *
+ * Session-authenticated app users may also call this route (usage tracked).
  */
 export async function POST(request: Request) {
   if (!isGrokProxyConfigured()) {
     return NextResponse.json({ error: 'Grok proxy is not configured on this host' }, { status: 503 });
   }
 
+  // Rate-limit machine tokens before any expensive work (session path has its own limit).
   if (isValidGrokProxyBearer(request)) {
+    const rateLimited = await checkRateLimit(request, 'grok.proxy.bearer', RATE_LIMITS.grok);
+    if (rateLimited) return rateLimited;
     return handleGrokProxyForward(request);
   }
 
@@ -104,6 +104,7 @@ export async function POST(request: Request) {
       rateLimit: RATE_LIMITS.grok,
       trackUsage: true,
       blockInMaintenance: true,
+      requireDealershipContext: true,
       perfEvent: 'api.grok.proxy',
     }
   );

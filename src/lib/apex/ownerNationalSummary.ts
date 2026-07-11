@@ -2,7 +2,7 @@ import 'server-only';
 
 import { listDealerIdsForOwnerGroups } from '@/lib/apex/dealerGroupAccess';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 
 export interface OwnerNationalActivityItem {
   id: string;
@@ -168,6 +168,13 @@ function seriesFromDaily(
 export async function getOwnerNationalSummary(
   context?: OwnerSummaryContext
 ): Promise<OwnerNationalSummary> {
+  // Phase 6.2 — national aggregates need control-plane bypass under default-deny RLS.
+  return withRlsBypass(async () => computeOwnerNationalSummary(context));
+}
+
+async function computeOwnerNationalSummary(
+  context?: OwnerSummaryContext
+): Promise<OwnerNationalSummary> {
   const now = Date.now();
   const nowDate = new Date(now);
   const weekAgo = new Date(now - SEVEN_DAYS_MS);
@@ -216,12 +223,12 @@ export async function getOwnerNationalSummary(
     mustChangeByRooftop,
     certSample,
   ] = await Promise.all([
-    prisma.dealer.count({
+    getRlsDb().dealer.count({
       where: isGroupScoped
         ? { status: 'active', id: { in: dealerIdList! } }
         : { status: 'active' },
     }),
-    prisma.technician.count({
+    getRlsDb().technician.count({
       where: {
         isActive: true,
         deletedAt: null,
@@ -229,25 +236,25 @@ export async function getOwnerNationalSummary(
         dealershipId: { in: effectiveRooftopIds },
       },
     }),
-    prisma.repairOrder.count({
+    getRlsDb().repairOrder.count({
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: weekAgo } },
     }),
-    prisma.repairOrder.count({
+    getRlsDb().repairOrder.count({
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: monthAgo } },
     }),
-    prisma.repairOrder.count({
+    getRlsDb().repairOrder.count({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         updatedAt: { gte: twoWeeksAgo, lt: weekAgo },
       },
     }),
-    prisma.technicianCertifiedStory.count({
+    getRlsDb().technicianCertifiedStory.count({
       where: { dealershipId: { in: effectiveRooftopIds }, certifiedAt: { gte: weekAgo } },
     }),
-    prisma.technicianCertifiedStory.count({
+    getRlsDb().technicianCertifiedStory.count({
       where: { dealershipId: { in: effectiveRooftopIds }, certifiedAt: { gte: monthAgo } },
     }),
-    prisma.auditLog.findMany({
+    getRlsDb().auditLog.findMany({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         createdAt: { gte: weekAgo },
@@ -257,7 +264,7 @@ export async function getOwnerNationalSummary(
       select: { technicianId: true },
       distinct: ['technicianId'],
     }),
-    prisma.auditLog.findMany({
+    getRlsDb().auditLog.findMany({
       where: { dealershipId: { in: effectiveRooftopIds } },
       select: {
         id: true,
@@ -270,7 +277,7 @@ export async function getOwnerNationalSummary(
       orderBy: { createdAt: 'desc' },
       take: 15,
     }),
-    prisma.technician.count({
+    getRlsDb().technician.count({
       where: {
         isActive: true,
         deletedAt: null,
@@ -279,12 +286,12 @@ export async function getOwnerNationalSummary(
         dealershipId: { in: effectiveRooftopIds },
       },
     }),
-    prisma.auditLog.groupBy({
+    getRlsDb().auditLog.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds } },
       _max: { createdAt: true },
     }),
-    prisma.technician.groupBy({
+    getRlsDb().technician.groupBy({
       by: ['dealershipId'],
       where: {
         isActive: true,
@@ -294,7 +301,7 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
-    prisma.technician.groupBy({
+    getRlsDb().technician.groupBy({
       by: ['dealershipId', 'role'],
       where: {
         isActive: true,
@@ -304,17 +311,17 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
-    prisma.repairOrder.groupBy({
+    getRlsDb().repairOrder.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: weekAgo } },
       _count: { _all: true },
     }),
-    prisma.repairOrder.groupBy({
+    getRlsDb().repairOrder.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, updatedAt: { gte: monthAgo } },
       _count: { _all: true },
     }),
-    prisma.repairOrder.groupBy({
+    getRlsDb().repairOrder.groupBy({
       by: ['dealershipId'],
       where: {
         dealershipId: { in: effectiveRooftopIds },
@@ -322,17 +329,17 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
-    prisma.technicianCertifiedStory.groupBy({
+    getRlsDb().technicianCertifiedStory.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, certifiedAt: { gte: weekAgo } },
       _count: { _all: true },
     }),
-    prisma.technicianCertifiedStory.groupBy({
+    getRlsDb().technicianCertifiedStory.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, certifiedAt: { gte: monthAgo } },
       _count: { _all: true },
     }),
-    prisma.auditLog.groupBy({
+    getRlsDb().auditLog.groupBy({
       by: ['dealershipId', 'technicianId'],
       where: {
         dealershipId: { in: effectiveRooftopIds },
@@ -341,36 +348,36 @@ export async function getOwnerNationalSummary(
         action: { in: ['auth.login', 'auth.refresh', 'ro.create', 'story.certify', 'story.generate'] },
       },
     }),
-    prisma.repairOrder.findMany({
+    getRlsDb().repairOrder.findMany({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         updatedAt: { gte: twoWeeksAgo },
       },
       select: { dealershipId: true, updatedAt: true },
     }),
-    prisma.technicianCertifiedStory.findMany({
+    getRlsDb().technicianCertifiedStory.findMany({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         certifiedAt: { gte: twoWeeksAgo },
       },
       select: { dealershipId: true, certifiedAt: true },
     }),
-    prisma.usageLog.count({
+    getRlsDb().usageLog.count({
       where: { dealershipId: { in: effectiveRooftopIds }, createdAt: { gte: weekAgo } },
     }),
-    prisma.usageLog.groupBy({
+    getRlsDb().usageLog.groupBy({
       by: ['dealershipId'],
       where: { dealershipId: { in: effectiveRooftopIds }, createdAt: { gte: weekAgo } },
       _count: { _all: true },
     }),
-    prisma.auditLog.count({
+    getRlsDb().auditLog.count({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         createdAt: { gte: weekAgo },
         action: 'auth.login',
       },
     }),
-    prisma.auditLog.groupBy({
+    getRlsDb().auditLog.groupBy({
       by: ['dealershipId'],
       where: {
         dealershipId: { in: effectiveRooftopIds },
@@ -379,7 +386,7 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
-    prisma.technician.groupBy({
+    getRlsDb().technician.groupBy({
       by: ['dealershipId'],
       where: {
         isActive: true,
@@ -390,7 +397,7 @@ export async function getOwnerNationalSummary(
       },
       _count: { _all: true },
     }),
-    prisma.technicianCertifiedStory.findMany({
+    getRlsDb().technicianCertifiedStory.findMany({
       where: {
         dealershipId: { in: effectiveRooftopIds },
         certifiedAt: { gte: monthAgo },
@@ -408,7 +415,7 @@ export async function getOwnerNationalSummary(
   const roIds = [...new Set(certSample.map((c) => c.repairOrderId))];
   const roCreated =
     roIds.length > 0
-      ? await prisma.repairOrder.findMany({
+      ? await getRlsDb().repairOrder.findMany({
           where: { id: { in: roIds } },
           select: { id: true, createdAt: true },
         })
@@ -734,7 +741,7 @@ async function loadRooftopRows(dealerIdList: string[] | null): Promise<
   }>
 > {
   if (dealerIdList) {
-    const rows = await prisma.dealership.findMany({
+    const rows = await getRlsDb().dealership.findMany({
       where: {
         id: { not: APEX_NATIONAL_DEALERSHIP_ID },
         dealerId: { in: dealerIdList },
@@ -754,7 +761,7 @@ async function loadRooftopRows(dealerIdList: string[] | null): Promise<
     }));
   }
 
-  const rows = await prisma.dealership.findMany({
+  const rows = await getRlsDb().dealership.findMany({
     where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
     select: {
       id: true,

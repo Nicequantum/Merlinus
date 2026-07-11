@@ -10,6 +10,7 @@ import {
 } from '@/lib/apex/tenantScope';
 import type { SessionPayload } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { isApexPlatformMode } from '@/lib/platformMode';
 
 /** Transaction client or root Prisma client that supports $executeRaw. */
 export type RlsDbClient = Prisma.TransactionClient | typeof prisma;
@@ -22,19 +23,44 @@ export interface RlsContext {
   scopeMode: AuditScopeMode;
   /**
    * When true, policies enforce tenant filters (app.rls_enforced=on).
-   * Defaults to isRlsEnabled() for generic helpers; PII paths force true via withSessionRls.
+   * Apex defaults to enforced; Merlinus soft-open unless RLS_ENABLED forces enforce.
    */
   enforced?: boolean;
+  /**
+   * When true, policies allow soft-open (Merlinus only). Never set for Apex.
+   * Maps to app.rls_soft_open=on.
+   */
+  softOpen?: boolean;
   /** Service/seed path — sets app.rls_bypass=on for the transaction. */
   bypass?: boolean;
 }
 
 const rlsTxStorage = new AsyncLocalStorage<Prisma.TransactionClient>();
 
-/** True when application should set enforced RLS session vars (defense-in-depth). */
+/**
+ * Phase 6.2 — enforce tenant RLS by default on Apex.
+ * Merlinus remains soft-open unless RLS_ENABLED forces enforcement.
+ *
+ * Explicit env:
+ *   RLS_ENABLED=true|1|yes|on  → enforce (both modes)
+ *   RLS_ENABLED=false|0|no|off → soft-open **only when not Apex** (Apex ignores off)
+ */
 export function isRlsEnabled(): boolean {
   const value = process.env.RLS_ENABLED?.trim().toLowerCase();
-  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+  if (value === '1' || value === 'true' || value === 'yes' || value === 'on') {
+    return true;
+  }
+  if (value === '0' || value === 'false' || value === 'no' || value === 'off') {
+    // Apex never soft-opens via env off — default-deny / always enforce.
+    return isApexPlatformMode() ? true : false;
+  }
+  // Default: Apex enforce; Merlinus soft-open.
+  return isApexPlatformMode();
+}
+
+/** Merlinus-only soft-open (policies require app.rls_soft_open=on). */
+export function isRlsSoftOpen(): boolean {
+  return !isRlsEnabled();
 }
 
 /**
@@ -52,12 +78,14 @@ export function rlsContextFromSession(
   const activeDealershipId =
     rawActive && rawActive !== APEX_NATIONAL_DEALERSHIP_ID ? rawActive : null;
 
+  const enforced = isRlsEnabled();
   return {
     technicianId: session.technicianId.trim(),
     activeDealershipId,
     dealerId: session.dealerId?.trim() || null,
     scopeMode,
-    enforced: isRlsEnabled(),
+    enforced,
+    softOpen: !enforced,
   };
 }
 
@@ -81,6 +109,8 @@ export function getRlsTransaction(): Prisma.TransactionClient | undefined {
 export async function setRlsContext(client: RlsDbClient, ctx: RlsContext): Promise<void> {
   const enforced = ctx.enforced ?? isRlsEnabled();
   const bypass = Boolean(ctx.bypass);
+  // Soft-open only when explicitly requested and not enforced/bypass (Merlinus bare paths).
+  const softOpen = Boolean(ctx.softOpen) && !enforced && !bypass;
   const technicianId = ctx.technicianId?.trim() || '';
   const activeDealershipId = ctx.activeDealershipId?.trim() || '';
   const dealerId = ctx.dealerId?.trim() || '';
@@ -88,6 +118,7 @@ export async function setRlsContext(client: RlsDbClient, ctx: RlsContext): Promi
   const scopeMode = ctx.scopeMode === 'dealership' ? 'dealership' : 'national';
 
   await client.$executeRaw`SELECT set_config('app.rls_enforced', ${enforced ? 'on' : 'off'}, true)`;
+  await client.$executeRaw`SELECT set_config('app.rls_soft_open', ${softOpen ? 'on' : 'off'}, true)`;
   await client.$executeRaw`SELECT set_config('app.rls_bypass', ${bypass ? 'on' : 'off'}, true)`;
   await client.$executeRaw`SELECT set_config('app.scope_mode', ${scopeMode}, true)`;
   await client.$executeRaw`SELECT set_config('app.active_dealership_id', ${activeDealershipId}, true)`;
@@ -120,8 +151,7 @@ export async function withRlsContext<T>(
 
 /**
  * Phase 6.2 — default PII path: enforce tenant RLS for the session and bind getRlsDb().
- * Always sets enforced=on so policies apply even when RLS_ENABLED env is unset
- * (soft-open policies only open when enforced is off).
+ * Always sets enforced=on and soft_open=off (default-deny when not bypass/tenant-matched).
  */
 export async function withSessionRls<T>(
   session: TenantScopedSession & Pick<SessionPayload, 'technicianId'>,
@@ -130,11 +160,15 @@ export async function withSessionRls<T>(
   const ctx: RlsContext = {
     ...rlsContextFromSession(session),
     enforced: true,
+    softOpen: false,
   };
   return withRlsContext(ctx, fn);
 }
 
-/** Seed / migrate / admin maintenance — bypass tenant filters for the transaction. */
+/**
+ * Control-plane / auth / seed / national aggregates — bypass tenant filters for the transaction.
+ * Prefer over bare prisma when default-deny policies are active (Phase 6.2).
+ */
 export async function withRlsBypass<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   return withRlsContext(
     {
@@ -143,11 +177,15 @@ export async function withRlsBypass<T>(fn: (tx: Prisma.TransactionClient) => Pro
       dealerId: null,
       scopeMode: 'dealership',
       enforced: true,
+      softOpen: false,
       bypass: true,
     },
     fn
   );
 }
+
+/** @deprecated alias — use withRlsBypass */
+export const withControlPlaneDb = withRlsBypass;
 
 /**
  * Atomic multi-step work under RLS. Reuses the ambient withSessionRls transaction
@@ -160,18 +198,39 @@ export async function rlsTransaction<T>(
 ): Promise<T> {
   const existing = rlsTxStorage.getStore();
   if (existing) {
-    if (ctx) await setRlsContext(existing, { ...ctx, enforced: ctx.enforced ?? true });
+    if (ctx) {
+      await setRlsContext(existing, {
+        ...ctx,
+        enforced: ctx.enforced ?? true,
+        softOpen: false,
+      });
+    }
     return fn(existing);
   }
-  const effective: RlsContext = ctx
-    ? { ...ctx, enforced: ctx.enforced ?? true }
-    : {
+  if (ctx) {
+    return withRlsContext(
+      {
+        ...ctx,
+        enforced: ctx.enforced ?? true,
+        softOpen: ctx.softOpen ?? false,
+      },
+      fn
+    );
+  }
+  // No session: Apex default-deny requires bypass for control-plane work.
+  // Merlinus soft-open transaction when not enforcing.
+  if (isRlsSoftOpen()) {
+    return withRlsContext(
+      {
         technicianId: '',
         activeDealershipId: null,
         dealerId: null,
         scopeMode: 'dealership',
-        // Without a session context, stay soft-open (do not enforce empty tenant).
         enforced: false,
-      };
-  return withRlsContext(effective, fn);
+        softOpen: true,
+      },
+      fn
+    );
+  }
+  return withRlsBypass(fn);
 }

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { isPlatformOperator } from '@/lib/apex/platformOperator';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 
 export interface OwnerDealerGroupMembership {
   dealerGroupId: string;
@@ -17,30 +17,32 @@ export interface OwnerDealerGroupMembership {
 export async function listOwnerDealerGroupMemberships(
   technicianId: string
 ): Promise<OwnerDealerGroupMembership[]> {
-  const rows = await prisma.dealerGroupMembership.findMany({
-    where: {
-      technicianId: technicianId.trim(),
-      isActive: true,
-      dealerGroup: { status: 'active' },
-    },
-    select: {
-      role: true,
-      isPrimary: true,
-      dealerGroup: {
-        select: { id: true, code: true, name: true, legalName: true },
+  return withRlsBypass(async () => {
+    const rows = await getRlsDb().dealerGroupMembership.findMany({
+      where: {
+        technicianId: technicianId.trim(),
+        isActive: true,
+        dealerGroup: { status: 'active' },
       },
-    },
-    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-  });
+      select: {
+        role: true,
+        isPrimary: true,
+        dealerGroup: {
+          select: { id: true, code: true, name: true, legalName: true },
+        },
+      },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+    });
 
-  return rows.map((row) => ({
-    dealerGroupId: row.dealerGroup.id,
-    dealerGroupCode: row.dealerGroup.code,
-    dealerGroupName: row.dealerGroup.name,
-    legalName: row.dealerGroup.legalName,
-    role: row.role,
-    isPrimary: row.isPrimary,
-  }));
+    return rows.map((row) => ({
+      dealerGroupId: row.dealerGroup.id,
+      dealerGroupCode: row.dealerGroup.code,
+      dealerGroupName: row.dealerGroup.name,
+      legalName: row.dealerGroup.legalName,
+      role: row.role,
+      isPrimary: row.isPrimary,
+    }));
+  });
 }
 
 /** Primary membership, or first active group if none marked primary. */
@@ -61,50 +63,52 @@ export async function resolvePrimaryDealerGroupForOwner(
 export async function listEnterableDealershipsForOwner(technicianId: string): Promise<
   Array<{ id: string; name: string; dealerCode: string | null; dealerGroupId: string | null }>
 > {
-  if (await isPlatformOperator(technicianId)) {
-    const dealerships = await prisma.dealership.findMany({
-      where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
+  return withRlsBypass(async () => {
+    if (await isPlatformOperator(technicianId)) {
+      const dealerships = await getRlsDb().dealership.findMany({
+        where: { id: { not: APEX_NATIONAL_DEALERSHIP_ID } },
+        select: {
+          id: true,
+          name: true,
+          dealerId: true,
+          dealer: { select: { code: true, dealerGroupId: true } },
+        },
+        orderBy: { name: 'asc' },
+      });
+      return dealerships.map((d) => ({
+        id: d.id,
+        name: d.name,
+        dealerCode: d.dealer?.code ?? null,
+        dealerGroupId: d.dealer?.dealerGroupId ?? null,
+      }));
+    }
+
+    const memberships = await listOwnerDealerGroupMemberships(technicianId);
+    const groupIds = memberships.map((m) => m.dealerGroupId);
+    if (groupIds.length === 0) {
+      return [];
+    }
+
+    const dealerships = await getRlsDb().dealership.findMany({
+      where: {
+        id: { not: APEX_NATIONAL_DEALERSHIP_ID },
+        dealer: { dealerGroupId: { in: groupIds } },
+      },
       select: {
         id: true,
         name: true,
-        dealerId: true,
         dealer: { select: { code: true, dealerGroupId: true } },
       },
       orderBy: { name: 'asc' },
     });
+
     return dealerships.map((d) => ({
       id: d.id,
       name: d.name,
       dealerCode: d.dealer?.code ?? null,
       dealerGroupId: d.dealer?.dealerGroupId ?? null,
     }));
-  }
-
-  const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  const groupIds = memberships.map((m) => m.dealerGroupId);
-  if (groupIds.length === 0) {
-    return [];
-  }
-
-  const dealerships = await prisma.dealership.findMany({
-    where: {
-      id: { not: APEX_NATIONAL_DEALERSHIP_ID },
-      dealer: { dealerGroupId: { in: groupIds } },
-    },
-    select: {
-      id: true,
-      name: true,
-      dealer: { select: { code: true, dealerGroupId: true } },
-    },
-    orderBy: { name: 'asc' },
   });
-
-  return dealerships.map((d) => ({
-    id: d.id,
-    name: d.name,
-    dealerCode: d.dealer?.code ?? null,
-    dealerGroupId: d.dealer?.dealerGroupId ?? null,
-  }));
 }
 
 /**
@@ -118,26 +122,28 @@ export async function ownerMayEnterDealership(
   const id = dealershipId.trim();
   if (!id || id === APEX_NATIONAL_DEALERSHIP_ID) return false;
 
-  if (await isPlatformOperator(technicianId)) {
-    const exists = await prisma.dealership.findUnique({
-      where: { id },
+  return withRlsBypass(async () => {
+    if (await isPlatformOperator(technicianId)) {
+      const exists = await getRlsDb().dealership.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      return Boolean(exists);
+    }
+
+    const memberships = await listOwnerDealerGroupMemberships(technicianId);
+    if (memberships.length === 0) return false;
+
+    const groupIds = memberships.map((m) => m.dealerGroupId);
+    const rooftop = await getRlsDb().dealership.findFirst({
+      where: {
+        id,
+        dealer: { dealerGroupId: { in: groupIds } },
+      },
       select: { id: true },
     });
-    return Boolean(exists);
-  }
-
-  const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  if (memberships.length === 0) return false;
-
-  const groupIds = memberships.map((m) => m.dealerGroupId);
-  const rooftop = await prisma.dealership.findFirst({
-    where: {
-      id,
-      dealer: { dealerGroupId: { in: groupIds } },
-    },
-    select: { id: true },
+    return Boolean(rooftop);
   });
-  return Boolean(rooftop);
 }
 
 /**
@@ -147,19 +153,21 @@ export async function ownerMayEnterDealership(
  * - Otherwise → empty array (no dealers)
  */
 export async function listDealerIdsForOwnerGroups(technicianId: string): Promise<string[] | null> {
-  if (await isPlatformOperator(technicianId)) {
-    return null;
-  }
+  return withRlsBypass(async () => {
+    if (await isPlatformOperator(technicianId)) {
+      return null;
+    }
 
-  const memberships = await listOwnerDealerGroupMemberships(technicianId);
-  if (memberships.length === 0) return [];
+    const memberships = await listOwnerDealerGroupMemberships(technicianId);
+    if (memberships.length === 0) return [];
 
-  const dealers = await prisma.dealer.findMany({
-    where: {
-      dealerGroupId: { in: memberships.map((m) => m.dealerGroupId) },
-      status: 'active',
-    },
-    select: { id: true },
+    const dealers = await getRlsDb().dealer.findMany({
+      where: {
+        dealerGroupId: { in: memberships.map((m) => m.dealerGroupId) },
+        status: 'active',
+      },
+      select: { id: true },
+    });
+    return dealers.map((d) => d.id);
   });
-  return dealers.map((d) => d.id);
 }

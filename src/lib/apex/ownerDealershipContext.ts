@@ -14,7 +14,7 @@ import {
   type SessionPayload,
   type TechnicianForSession,
 } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
 function ownerTechnicianForSession(
@@ -73,37 +73,39 @@ type OwnerTechRow = {
 };
 
 async function loadOwnerTech(technicianId: string): Promise<OwnerTechRow | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { id: technicianId.trim() },
-    select: {
-      id: true,
-      name: true,
-      role: true,
-      isAdmin: true,
-      isActive: true,
-      deletedAt: true,
-      serviceAdvisorId: true,
-      sessionVersion: true,
-      consentAt: true,
-      consentVersion: true,
-      legalDisclaimerAt: true,
-      legalDisclaimerVersion: true,
-      dealershipId: true,
-      mustChangePassword: true,
-      d7Number: true,
-      apexUsername: true,
-    },
-  });
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id: technicianId.trim() },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        isAdmin: true,
+        isActive: true,
+        deletedAt: true,
+        serviceAdvisorId: true,
+        sessionVersion: true,
+        consentAt: true,
+        consentVersion: true,
+        legalDisclaimerAt: true,
+        legalDisclaimerVersion: true,
+        dealershipId: true,
+        mustChangePassword: true,
+        d7Number: true,
+        apexUsername: true,
+      },
+    });
 
-  if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
-  return tech;
+    if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
+    return tech;
+  });
 }
 
 /** Heal mis-stamped dealership FK without wiping owner login identifiers. */
 async function healOwnerNationalFk(tech: OwnerTechRow): Promise<void> {
   if (tech.dealershipId === APEX_NATIONAL_DEALERSHIP_ID) return;
-  void prisma.technician
-    .update({
+  void withRlsBypass(async () =>
+    getRlsDb().technician.update({
       where: { id: tech.id },
       data: {
         dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
@@ -111,7 +113,7 @@ async function healOwnerNationalFk(tech: OwnerTechRow): Promise<void> {
         // Never clear apexUsername / email — group owners login with username
       },
     })
-    .catch(() => undefined);
+  ).catch(() => undefined);
 }
 
 function nationalPayload(tech: OwnerTechRow, scopeMode: 'national' | 'group', group?: { id: string; name: string }) {
@@ -166,17 +168,19 @@ export async function buildOwnerGroupSession(
   const tech = await loadOwnerTech(technicianId);
   if (!tech) return null;
 
-  const membership = await prisma.dealerGroupMembership.findFirst({
-    where: {
-      technicianId: tech.id,
-      dealerGroupId: dealerGroupId.trim(),
-      isActive: true,
-      dealerGroup: { status: 'active' },
-    },
-    select: {
-      dealerGroup: { select: { id: true, name: true } },
-    },
-  });
+  const membership = await withRlsBypass(async () =>
+    getRlsDb().dealerGroupMembership.findFirst({
+      where: {
+        technicianId: tech.id,
+        dealerGroupId: dealerGroupId.trim(),
+        isActive: true,
+        dealerGroup: { status: 'active' },
+      },
+      select: {
+        dealerGroup: { select: { id: true, name: true } },
+      },
+    })
+  );
   if (!membership) return null;
 
   await healOwnerNationalFk(tech);
@@ -203,50 +207,52 @@ export async function buildOwnerDealershipSession(
   technicianId: string,
   dealershipId: string
 ): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { id: technicianId.trim() },
-    include: { dealership: true },
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id: technicianId.trim() },
+      include: { dealership: true },
+    });
+
+    if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
+
+    const targetId = dealershipId.trim();
+    if (!targetId || targetId === APEX_NATIONAL_DEALERSHIP_ID) return null;
+
+    // Phase 6.1 — re-validate group/platform enter rights on every session rebuild/refresh.
+    // Prevents stale rooftop access after membership revocation.
+    const allowed = await ownerMayEnterDealership(tech.id, targetId);
+    if (!allowed) return null;
+
+    const dealership = await getRlsDb().dealership.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        name: true,
+        dealerId: true,
+        dealer: { select: { dealerGroupId: true, dealerGroup: { select: { id: true, name: true } } } },
+      },
+    });
+
+    if (!dealership || dealership.id === APEX_NATIONAL_DEALERSHIP_ID) return null;
+
+    const payload = ownerTechnicianForSession(
+      tech as TechnicianForSession & {
+        dealership: { id: string; name: string; dealerId: string | null };
+      },
+      dealership,
+      'dealership'
+    );
+
+    // Preserve group context while inside a rooftop for exit routing / UI
+    const group = dealership.dealer?.dealerGroup;
+    if (group) {
+      return {
+        ...payload,
+        activeDealerGroupId: group.id,
+        dealerGroupName: group.name,
+      };
+    }
+
+    return payload;
   });
-
-  if (!tech || !isTechnicianAccountActive(tech) || tech.role !== 'owner') return null;
-
-  const targetId = dealershipId.trim();
-  if (!targetId || targetId === APEX_NATIONAL_DEALERSHIP_ID) return null;
-
-  // Phase 6.1 — re-validate group/platform enter rights on every session rebuild/refresh.
-  // Prevents stale rooftop access after membership revocation.
-  const allowed = await ownerMayEnterDealership(tech.id, targetId);
-  if (!allowed) return null;
-
-  const dealership = await prisma.dealership.findUnique({
-    where: { id: targetId },
-    select: {
-      id: true,
-      name: true,
-      dealerId: true,
-      dealer: { select: { dealerGroupId: true, dealerGroup: { select: { id: true, name: true } } } },
-    },
-  });
-
-  if (!dealership || dealership.id === APEX_NATIONAL_DEALERSHIP_ID) return null;
-
-  const payload = ownerTechnicianForSession(
-    tech as TechnicianForSession & {
-      dealership: { id: string; name: string; dealerId: string | null };
-    },
-    dealership,
-    'dealership'
-  );
-
-  // Preserve group context while inside a rooftop for exit routing / UI
-  const group = dealership.dealer?.dealerGroup;
-  if (group) {
-    return {
-      ...payload,
-      activeDealerGroupId: group.id,
-      dealerGroupName: group.name,
-    };
-  }
-
-  return payload;
 }

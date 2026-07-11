@@ -1,7 +1,7 @@
 import 'server-only';
 
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { stripEnvQuotes } from '@/lib/apex/seedOwnerAccounts';
-import { prisma } from '@/lib/db';
 
 /**
  * Phase 6.1 — explicit platform operator allowlist.
@@ -51,14 +51,16 @@ export async function isPlatformOperator(technicianId: string): Promise<boolean>
   const allowlist = parsePlatformOwnerEmailsFromEnv();
   if (allowlist.size === 0) return false;
 
-  const tech = await prisma.technician.findUnique({
-    where: { id },
-    select: { email: true, role: true, isActive: true, deletedAt: true },
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id },
+      select: { email: true, role: true, isActive: true, deletedAt: true },
+    });
+
+    if (!tech || tech.role !== 'owner' || !tech.isActive || tech.deletedAt) {
+      return false;
+    }
+
+    return isPlatformOperatorEmail(tech.email);
   });
-
-  if (!tech || tech.role !== 'owner' || !tech.isActive || tech.deletedAt) {
-    return false;
-  }
-
-  return isPlatformOperatorEmail(tech.email);
 }

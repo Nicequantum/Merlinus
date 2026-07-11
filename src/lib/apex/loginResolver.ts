@@ -15,7 +15,7 @@ import {
 } from '@/lib/apex/credentialType';
 import { buildOwnerHomeSession } from '@/lib/apex/ownerDealershipContext';
 import { listActiveDealershipMemberships } from '@/lib/apex/membershipGuard';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 
 export const LEGACY_LOGIN_FAILURE_MESSAGE = 'Invalid D7 number or password.';
@@ -52,26 +52,27 @@ async function findTechnicianByCredential(
   credentialType: Exclude<CredentialType, 'invalid'>,
   normalizedIdentifier: string
 ): Promise<TechnicianWithDealership | null> {
+  const db = getRlsDb();
   switch (credentialType) {
     case 'email': {
       // Prefer exact lowercase match (owners are seeded lowercased); fall back insensitive.
-      const exact = await prisma.technician.findUnique({
+      const exact = await db.technician.findUnique({
         where: { email: normalizedIdentifier },
         include: technicianInclude,
       });
       if (exact) return exact;
-      return prisma.technician.findFirst({
+      return db.technician.findFirst({
         where: { email: { equals: normalizedIdentifier, mode: 'insensitive' } },
         include: technicianInclude,
       });
     }
     case 'd7':
-      return prisma.technician.findUnique({
+      return db.technician.findUnique({
         where: { d7Number: normalizedIdentifier },
         include: technicianInclude,
       });
     case 'username':
-      return prisma.technician.findUnique({
+      return db.technician.findUnique({
         where: { apexUsername: normalizedIdentifier },
         include: technicianInclude,
       });
@@ -122,7 +123,7 @@ export function mapMembershipsToLoginDealerships(
 
 /** Load memberships with dealer codes for the dealership selector (apex login). */
 async function listLoginDealershipOptions(technicianId: string): Promise<LoginDealershipOption[]> {
-  const memberships = await prisma.technicianDealership.findMany({
+  const memberships = await getRlsDb().technicianDealership.findMany({
     where: { technicianId: technicianId.trim(), isActive: true },
     include: {
       dealership: {
@@ -163,6 +164,8 @@ export async function resolveUnifiedLogin(
   identifier: string,
   password: string
 ): Promise<UnifiedLoginResult> {
+  // Phase 6.2 — credential lookup is control-plane (default-deny Technician RLS).
+  return withRlsBypass(async () => {
   const credentialType = detectCredentialType(identifier);
   if (credentialType === 'invalid') return { status: 'invalid' };
 
@@ -219,4 +222,5 @@ export async function resolveUnifiedLogin(
     credentialType,
     dealerships: await listLoginDealershipOptions(tech.id),
   };
+  });
 }

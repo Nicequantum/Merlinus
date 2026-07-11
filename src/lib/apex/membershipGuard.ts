@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { Prisma, TechnicianDealership, TechnicianRole } from '@prisma/client';
-import { prisma } from '@/lib/db';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 
 /** Thrown when a technician has no active membership for the requested dealership. */
 export class DealershipMembershipError extends Error {
@@ -40,7 +40,7 @@ async function loadActiveDealershipMembership(
   const trimmedDealershipId = dealershipId.trim();
   if (!trimmedTechId || !trimmedDealershipId) return null;
 
-  return prisma.technicianDealership.findFirst({
+  return getRlsDb().technicianDealership.findFirst({
     where: {
       technicianId: trimmedTechId,
       dealershipId: trimmedDealershipId,
@@ -80,7 +80,7 @@ export async function findActiveDealershipMembership(
 export async function listActiveDealershipMemberships(
   technicianId: string
 ): Promise<TechnicianDealershipWithDealership[]> {
-  return prisma.technicianDealership.findMany({
+  return getRlsDb().technicianDealership.findMany({
     where: { technicianId: technicianId.trim(), isActive: true },
     include: { dealership: { select: { id: true, name: true, dealerId: true } } },
     orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
@@ -89,7 +89,7 @@ export async function listActiveDealershipMemberships(
 
 /** Count active memberships — login routing uses 0 / 1 / many. */
 export async function countActiveDealershipMemberships(technicianId: string): Promise<number> {
-  return prisma.technicianDealership.count({
+  return getRlsDb().technicianDealership.count({
     where: { technicianId: technicianId.trim(), isActive: true },
   });
 }
@@ -105,7 +105,7 @@ export async function upsertTechnicianDealershipMembership(input: {
   const technicianId = input.technicianId.trim();
   const dealershipId = input.dealershipId.trim();
 
-  return prisma.technicianDealership.upsert({
+  return getRlsDb().technicianDealership.upsert({
     where: {
       technicianId_dealershipId: { technicianId, dealershipId },
     },

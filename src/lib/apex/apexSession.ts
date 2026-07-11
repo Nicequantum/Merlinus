@@ -16,7 +16,7 @@ import {
   type SessionPayload,
   type TechnicianForSession,
 } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { isTechnicianAccountActive } from '@/lib/technicianAccounts';
 import { logger } from '@/lib/logger';
 import { getRequestIp } from '@/lib/rate-limit';
@@ -219,14 +219,16 @@ export async function createPendingSelectionToken(input: {
     .sign(getSecret());
 
   const expiresAt = new Date(Date.now() + getPendingSelectionTtlSeconds() * 1000);
-  await prisma.sessionRefreshToken.create({
-    data: {
-      technicianId: input.technicianId,
-      tokenHash: sha256Hex(token),
-      familyId: `pending:${input.technicianId}`,
-      expiresAt,
-    },
-  });
+  await withRlsBypass(async () =>
+    getRlsDb().sessionRefreshToken.create({
+      data: {
+        technicianId: input.technicianId,
+        tokenHash: sha256Hex(token),
+        familyId: `pending:${input.technicianId}`,
+        expiresAt,
+      },
+    })
+  );
 
   return token;
 }
@@ -242,10 +244,12 @@ export async function verifyPendingSelectionToken(
     const claims = payload as unknown as PendingSelectionClaims;
     if (claims.tokenType !== 'pending_selection') return null;
 
-    const row = await prisma.sessionRefreshToken.findUnique({
-      where: { tokenHash: sha256Hex(token) },
-      select: { revokedAt: true, expiresAt: true, technicianId: true },
-    });
+    const row = await withRlsBypass(async () =>
+      getRlsDb().sessionRefreshToken.findUnique({
+        where: { tokenHash: sha256Hex(token) },
+        select: { revokedAt: true, expiresAt: true, technicianId: true },
+      })
+    );
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     if (row.technicianId !== claims.technicianId) return null;
 
@@ -257,10 +261,12 @@ export async function verifyPendingSelectionToken(
 
 export async function consumePendingSelectionToken(token: string): Promise<boolean> {
   const tokenHash = sha256Hex(token);
-  const updated = await prisma.sessionRefreshToken.updateMany({
-    where: { tokenHash, revokedAt: null, expiresAt: { gt: new Date() } },
-    data: { revokedAt: new Date() },
-  });
+  const updated = await withRlsBypass(async () =>
+    getRlsDb().sessionRefreshToken.updateMany({
+      where: { tokenHash, revokedAt: null, expiresAt: { gt: new Date() } },
+      data: { revokedAt: new Date() },
+    })
+  );
   return updated.count === 1;
 }
 
@@ -278,32 +284,38 @@ export async function issueApexRefreshToken(input: {
   const expiresAt = new Date(Date.now() + getRefreshTokenTtlSeconds() * 1000);
   const ip = input.request ? getRequestIp(input.request) : 'unknown';
 
-  await prisma.sessionRefreshToken.create({
-    data: {
-      technicianId: input.technicianId,
-      tokenHash: sha256Hex(rawToken),
-      familyId,
-      ipHash: hashClientIp(ip),
-      userAgentHash: hashUserAgent(input.request?.headers.get('user-agent')),
-      expiresAt,
-    },
-  });
+  await withRlsBypass(async () =>
+    getRlsDb().sessionRefreshToken.create({
+      data: {
+        technicianId: input.technicianId,
+        tokenHash: sha256Hex(rawToken),
+        familyId,
+        ipHash: hashClientIp(ip),
+        userAgentHash: hashUserAgent(input.request?.headers.get('user-agent')),
+        expiresAt,
+      },
+    })
+  );
 
   return { rawToken, familyId };
 }
 
 export async function revokeRefreshTokenFamily(familyId: string): Promise<void> {
-  await prisma.sessionRefreshToken.updateMany({
-    where: { familyId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
+  await withRlsBypass(async () =>
+    getRlsDb().sessionRefreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+  );
 }
 
 export async function revokeAllRefreshTokensForTechnician(technicianId: string): Promise<void> {
-  await prisma.sessionRefreshToken.updateMany({
-    where: { technicianId, revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
+  await withRlsBypass(async () =>
+    getRlsDb().sessionRefreshToken.updateMany({
+      where: { technicianId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+  );
 }
 
 export async function applyApexSessionCookies(
@@ -373,36 +385,38 @@ function buildDealershipScopedTechnicianSession(
 async function resolveTechnicianSessionFromClaims(
   claims: ApexAccessClaims
 ): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { id: claims.technicianId },
-    include: { dealership: true },
-  });
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id: claims.technicianId },
+      include: { dealership: true },
+    });
 
-  if (!tech || !isTechnicianAccountActive(tech)) return null;
-  if (tech.sessionVersion !== claims.sessionVersion) return null;
-  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
+    if (!tech || !isTechnicianAccountActive(tech)) return null;
+    if (tech.sessionVersion !== claims.sessionVersion) return null;
+    if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
 
-  if (tech.role === 'owner') {
-    if (claims.scopeMode === 'dealership' && claims.activeDealershipId) {
-      return buildOwnerDealershipSession(tech.id, claims.activeDealershipId);
+    if (tech.role === 'owner') {
+      if (claims.scopeMode === 'dealership' && claims.activeDealershipId) {
+        return buildOwnerDealershipSession(tech.id, claims.activeDealershipId);
+      }
+      if (claims.scopeMode === 'group' && claims.activeDealerGroupId) {
+        return buildOwnerGroupSession(tech.id, claims.activeDealerGroupId);
+      }
+      return buildOwnerHomeSession(tech.id);
     }
-    if (claims.scopeMode === 'group' && claims.activeDealerGroupId) {
-      return buildOwnerGroupSession(tech.id, claims.activeDealerGroupId);
-    }
-    return buildOwnerHomeSession(tech.id);
-  }
 
-  const membership = await findActiveDealershipMembership(tech.id, claims.dealershipId, {
-    includeDealership: true,
+    const membership = await findActiveDealershipMembership(tech.id, claims.dealershipId, {
+      includeDealership: true,
+    });
+    if (!membership || !('dealership' in membership)) return null;
+
+    return buildDealershipScopedTechnicianSession(
+      tech as TechnicianForSession & {
+        dealership: { id: string; name: string; dealerId: string | null };
+      },
+      membership.dealership
+    );
   });
-  if (!membership || !('dealership' in membership)) return null;
-
-  return buildDealershipScopedTechnicianSession(
-    tech as TechnicianForSession & {
-      dealership: { id: string; name: string; dealerId: string | null };
-    },
-    membership.dealership
-  );
 }
 
 export async function getApexSessionContext(request?: Request): Promise<{
@@ -434,8 +448,9 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
   const rawRefresh = await readApexRefreshToken(request);
   if (!rawRefresh) return { status: 'invalid' };
 
+  return withRlsBypass(async () => {
   const tokenHash = sha256Hex(rawRefresh);
-  const row = await prisma.sessionRefreshToken.findUnique({
+  const row = await getRlsDb().sessionRefreshToken.findUnique({
     where: { tokenHash },
   });
 
@@ -453,7 +468,7 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
     return { status: 'invalid' };
   }
 
-  const tech = await prisma.technician.findUnique({
+  const tech = await getRlsDb().technician.findUnique({
     where: { id: row.technicianId },
     include: { dealership: true },
   });
@@ -466,7 +481,7 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
     return { status: 'invalid' };
   }
 
-  await prisma.sessionRefreshToken.update({
+  await getRlsDb().sessionRefreshToken.update({
     where: { tokenHash },
     data: { revokedAt: new Date() },
   });
@@ -544,6 +559,7 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
     refreshToken,
     authSource: 'refresh',
   };
+  });
 }
 
 export async function destroyApexSession(technicianId?: string): Promise<void> {

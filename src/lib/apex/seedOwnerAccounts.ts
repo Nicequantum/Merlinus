@@ -8,7 +8,7 @@ import {
   APEX_NATIONAL_DEALERSHIP_ID,
   APEX_NATIONAL_DEALERSHIP_NAME,
 } from '@/lib/apex/platformConstants';
-import { prisma } from '@/lib/db';
+import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { logger } from '@/lib/logger';
 
 /** Second rooftop for multi-dealership selector demos and integration tests. */
@@ -135,7 +135,7 @@ export interface ApexOwnerSeedResult {
 }
 
 async function ensureNationalSentinelDealership(): Promise<void> {
-  await prisma.dealership.upsert({
+  await getRlsDb().dealership.upsert({
     where: { id: APEX_NATIONAL_DEALERSHIP_ID },
     update: { name: APEX_NATIONAL_DEALERSHIP_NAME },
     create: { id: APEX_NATIONAL_DEALERSHIP_ID, name: APEX_NATIONAL_DEALERSHIP_NAME },
@@ -151,7 +151,7 @@ async function ensureNationalOwnerAccount(
 ): Promise<{ id: string; email: string; created: boolean }> {
   const email = account.email.trim().toLowerCase();
 
-  const existing = await prisma.technician.findFirst({
+  const existing = await getRlsDb().technician.findFirst({
     where: { email: { equals: email, mode: 'insensitive' } },
     select: { id: true, email: true, role: true },
   });
@@ -161,7 +161,7 @@ async function ensureNationalOwnerAccount(
     // only when the account is already an owner and was soft-deactivated incorrectly —
     // still never rewrite password.
     if (existing.role === 'owner' && existing.email !== email) {
-      await prisma.technician.update({
+      await getRlsDb().technician.update({
         where: { id: existing.id },
         data: { email },
       });
@@ -170,7 +170,7 @@ async function ensureNationalOwnerAccount(
   }
 
   const passwordHash = await bcrypt.hash(account.password, 12);
-  const created = await prisma.technician.create({
+  const created = await getRlsDb().technician.create({
     data: {
       email,
       name: account.name,
@@ -196,10 +196,14 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     throw new Error('seedApexOwnerAccounts requires at least one owner account');
   }
 
+  return withRlsBypass(async () => seedApexOwnerAccountsInner(config));
+}
+
+async function seedApexOwnerAccountsInner(config: ApexOwnerSeedConfig): Promise<ApexOwnerSeedResult> {
   await ensureNationalSentinelDealership();
 
   // Keep seed pilots as named team test rooftops (re-seed renames if still on old pilot labels).
-  const primaryDealership = await prisma.dealership.upsert({
+  const primaryDealership = await getRlsDb().dealership.upsert({
     where: { id: APEX_SEED_PRIMARY_DEALERSHIP_ID },
     update: { name: APEX_TEST_PLATFORM_ROOFTOP_NAME },
     create: {
@@ -208,7 +212,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     },
   });
 
-  const secondDealership = await prisma.dealership.upsert({
+  const secondDealership = await getRlsDb().dealership.upsert({
     where: { id: APEX_SEED_SECOND_DEALERSHIP_ID },
     update: { name: APEX_GENERIC_TEST_ROOFTOP_NAME },
     create: {
@@ -230,7 +234,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     multiRooftopUsername = config.multiRooftopUsername;
     const multiEmail = `multi-rooftop+${config.multiRooftopUsername}@apex.seed.local`;
 
-    const existingMulti = await prisma.technician.findUnique({
+    const existingMulti = await getRlsDb().technician.findUnique({
       where: { email: multiEmail },
       select: { id: true },
     });
@@ -238,7 +242,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
     if (existingMulti) {
       // Create-only: never reset multi-rooftop password hash.
       multiRooftopId = existingMulti.id;
-      await prisma.technician.update({
+      await getRlsDb().technician.update({
         where: { id: existingMulti.id },
         data: {
           apexUsername: config.multiRooftopUsername,
@@ -252,7 +256,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
         },
       });
     } else {
-      await prisma.technician.updateMany({
+      await getRlsDb().technician.updateMany({
         where: {
           apexUsername: config.multiRooftopUsername,
           email: { not: multiEmail },
@@ -261,7 +265,7 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
       });
 
       const multiHash = await bcrypt.hash(config.multiRooftopPassword, 12);
-      const multi = await prisma.technician.create({
+      const multi = await getRlsDb().technician.create({
         data: {
           email: multiEmail,
           apexUsername: config.multiRooftopUsername,

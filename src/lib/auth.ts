@@ -185,16 +185,19 @@ export async function destroySession(technicianId?: string): Promise<void> {
 }
 
 async function resolveSessionPayload(tokenPayload: SessionPayload): Promise<SessionPayload | null> {
-  const tech = await prisma.technician.findUnique({
-    where: { id: tokenPayload.technicianId },
-    include: { dealership: true },
+  const { getRlsDb, withRlsBypass } = await import('@/lib/apex/rlsContext');
+  return withRlsBypass(async () => {
+    const tech = await getRlsDb().technician.findUnique({
+      where: { id: tokenPayload.technicianId },
+      include: { dealership: true },
+    });
+
+    if (!tech || !isTechnicianAccountActive(tech)) return null;
+    if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
+    if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
+
+    return buildSessionPayloadFromTechnician(tech);
   });
-
-  if (!tech || !isTechnicianAccountActive(tech)) return null;
-  if (tech.sessionVersion !== tokenPayload.sessionVersion) return null;
-  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
-
-  return buildSessionPayloadFromTechnician(tech);
 }
 
 function readSessionTokenFromRequest(request?: Request): string | undefined {
@@ -250,11 +253,14 @@ export async function requireSession(request?: Request): Promise<SessionPayload>
 }
 
 export async function incrementSessionVersion(technicianId: string): Promise<number> {
-  const updated = await prisma.technician.update({
-    where: { id: technicianId },
-    data: { sessionVersion: { increment: 1 } },
-    select: { sessionVersion: true },
-  });
+  const { getRlsDb, withRlsBypass } = await import('@/lib/apex/rlsContext');
+  const updated = await withRlsBypass(async () =>
+    getRlsDb().technician.update({
+      where: { id: technicianId },
+      data: { sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
+    })
+  );
   logger.info('auth.session_version_incremented', { technicianId, sessionVersion: updated.sessionVersion });
   return updated.sessionVersion;
 }
@@ -264,14 +270,17 @@ export async function revokeTechnicianSessions(technicianId: string): Promise<vo
 }
 
 export async function loginTechnician(d7Number: string, password: string): Promise<SessionPayload | null> {
-  const normalizedD7 = normalizeD7Number(d7Number);
-  const tech = await prisma.technician.findUnique({
-    where: { d7Number: normalizedD7 },
-    include: { dealership: true },
+  const { getRlsDb, withRlsBypass } = await import('@/lib/apex/rlsContext');
+  return withRlsBypass(async () => {
+    const normalizedD7 = normalizeD7Number(d7Number);
+    const tech = await getRlsDb().technician.findUnique({
+      where: { d7Number: normalizedD7 },
+      include: { dealership: true },
+    });
+    if (!tech || !isTechnicianAccountActive(tech)) return null;
+    if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
+    const valid = await verifyPassword(password, tech.passwordHash);
+    if (!valid) return null;
+    return buildSessionPayloadFromTechnician(tech);
   });
-  if (!tech || !isTechnicianAccountActive(tech)) return null;
-  if (tech.role === 'service_advisor' && !tech.serviceAdvisorId) return null;
-  const valid = await verifyPassword(password, tech.passwordHash);
-  if (!valid) return null;
-  return buildSessionPayloadFromTechnician(tech);
 }
