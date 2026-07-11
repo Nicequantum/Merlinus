@@ -4,6 +4,18 @@ All notable changes to Merlinus are documented here.
 
 ## [3.0.1] — 2026-07-11
 
+### Enterprise Readiness Cleanup (Phase 7.1–7.3) — **complete**
+
+Major maintainability and multi-tenant scale pass after the security hardening sprint. Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
+
+| Phase | Summary |
+|-------|---------|
+| **7.1** | Prisma `getRlsDb` / `withRlsBypass` consistency; advisor metrics 90d window; owner summary SQL day buckets; batched image access; platform-operator-only national session; production weak-secret hard-fail; Zod JWT claim validation |
+| **7.2** | Log/Sentry redaction; Sentry only on 5xx; rate-limit success→debug; request correlation IDs; Grok/Blob `reportMappedRouteError`; H12 behavioral tests (429, RLS contracts, session revoke, Clerk webhook) |
+| **7.3** | Per-dealership IANA timezone + day-boundary/usage; `withStoryAiRoute` + `blockServiceAdvisorAi`; multi-group portfolio switcher; hot-path composite indexes |
+
+**Status:** Engineering delivery for Phases **7.1–7.3 is complete.** Apply migration `20250716120000_apex_phase7_3_timezone_indexes` on production Supabase with Phase 6 RLS migrations + production KV.
+
 ### Security Hardening Sprint (Phase 6.1–6.5) — **complete and production-ready**
 
 Enterprise multi-dealership security pass after third-party-style audit. **Code baseline for Phases 6.1–6.5 is complete and production-ready.** Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
@@ -16,7 +28,7 @@ Enterprise multi-dealership security pass after third-party-style audit. **Code 
 | **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates |
 | **6.5** | Apex production **fail-closed** without KV (503); MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
-**Production readiness:** ship with Vercel KV on Apex production, RLS migrations applied, and pre-rollout **APEX 6.1–6.5** green.  
+**Production readiness:** ship with Vercel KV on Apex production, RLS + Phase 7.3 migrations applied, and pre-rollout **APEX 6.1–6.5** green.  
 **Follow-on (product / ops, not code blockers):** deliver MFA/SSO features; independent pen test after production deploy.
 
 ### DealerGroup & group owner dashboard

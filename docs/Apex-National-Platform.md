@@ -125,6 +125,7 @@ National summary API: `GET /api/owner/summary` (owner-gated, apex-only, no PII i
 - Owner FK uses sentinel dealership `__apex_national__`
 - All owner context switches are audited (`owner.dealership_enter`, `owner.dealership_exit`, `owner.national_access`)
 - **Phase 6 fortress + Hardening Sprint (complete · production-ready):** RLS default-deny, fail-closed audits, session revocation, Apex KV fail-closed — see [Security-Fortress.md](./Security-Fortress.md)
+- **Phase 7 enterprise cleanup (complete):** Prisma RLS client consistency, observability, per-rooftop timezone, story AI shell, multi-group portfolio switcher — see Security-Fortress.md
 
 ---
 
@@ -222,7 +223,16 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 
 **Phase 6.0 Security Fortress: complete and production-ready.**  
 **Security Hardening Sprint (6.1–6.5): complete and production-ready.**  
-Deploy Apex with production KV + RLS migrations; run `npm run validate:pre-rollout` (APEX 6.1–6.5 gates).
+**Enterprise Readiness Cleanup (7.1–7.3): complete.**  
+Deploy Apex with production KV + RLS + Phase 7.3 timezone/index migrations; run `npm run validate:pre-rollout` (APEX 6.1–6.5 gates).
+
+### Phase 7 — enterprise readiness cleanup (complete)
+
+| Phase | Highlights |
+|-------|------------|
+| **7.1** | `getRlsDb` consistency; metrics/summary/image scale; operator-only national; weak-secret fail; JWT Zod claims |
+| **7.2** | Log/Sentry redaction; 5xx-only Sentry; request IDs; Grok error reporting; behavioral security tests |
+| **7.3** | `Dealership.timezone`; `withStoryAiRoute`; multi-group switcher (`/api/owner/dealer-groups`, select); composite indexes |
 
 ---
 

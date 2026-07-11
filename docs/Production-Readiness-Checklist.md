@@ -19,6 +19,7 @@ Complete every section. A deployment is **blocked** until all **Critical** items
 | 1.6 | Legacy PII re-encryption | Follow [Reencryption-Runbook.md](./Reencryption-Runbook.md) if upgrading | ☐ | ☐ | | |
 | 1.7 | KV rate limiting (Phase 6.4–6.5) | `KV_REST_API_URL` + `KV_REST_API_TOKEN` on **Production** Vercel env; Apex production **fails closed** without KV (no memory fallback); no `rate_limit.apex_kv_required` / `production_kv_missing` at healthy startup | ✅ | ☐ | | |
 | 1.8 | Security Hardening Sprint (6.1–6.5) | Pre-rollout **APEX 6.1–6.5** all PASS; [Security-Fortress.md](./Security-Fortress.md) sprint **complete and production-ready**; RLS migrations applied on target DB | ✅ | ☐ | | |
+| 1.8b | Enterprise cleanup (7.1–7.3) | Phase 7.3 migration `20250716120000_apex_phase7_3_timezone_indexes` applied; docs mark **7.1–7.3 complete** | ✅ | ☐ | | |
 | 1.9 | Build metadata | `NEXT_PUBLIC_BUILD_COMMIT` + `NEXT_PUBLIC_BUILD_DATE` stamped | ☐ | ☐ | | |
 
 ---
@@ -35,6 +36,7 @@ Complete every section. A deployment is **blocked** until all **Critical** items
 | 2.6 | Audit chain verified on sample dealership | ✅ | ☐ | | |
 | 2.7 | Customer Pay templates bypass Grok — audit uses `customerPayTemplateApplied` | ✅ | ☐ | | |
 | 2.8 | Security Hardening Sprint (6.1–6.5) baseline | ✅ | ☐ | | |
+| 2.9 | Enterprise Readiness Cleanup (7.1–7.3) complete | ✅ | ☐ | | |
 
 ---
 

@@ -1,7 +1,7 @@
-# Security Fortress (Phase 6.0) + Hardening Sprint (6.1–6.5)
+# Security Fortress (Phase 6.0) + Hardening Sprint (6.1–6.5) + Enterprise Cleanup (7.1–7.3)
 
-**Status:** **Complete and production-ready** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.5)  
-**Code baseline:** Phases 6.1–6.5 shipped; pre-rollout **APEX 6.1–6.5** gates green. Deploy with production KV + RLS migrations applied.  
+**Status:** **Complete and production-ready** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.5) + **Enterprise Readiness Cleanup (Phases 7.1–7.3)**  
+**Code baseline:** Phases 6.1–6.5 + **7.1–7.3** shipped; pre-rollout **APEX 6.1–6.5** gates green. Deploy with production KV + RLS + Phase 7.3 timezone/index migrations applied.  
 **Audience:** Platform security, compliance, enterprise buyers, and operators  
 **Default product mode:** Merlinus single-dealer remains the safe default; Apex enables multi-rooftop fortress controls.
 
@@ -82,6 +82,22 @@
 
 **Sprint status: complete and production-ready** (Phases 6.1–6.5).  
 Engineering delivery is finished. Ops go-live still requires production KV, Supabase RLS migrations, and [Production-Readiness-Checklist.md](./Production-Readiness-Checklist.md) sign-off. Follow-on product work (not blocking code readiness): MFA/SSO delivery, independent pen test.
+
+---
+
+## Enterprise Readiness Cleanup (Phases 7.1–7.3) — **complete**
+
+Post-hardening maintainability and multi-tenant scale pass. **Status: complete.**
+
+| Phase | Theme | Highlights |
+|-------|--------|------------|
+| **7.1** | Consistency & scale | Migrate bare Prisma → `getRlsDb` / `withRlsBypass`; advisor metrics **90d** window; owner summary SQL day buckets; batched image access; national session only for platform operators; production weak-secret hard-fail; Zod JWT claim validation |
+| **7.2** | Observability & test proof | Central log/Sentry redaction; Sentry only for **5xx**; rate-limit success → debug; request correlation IDs; Grok/Blob `reportMappedRouteError`; behavioral tests for 429, RLS contracts, session revoke, Clerk webhook |
+| **7.3** | Future-proofing | Per-dealership IANA **timezone**; `withStoryAiRoute` + consistent `blockServiceAdvisorAi`; multi-group portfolio switcher; hot-path composite indexes |
+
+**Modules added/extended:** [`logRedact.ts`](../src/lib/logRedact.ts), [`requestContext.ts`](../src/lib/requestContext.ts), [`storyAiRoute.ts`](../src/lib/storyAiRoute.ts), [`dealershipDayBoundary.ts`](../src/lib/dealershipDayBoundary.ts), owner `dealer-groups` / `select-dealer-group` APIs, migration `20250716120000_apex_phase7_3_timezone_indexes`.
+
+**Cleanup status: complete.** Optional later: live Postgres RLS CI suite, coverage gates, browser E2E, MFA/SSO product delivery.
 
 ---
 
@@ -238,4 +254,5 @@ Unit guards: `tests/unit/phase63Security.test.ts`, `tests/unit/phase63MediumHard
 | 6.5 | Apex production fail-closed without KV; MFA/SSO implementation guidance; final pre-rollout gates |
 
 **Phase 6.0 Security Fortress: complete and production-ready.**  
-**Security Hardening Sprint (6.1–6.5): complete and production-ready.**
+**Security Hardening Sprint (6.1–6.5): complete and production-ready.**  
+**Enterprise Readiness Cleanup (7.1–7.3): complete.**

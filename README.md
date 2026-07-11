@@ -102,6 +102,7 @@ Production rollout: [Deployment Checklist & Operations](./docs/Deployment-Checkl
 Merlinus v3.0.1 completed a full enterprise hardening cycle and pre-rollout validation — architecture, security, audit integrity, shop-floor UX, and production operations.
 
 **Security Hardening Sprint (Phases 6.1–6.5): complete and production-ready** — see [Security Fortress](./docs/Security-Fortress.md).  
+**Enterprise Readiness Cleanup (Phases 7.1–7.3): complete** — Prisma/RLS consistency, observability, timezone, story AI shell, multi-group switcher.  
 **Production Hardened & Ready for Deployment** — Production Ready per the [Production Readiness Checklist](./docs/Production-Readiness-Checklist.md).
 
 ```
