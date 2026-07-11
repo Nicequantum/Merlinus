@@ -94,3 +94,4 @@ Enterprise multi-dealership security pass after third-party-style audit. **Code 
 ## [2.0.0] — 2026
 
 Enterprise security hardening release: AES-256-GCM PII encryption, hash-chained audit trail, CSP headers, Customer Pay templates, voice input for shop-floor tablets, and full rollout documentation suite.
+
