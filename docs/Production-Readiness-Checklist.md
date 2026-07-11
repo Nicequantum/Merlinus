@@ -17,8 +17,9 @@ Complete every section. A deployment is **blocked** until all **Critical** items
 | 1.4 | Integration tests | `npm run test:integration` — all pass | ✅ | ☐ | | |
 | 1.5 | Database migrations | `npx prisma migrate deploy` on target DB | ✅ | ☐ | | |
 | 1.6 | Legacy PII re-encryption | Follow [Reencryption-Runbook.md](./Reencryption-Runbook.md) if upgrading | ☐ | ☐ | | |
-| 1.7 | KV rate limiting (Phase 6.4) | `KV_REST_API_URL` + `KV_REST_API_TOKEN` on **Production** Vercel env; no `rate_limit.production_kv_missing` in startup logs; auth limits distributed | ✅ | ☐ | | |
-| 1.8 | Build metadata | `NEXT_PUBLIC_BUILD_COMMIT` + `NEXT_PUBLIC_BUILD_DATE` stamped | ☐ | ☐ | | |
+| 1.7 | KV rate limiting (Phase 6.4–6.5) | `KV_REST_API_URL` + `KV_REST_API_TOKEN` on **Production** Vercel env; Apex production **fails closed** without KV (no memory fallback); no `rate_limit.apex_kv_required` / `production_kv_missing` at healthy startup | ✅ | ☐ | | |
+| 1.8 | Security Hardening Sprint (6.1–6.5) | Pre-rollout **APEX 6.1–6.5** all PASS; [Security-Fortress.md](./Security-Fortress.md) sprint **complete and production-ready**; RLS migrations applied on target DB | ✅ | ☐ | | |
+| 1.9 | Build metadata | `NEXT_PUBLIC_BUILD_COMMIT` + `NEXT_PUBLIC_BUILD_DATE` stamped | ☐ | ☐ | | |
 
 ---
 
@@ -33,6 +34,7 @@ Complete every section. A deployment is **blocked** until all **Critical** items
 | 2.5 | Manager can view `/api/auth/security-status` — no default passwords | ✅ | ☐ | | |
 | 2.6 | Audit chain verified on sample dealership | ✅ | ☐ | | |
 | 2.7 | Customer Pay templates bypass Grok — audit uses `customerPayTemplateApplied` | ✅ | ☐ | | |
+| 2.8 | Security Hardening Sprint (6.1–6.5) baseline | ✅ | ☐ | | |
 
 ---
 

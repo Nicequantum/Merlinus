@@ -4,9 +4,9 @@ All notable changes to Merlinus are documented here.
 
 ## [3.0.1] — 2026-07-11
 
-### Security Hardening Sprint (Phase 6.1–6.5) — **complete**
+### Security Hardening Sprint (Phase 6.1–6.5) — **complete and production-ready**
 
-Enterprise multi-dealership security pass after third-party-style audit. Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
+Enterprise multi-dealership security pass after third-party-style audit. **Code baseline for Phases 6.1–6.5 is complete and production-ready.** Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
 
 | Phase | Summary |
 |-------|---------|
@@ -16,7 +16,8 @@ Enterprise multi-dealership security pass after third-party-style audit. Full no
 | **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates |
 | **6.5** | Apex production **fail-closed** without KV (503); MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
-**Follow-on (product / ops):** deliver MFA/SSO features; independent pen test after production deploy of 6.1–6.5 + RLS migrations + production KV.
+**Production readiness:** ship with Vercel KV on Apex production, RLS migrations applied, and pre-rollout **APEX 6.1–6.5** green.  
+**Follow-on (product / ops, not code blockers):** deliver MFA/SSO features; independent pen test after production deploy.
 
 ### DealerGroup & group owner dashboard
 

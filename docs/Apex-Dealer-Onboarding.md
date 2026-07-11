@@ -1,7 +1,7 @@
 # Apex Dealer Onboarding — Secure Provisioning Guide
 
 **Audience:** Platform operators provisioning new franchise dealers and rooftops  
-**Prerequisites:** Apex national platform (Phase 5) + Security Fortress (Phase 6)  
+**Prerequisites:** Apex national platform (Phase 5) + Security Fortress + Hardening Sprint (Phases 6.0–6.5, complete and production-ready)  
 **Status:** Complete (PR-P1 engine/CLI · PR-P2 docs/UI · PR-P3 HTTP API · PR-P4 finalize)
 
 Related:

@@ -1,6 +1,7 @@
 # Security Fortress (Phase 6.0) + Hardening Sprint (6.1–6.5)
 
-**Status:** **Complete** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.5)  
+**Status:** **Complete and production-ready** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.5)  
+**Code baseline:** Phases 6.1–6.5 shipped; pre-rollout **APEX 6.1–6.5** gates green. Deploy with production KV + RLS migrations applied.  
 **Audience:** Platform security, compliance, enterprise buyers, and operators  
 **Default product mode:** Merlinus single-dealer remains the safe default; Apex enables multi-rooftop fortress controls.
 
@@ -52,7 +53,7 @@
 | [`src/lib/apex/platformOperator.ts`](../src/lib/apex/platformOperator.ts) | Explicit platform operator allowlist (no “empty membership = superuser”) |
 | [`src/lib/sessionRevocation.ts`](../src/lib/sessionRevocation.ts) | `revokeAllSessionsForTechnician`, scope-switch refresh drop |
 | [`src/lib/grokProxyAuth.ts`](../src/lib/grokProxyAuth.ts) | Short-lived HMAC proxy tokens + timing-safe verify |
-| [`src/lib/rate-limit.ts`](../src/lib/rate-limit.ts) | Distributed KV limits; auth KV production warnings |
+| [`src/lib/rate-limit.ts`](../src/lib/rate-limit.ts) | Distributed KV limits; Apex production fail-closed without KV |
 | [`prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/`](../prisma/migrations/20250712120000_apex_phase6_1_rls_foundation/) | ENABLE + FORCE RLS policies |
 | [`prisma/migrations/20250715120000_apex_phase6_2_rls_default_deny/`](../prisma/migrations/20250715120000_apex_phase6_2_rls_default_deny/) | Default-deny soft-open + Technician / UsageLog RLS |
 
@@ -69,7 +70,7 @@
 
 ---
 
-## Security Hardening Sprint (complete)
+## Security Hardening Sprint (complete · production-ready)
 
 | Phase | Theme | Highlights |
 |-------|--------|------------|
@@ -79,7 +80,8 @@
 | **6.4** | Finalize | Production KV guidance + boot warnings; MFA/SSO & pen-test roadmap; changelog + pre-rollout complete gates |
 | **6.5** | Remaining items | Apex production **fail-closed** without KV; MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
-**Sprint status: complete** (Phases 6.1–6.5). Follow-on product work: MFA/SSO delivery, independent pen test.
+**Sprint status: complete and production-ready** (Phases 6.1–6.5).  
+Engineering delivery is finished. Ops go-live still requires production KV, Supabase RLS migrations, and [Production-Readiness-Checklist.md](./Production-Readiness-Checklist.md) sign-off. Follow-on product work (not blocking code readiness): MFA/SSO delivery, independent pen test.
 
 ---
 
@@ -235,5 +237,5 @@ Unit guards: `tests/unit/phase63Security.test.ts`, `tests/unit/phase63MediumHard
 | 6.4 | Production KV docs/boot logs; MFA/SSO + pen-test roadmap; changelog; pre-rollout complete gates |
 | 6.5 | Apex production fail-closed without KV; MFA/SSO implementation guidance; final pre-rollout gates |
 
-**Phase 6.0 Security Fortress: complete.**  
-**Security Hardening Sprint (6.1–6.5): complete.**
+**Phase 6.0 Security Fortress: complete and production-ready.**  
+**Security Hardening Sprint (6.1–6.5): complete and production-ready.**
