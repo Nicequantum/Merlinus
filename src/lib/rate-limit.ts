@@ -2,10 +2,12 @@
  * Distributed per-IP rate limiting for API routes (KV INCR + EXPIRE sliding window).
  *
  * KV configured and healthy: distributed limits via Upstash/Vercel KV.
- * KV missing or unreachable (any environment): per-instance in-memory limits — routes stay available.
+ * Apex production without KV: fail closed (503) — Phase 6.5.
+ * Merlinus / local: per-instance in-memory fallback when KV missing.
  *
  * Routes pass a stable `routeKey` plus an optional limit override through `withAuth` / `checkRateLimit`.
  */
+import { isApexPlatformMode } from '@/lib/platformMode';
 import { apiError, RATE_LIMIT_ERROR } from './errors';
 import { logger } from './logger';
 
@@ -180,6 +182,14 @@ function memoryRateLimitConfig(config: RateLimitConfig): RateLimitConfig {
   };
 }
 
+/** Phase 6.5 — Apex production must not silently degrade to per-instance memory limits. */
+function apexProductionRequiresKv(): boolean {
+  return isProductionEnv() && isApexPlatformMode();
+}
+
+const APEX_KV_REQUIRED_MESSAGE =
+  'Distributed rate limiting is not available. Apex production requires Vercel KV (KV_REST_API_URL + KV_REST_API_TOKEN). Contact your administrator.';
+
 export async function checkRateLimit(
   request: Request,
   routeKey: string,
@@ -189,8 +199,17 @@ export async function checkRateLimit(
   const key = `ratelimit:${routeKey}:${ip === 'unknown' ? 'unknown' : ip}`;
   const authSensitive = isAuthRateLimitRoute(routeKey);
   const production = isProductionEnv();
+  const apexProd = apexProductionRequiresKv();
 
   if (!isKvConfigured()) {
+    if (apexProd) {
+      logger.error('rate_limit.apex_kv_required', {
+        message:
+          'Apex production missing KV — refusing request (fail-closed). Set KV_REST_API_URL + KV_REST_API_TOKEN and redeploy.',
+        ...getRateLimitRuntimeSnapshot(request, routeKey),
+      });
+      return apiError(APEX_KV_REQUIRED_MESSAGE, 503);
+    }
     if (production && authSensitive) {
       logger.error('rate_limit.auth_kv_required', {
         message:
@@ -208,6 +227,15 @@ export async function checkRateLimit(
     return result;
   } catch (error) {
     logKvRateLimitError(routeKey, request, ip, error);
+    if (apexProd) {
+      logger.error('rate_limit.apex_kv_unavailable', {
+        message:
+          'Apex production KV unavailable — refusing request (fail-closed). Investigate Upstash/Vercel KV health.',
+        error: error instanceof Error ? error.message : 'unknown',
+        ...getRateLimitRuntimeSnapshot(request, routeKey),
+      });
+      return apiError(APEX_KV_REQUIRED_MESSAGE, 503);
+    }
     if (production && authSensitive) {
       logger.error('rate_limit.auth_kv_unavailable_fallback', {
         message:

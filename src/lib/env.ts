@@ -5,6 +5,7 @@
 
 import { getExposedPublicGrokEnvKeys } from '@/lib/grokApiKey.shared';
 import { logger } from '@/lib/logger';
+import { isApexPlatformMode } from '@/lib/platformMode';
 import { getSupabaseEnvConfig, isApexSupabaseProductionReady } from '@/lib/supabaseEnv';
 import { APP_VERSION } from '@/lib/version';
 
@@ -153,10 +154,19 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
   const kvUrl = process.env.KV_REST_API_URL?.trim();
   const kvToken = process.env.KV_REST_API_TOKEN?.trim();
   const kvConfigured = Boolean(kvUrl && kvToken);
+  const apexMode = isApexPlatformMode();
   if (!kvConfigured) {
-    if (isProduction) {
+    // Phase 6.5 — Apex production hard-requires distributed KV (no silent memory fallback).
+    if (isProduction && apexMode) {
+      for (const key of PRODUCTION_KV_ENV_VARS) {
+        if (!process.env[key]?.trim()) missing.push(key);
+      }
       warnings.push(
-        'KV_REST_API_URL + KV_REST_API_TOKEN required in production — without Vercel KV/Upstash, auth rate limits fall back to per-instance memory (weaker multi-instance protection). Connect a KV store in Vercel → Storage → KV.'
+        'Apex production requires Vercel KV (KV_REST_API_URL + KV_REST_API_TOKEN). Connect Storage → KV and redeploy — rate limits fail closed without it.'
+      );
+    } else if (isProduction) {
+      warnings.push(
+        'KV_REST_API_URL + KV_REST_API_TOKEN recommended in production — without Vercel KV/Upstash, rate limits fall back to per-instance memory. Connect a KV store in Vercel → Storage → KV.'
       );
     } else {
       warnings.push(

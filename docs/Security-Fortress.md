@@ -1,6 +1,6 @@
-# Security Fortress (Phase 6.0) + Hardening Sprint (6.1–6.4)
+# Security Fortress (Phase 6.0) + Hardening Sprint (6.1–6.5)
 
-**Status:** **Complete** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.4)  
+**Status:** **Complete** — Security Fortress (Phase 6.0) + Security Hardening Sprint (Phases 6.1–6.5)  
 **Audience:** Platform security, compliance, enterprise buyers, and operators  
 **Default product mode:** Merlinus single-dealer remains the safe default; Apex enables multi-rooftop fortress controls.
 
@@ -77,8 +77,9 @@
 | **6.2** | RLS default-deny + Grok proxy | Apex enforce-by-default; Technician/UsageLog/DealerGroupMembership RLS; short-lived Grok proxy HMAC tokens; timing-safe compare |
 | **6.3** | Manager parity + audit + limits | Manager/admin auto dealership context + `getRlsDb`; allowlist-only audit metadata + RO hash; fail-closed `ro.list`; companion rate limits; production auth KV warnings |
 | **6.4** | Finalize | Production KV guidance + boot warnings; MFA/SSO & pen-test roadmap; changelog + pre-rollout complete gates |
+| **6.5** | Remaining items | Apex production **fail-closed** without KV; MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
-**Sprint status: complete** for Critical / High / Medium audit items. Remaining items are product roadmap (MFA/SSO) and operational pen-test.
+**Sprint status: complete** (Phases 6.1–6.5). Follow-on product work: MFA/SSO delivery, independent pen test.
 
 ---
 
@@ -125,13 +126,15 @@
 2. Confirm Production env has both variables  
 3. Redeploy  
 
-**Fallback behavior**
+**Behavior by mode (Phase 6.5)**
 
-- Missing/unhealthy KV → in-memory per-instance limits (availability preserved)  
-- Auth routes in production log **`rate_limit.auth_kv_required`** / **`rate_limit.auth_kv_unavailable_fallback`**  
-- Startup logs **`rate_limit.production_kv_missing`** when production and KV unset  
+| Environment | Missing / unhealthy KV |
+|-------------|------------------------|
+| **Apex + production** | **Fail closed** — `checkRateLimit` returns **503**; startup logs `rate_limit.apex_kv_required`; env validation treats KV as **required** (build/start fail when `throwOnError`) |
+| **Merlinus + production** | Loud **`rate_limit.auth_kv_required`** / **`auth_kv_unavailable_fallback`**; in-memory fallback for availability |
+| **Local / preview / CI** | In-memory fallback OK |
 
-Local/dev may omit KV (in-memory is fine).
+Startup also logs `rate_limit.kv_ready` when configured.
 
 ---
 
@@ -164,23 +167,42 @@ Full operator runbook: [Apex-Dealer-Onboarding.md](./Apex-Dealer-Onboarding.md).
 
 ---
 
-## Roadmap — remaining enterprise items
+## MFA / SSO — implementation guidance (Phase 6.5)
 
-### MFA / SSO (product)
+Compensating controls today (until MFA/SSO ship): create-only owner seed, no hard-coded secrets, session revocation, distributed rate limits (Apex fail-closed without KV), fail-closed audits, platform operator allowlist.
 
-| Item | Recommendation | Compensating controls today |
-|------|----------------|------------------------------|
-| **MFA for platform operators** | Require TOTP/WebAuthn (or IdP MFA) for `role=owner` platform accounts before enterprise GTM | Strong unique passwords; create-only seed; session revocation; rate-limited login; audit `auth.login` |
-| **SSO (SAML/OIDC)** | Okta / Azure AD / Google Workspace via Clerk or enterprise IdP | Clerk dual/clerk modes already supported for staff linking; legacy D7/email for Apex |
+### MFA for platform operators (recommended first)
 
-**Target:** schedule MFA for national operators as a hard gate before multi-group production pilots; SSO for dealer-group staff as Phase 7+ identity work.
+| Step | Guidance |
+|------|----------|
+| 1. Scope | `role=owner` accounts listed in `APEX_PLATFORM_OWNER_EMAILS` / `OWNER_SEED_EMAIL*` |
+| 2. Provider | Prefer **Clerk** MFA (TOTP + WebAuthn) when `AUTH_MODE=dual` or `clerk`, or IdP MFA enforced at Okta/Azure AD |
+| 3. Policy | Block national console and enter-dealership until MFA satisfied (session claim `mfa: true` or Clerk `factorVerificationAge`) |
+| 4. Recovery | Break-glass owners via hardware key + offline recovery codes stored in 1Password/Bitwarden enterprise vault |
+| 5. Audit | Log `auth.mfa_challenge` / `auth.mfa_success` (fail-closed when MFA gated routes) |
+| 6. Rollout | Stage: require MFA for new owners → production: enforce for all platform operators before multi-group GTM |
+
+**Code hooks (future PR):** extend `resolveAppSession` / Apex access JWT with MFA claim; gate `requireOwner` / `requireOwnerNational` when claim missing.
+
+### SSO (SAML / OIDC) for dealer groups
+
+| Step | Guidance |
+|------|----------|
+| 1. IdP | Okta / Azure AD / Google Workspace enterprise app |
+| 2. Broker | **Clerk** Enterprise Connections (SAML/OIDC) or native OIDC if Clerk not used |
+| 3. Mapping | IdP groups → Apex `DealerGroupMembership` + rooftop roles (`manager` / `technician` / `service_advisor`) |
+| 4. Linking | Existing `authProvider` / `clerkUserId` on `Technician`; keep D7 login for bay techs who lack IdP seats |
+| 5. Provision | SCIM optional Phase 7+; until then JIT create on first SSO with manager approval |
+| 6. Cutover | `AUTH_MODE=dual` during migration → `clerk` for groups that completed SSO |
+
+**Code hooks (future PR):** Clerk webhook membership sync; map SAML attributes to `dealerGroupId` / rooftop codes.
 
 ### Independent pen test
 
 | Item | Recommendation |
 |------|----------------|
-| **Scope** | Apex multi-tenant isolation, owner enter/exit, provision API (if enabled), auth brute-force, Grok proxy token path, RLS default-deny verification |
-| **Timing** | After Phase 6.1–6.4 deploys + RLS migration applied on production Supabase |
+| **Scope** | Apex multi-tenant isolation, owner enter/exit, provision API (if enabled), auth brute-force, Grok proxy token path, RLS default-deny verification, KV fail-closed on Apex |
+| **Timing** | After Phase 6.1–6.5 deploys + RLS migrations on production Supabase + production KV connected |
 | **Evidence** | Written report; retest of Critical/High findings |
 
 Until pen test: internal pre-rollout + fortress integration suite + this document as security baseline.
@@ -211,6 +233,7 @@ Unit guards: `tests/unit/phase63Security.test.ts`, `tests/unit/phase63MediumHard
 | 6.2 | RLS default-deny (Apex); Technician RLS; Grok proxy short-lived tokens |
 | 6.3 | Manager `getRlsDb` parity; audit allowlist; `ro.list`; companion rate limits; auth KV warnings |
 | 6.4 | Production KV docs/boot logs; MFA/SSO + pen-test roadmap; changelog; pre-rollout complete gates |
+| 6.5 | Apex production fail-closed without KV; MFA/SSO implementation guidance; final pre-rollout gates |
 
 **Phase 6.0 Security Fortress: complete.**  
-**Security Hardening Sprint (6.1–6.4): complete.**
+**Security Hardening Sprint (6.1–6.5): complete.**

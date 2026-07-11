@@ -2277,6 +2277,103 @@ function checkApexPhase64FortressComplete(): void {
   }
 }
 
+/**
+ * Phase 6.5 — final security hardening gates:
+ * - no hard-coded credentials in seed/source
+ * - RLS default-deny active on Apex
+ * - Apex production fail-closed without KV
+ */
+function checkApexPhase65RemainingSecurity(): void {
+  section('APEX Phase 6.5 — Remaining Security Items');
+
+  // No hard-coded owner credentials in application source (exclude tests that assert absence)
+  const seedPath = resolve(process.cwd(), 'src/lib/apex/seedOwnerAccounts.ts');
+  const seed = existsSync(seedPath) ? readFileSync(seedPath, 'utf8') : '';
+  const forbiddenCredPatterns = [
+    /devPassword/,
+    /Bressette1735/,
+    /Getfused123/,
+    /hombre3536@gmail\.com/,
+    /scollier@getfused\.com/,
+    /password\s*[:=]\s*['"][^'"]{8,}['"]/i,
+  ];
+  const seedClean =
+    seed.length > 0 &&
+    !forbiddenCredPatterns.some((re) => re.test(seed)) &&
+    seed.includes('ensureNationalOwnerAccount') &&
+    seed.includes('OWNER_SEED_EMAIL');
+  if (seedClean) {
+    record('APEX 6.5', 'No hard-coded credentials', 'pass', 'seedOwnerAccounts env-only, create-only owners');
+  } else {
+    record('APEX 6.5', 'No hard-coded credentials', 'fail', 'Hard-coded credentials or missing create-only seed');
+  }
+
+  // RLS default-deny on Apex
+  const rlsPath = resolve(process.cwd(), 'src/lib/apex/rlsContext.ts');
+  const rlsSrc = existsSync(rlsPath) ? readFileSync(rlsPath, 'utf8') : '';
+  const mig62 = resolve(
+    process.cwd(),
+    'prisma/migrations/20250715120000_apex_phase6_2_rls_default_deny/migration.sql'
+  );
+  const mig62Src = existsSync(mig62) ? readFileSync(mig62, 'utf8') : '';
+  const rlsOk =
+    rlsSrc.includes('isApexPlatformMode') &&
+    rlsSrc.includes('rls_soft_open') &&
+    rlsSrc.includes('isRlsEnabled') &&
+    mig62Src.includes('app.rls_soft_open') &&
+    mig62Src.includes('Technician');
+  if (rlsOk) {
+    record(
+      'APEX 6.5',
+      'RLS default-deny on Apex',
+      'pass',
+      'Apex enforce-by-default + soft_open GUC + Technician policies'
+    );
+  } else {
+    record('APEX 6.5', 'RLS default-deny on Apex', 'fail', 'RLS default-deny incomplete');
+  }
+
+  // Apex production fail-closed without KV
+  const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
+  const envSrc = readFileSync(resolve(process.cwd(), 'src/lib/env.ts'), 'utf8');
+  if (
+    rateSrc.includes('apex_kv_required') &&
+    rateSrc.includes('apexProductionRequiresKv') &&
+    rateSrc.includes('503') &&
+    envSrc.includes('PRODUCTION_KV_ENV_VARS') &&
+    envSrc.includes('isApexPlatformMode')
+  ) {
+    record(
+      'APEX 6.5',
+      'Apex production requires KV',
+      'pass',
+      'Fail-closed 503 without KV; env hard-requires KV for Apex production'
+    );
+  } else {
+    record('APEX 6.5', 'Apex production requires KV', 'fail', 'Apex KV fail-closed incomplete');
+  }
+
+  const fortress = readFileSync(resolve(process.cwd(), 'docs/Security-Fortress.md'), 'utf8');
+  if (
+    fortress.includes('implementation guidance') &&
+    fortress.includes('Phase 6.5') &&
+    (fortress.includes('Fail closed') || fortress.includes('fail-closed') || fortress.includes('fail closed')) &&
+    fortress.includes('Clerk') &&
+    fortress.includes('WebAuthn')
+  ) {
+    record('APEX 6.5', 'MFA/SSO implementation docs', 'pass', 'Security-Fortress MFA/SSO implementation guidance');
+  } else {
+    record('APEX 6.5', 'MFA/SSO implementation docs', 'fail', 'Security-Fortress missing MFA/SSO guidance');
+  }
+
+  const changelog = readFileSync(resolve(process.cwd(), 'CHANGELOG.md'), 'utf8');
+  if (changelog.includes('6.5') && changelog.includes('Security Hardening Sprint')) {
+    record('APEX 6.5', 'Changelog Phase 6.5', 'pass', 'CHANGELOG marks 6.5 / full sprint complete');
+  } else {
+    record('APEX 6.5', 'Changelog Phase 6.5', 'fail', 'CHANGELOG missing Phase 6.5');
+  }
+}
+
 function checkApexPhase63SecurityExpansion(): void {
   section('APEX Phase 6.3 — Expanded RLS enforcement and auditing');
 
@@ -2689,6 +2786,7 @@ async function main(): Promise<void> {
   checkApexPhase62RlsEnforcement();
   checkApexPhase63SecurityExpansion();
   checkApexPhase64FortressComplete();
+  checkApexPhase65RemainingSecurity();
   checkApexDealerProvisionFinalize();
   checkApexDealerGroupFinalize();
   checkLowAuditFixes();

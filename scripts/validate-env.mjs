@@ -141,11 +141,17 @@ if (isProduction) {
 
   const missingProd = PRODUCTION_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missingProd.length > 0) {
+    const apex =
+      process.env.PLATFORM_MODE?.trim().toLowerCase() === 'apex' ||
+      process.env.NEXT_PUBLIC_PLATFORM_MODE?.trim().toLowerCase() === 'apex' ||
+      ['1', 'true', 'yes'].includes(process.env.APEX_ENV?.trim().toLowerCase() || '');
     console.error(
       `[merlin:build] Missing required production environment variables: ${missingProd.join(', ')}`
     );
     console.error(
-      '[merlin:build] Configure Vercel KV / Upstash (KV_REST_API_URL + KV_REST_API_TOKEN) for distributed rate limiting.'
+      apex
+        ? '[merlin:build] Apex production HARD-REQUIRES Vercel KV (KV_REST_API_URL + KV_REST_API_TOKEN). Rate limits fail closed without it. Vercel → Storage → Create KV → connect project.'
+        : '[merlin:build] Configure Vercel KV / Upstash (KV_REST_API_URL + KV_REST_API_TOKEN) for distributed rate limiting.'
     );
     process.exit(1);
   }

@@ -4,7 +4,7 @@ All notable changes to Merlinus are documented here.
 
 ## [3.0.1] — 2026-07-11
 
-### Security Hardening Sprint (Phase 6.1–6.4) — **complete**
+### Security Hardening Sprint (Phase 6.1–6.5) — **complete**
 
 Enterprise multi-dealership security pass after third-party-style audit. Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
 
@@ -13,9 +13,10 @@ Enterprise multi-dealership security pass after third-party-style audit. Full no
 | **6.1** | Remove hard-coded owner secrets; create-only owner seed (no password overwrite); admin reset forces `mustChangePassword`; re-validate `ownerMayEnterDealership` on session rebuild; explicit platform operator allowlist (`APEX_PLATFORM_OWNER_EMAILS`) |
 | **6.2** | Apex RLS default-deny (`app.rls_soft_open`); Technician / UsageLog / DealerGroupMembership RLS; control-plane `withRlsBypass`; Grok proxy short-lived HMAC tokens + timing-safe verify |
 | **6.3** | Manager/admin auto dealership context + `getRlsDb`; allowlist-only audit metadata + `roNumberHash`; fail-closed `ro.list`; companion rate limits; production auth KV fallback warnings |
-| **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates; this changelog |
+| **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates |
+| **6.5** | Apex production **fail-closed** without KV (503); MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
-**Roadmap (not blocking sprint close):** operator MFA, enterprise SSO, independent pen test after production deploy of 6.1–6.4 + RLS migrations.
+**Follow-on (product / ops):** deliver MFA/SSO features; independent pen test after production deploy of 6.1–6.5 + RLS migrations + production KV.
 
 ### DealerGroup & group owner dashboard
 

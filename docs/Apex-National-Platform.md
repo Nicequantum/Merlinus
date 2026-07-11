@@ -211,8 +211,17 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 | Roadmap | MFA/SSO + independent pen test (see Security-Fortress.md) |
 | Docs | `docs/Security-Fortress.md` + CHANGELOG Hardening Sprint + pre-rollout complete gates |
 
+### Phase 6.5 — remaining security items
+
+| Piece | Behavior |
+|-------|----------|
+| Apex production KV | Missing/unhealthy KV → **503 fail-closed** (not memory fallback) |
+| Env / build | Apex production hard-requires `KV_REST_API_*` |
+| MFA/SSO docs | Implementation guidance in Security-Fortress.md |
+| Pre-rollout | Gates: no hard-coded credentials; RLS default-deny on Apex |
+
 **Phase 6.0 Security Fortress: complete.**  
-**Security Hardening Sprint (6.1–6.4): complete.**
+**Security Hardening Sprint (6.1–6.5): complete.**
 
 ---
 
