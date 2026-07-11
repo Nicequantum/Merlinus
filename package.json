@@ -19,6 +19,7 @@
     "db:migrate:apex": "node scripts/apex-migrate-deploy.mjs",
     "db:seed": "npx tsx --import ./tests/setup/preload.mjs prisma/seed.ts",
     "provision-dealer": "npx tsx --import ./tests/setup/preload.mjs scripts/provision-dealer.ts",
+    "rename-test-rooftops": "npx tsx --import ./tests/setup/preload.mjs scripts/rename-test-rooftops.ts",
     "smoke:dealer-provision": "npx tsx --import ./tests/setup/preload.mjs scripts/smoke-dealer-provision.ts",
     "db:reencrypt": "npx tsx scripts/reencrypt-legacy-data.ts",
     "db:migrate-pii": "npx tsx scripts/migrate-pii-to-encrypted.ts",

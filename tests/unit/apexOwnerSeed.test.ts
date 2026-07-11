@@ -4,7 +4,12 @@ import { resolve } from 'node:path';
 import { describe, it, test } from 'node:test';
 import {
   readApexOwnerSeedConfig,
+  APEX_GENERIC_TEST_ROOFTOP_NAME,
+  APEX_GENERIC_TEST_TEMPLATE_ID,
+  APEX_SEED_PRIMARY_DEALERSHIP_ID,
   APEX_SEED_SECOND_DEALERSHIP_ID,
+  APEX_TEST_PLATFORM_ROOFTOP_NAME,
+  APEX_TEST_PLATFORM_TEMPLATE_ID,
 } from '../../src/lib/apex/seedOwnerAccounts';
 
 const root = resolve(process.cwd());
@@ -116,7 +121,12 @@ describe('Apex owner seed (Phase 5.10)', () => {
     }
   });
 
-  test('second seed rooftop id is stable for integration tests', () => {
+  test('seed rooftop ids and clean test names are stable', () => {
+    assert.equal(APEX_SEED_PRIMARY_DEALERSHIP_ID, 'seed-dealership');
     assert.equal(APEX_SEED_SECOND_DEALERSHIP_ID, 'seed-dealership-2');
+    assert.equal(APEX_TEST_PLATFORM_ROOFTOP_NAME, 'Apex Test Platform');
+    assert.equal(APEX_TEST_PLATFORM_TEMPLATE_ID, 'mercedes-rooftop-v1');
+    assert.equal(APEX_GENERIC_TEST_ROOFTOP_NAME, 'Apex Generic Test');
+    assert.equal(APEX_GENERIC_TEST_TEMPLATE_ID, 'generic-rooftop-v1');
   });
 });

@@ -14,6 +14,21 @@ import { logger } from '@/lib/logger';
 /** Second rooftop for multi-dealership selector demos and integration tests. */
 export const APEX_SEED_SECOND_DEALERSHIP_ID = 'seed-dealership-2';
 
+/** Primary seed pilot rooftop id (no franchise Dealer.code). */
+export const APEX_SEED_PRIMARY_DEALERSHIP_ID = 'seed-dealership';
+
+/**
+ * Clean team test environments (seed pilots, not provisioned franchise codes).
+ * Templates are operational intent — not stored on Dealership rows.
+ */
+export const APEX_TEST_PLATFORM_ROOFTOP_NAME = 'Apex Test Platform';
+/** Operational template for the primary seed rooftop (D7 / Xentry testing). */
+export const APEX_TEST_PLATFORM_TEMPLATE_ID = 'mercedes-rooftop-v1' as const;
+
+export const APEX_GENERIC_TEST_ROOFTOP_NAME = 'Apex Generic Test';
+/** Operational template for the second seed rooftop (username login, neutral chrome). */
+export const APEX_GENERIC_TEST_TEMPLATE_ID = 'generic-rooftop-v1' as const;
+
 const seedCompliance = {
   consentAt: new Date(),
   consentVersion: CONSENT_VERSION,
@@ -198,19 +213,22 @@ export async function seedApexOwnerAccounts(config: ApexOwnerSeedConfig): Promis
 
   await ensureNationalSentinelDealership();
 
-  let primaryDealership = await prisma.dealership.findUnique({ where: { id: 'seed-dealership' } });
-  if (!primaryDealership) {
-    primaryDealership = await prisma.dealership.create({
-      data: { id: 'seed-dealership', name: 'Mercedes-Benz of Tiverton' },
-    });
-  }
+  // Keep seed pilots as named team test rooftops (re-seed renames if still on old pilot labels).
+  const primaryDealership = await prisma.dealership.upsert({
+    where: { id: APEX_SEED_PRIMARY_DEALERSHIP_ID },
+    update: { name: APEX_TEST_PLATFORM_ROOFTOP_NAME },
+    create: {
+      id: APEX_SEED_PRIMARY_DEALERSHIP_ID,
+      name: APEX_TEST_PLATFORM_ROOFTOP_NAME,
+    },
+  });
 
   const secondDealership = await prisma.dealership.upsert({
     where: { id: APEX_SEED_SECOND_DEALERSHIP_ID },
-    update: { name: 'Mercedes-Benz of Newport (Seed)' },
+    update: { name: APEX_GENERIC_TEST_ROOFTOP_NAME },
     create: {
       id: APEX_SEED_SECOND_DEALERSHIP_ID,
-      name: 'Mercedes-Benz of Newport (Seed)',
+      name: APEX_GENERIC_TEST_ROOFTOP_NAME,
     },
   });
 
