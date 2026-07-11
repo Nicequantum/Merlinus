@@ -17,7 +17,7 @@ Complete every section. A deployment is **blocked** until all **Critical** items
 | 1.4 | Integration tests | `npm run test:integration` — all pass | ✅ | ☐ | | |
 | 1.5 | Database migrations | `npx prisma migrate deploy` on target DB | ✅ | ☐ | | |
 | 1.6 | Legacy PII re-encryption | Follow [Reencryption-Runbook.md](./Reencryption-Runbook.md) if upgrading | ☐ | ☐ | | |
-| 1.7 | KV rate limiting | `KV_REST_API_URL` + `KV_REST_API_TOKEN` configured | ✅ | ☐ | | |
+| 1.7 | KV rate limiting (Phase 6.4) | `KV_REST_API_URL` + `KV_REST_API_TOKEN` on **Production** Vercel env; no `rate_limit.production_kv_missing` in startup logs; auth limits distributed | ✅ | ☐ | | |
 | 1.8 | Build metadata | `NEXT_PUBLIC_BUILD_COMMIT` + `NEXT_PUBLIC_BUILD_DATE` stamped | ☐ | ☐ | | |
 
 ---

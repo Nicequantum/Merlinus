@@ -33,6 +33,21 @@ export async function register() {
       logger.error('merlin.startup.env_invalid');
     }
 
+    // Phase 6.4 — surface KV readiness for distributed auth rate limits at boot.
+    const { isKvConfigured, isProductionEnv } = await import('./lib/rate-limit');
+    if (isProductionEnv() && !isKvConfigured()) {
+      logger.error('rate_limit.production_kv_missing', {
+        message:
+          'Production deployment missing KV_REST_API_URL / KV_REST_API_TOKEN. Auth rate limits use per-instance memory fallback. Connect Vercel KV (Upstash) and redeploy.',
+      });
+    } else if (isKvConfigured()) {
+      logger.info('rate_limit.kv_ready', { configured: true });
+    } else {
+      logger.warn('rate_limit.kv_not_configured', {
+        message: 'KV not set — local/dev in-memory rate limits only',
+      });
+    }
+
     const { logSupabaseProductionReadiness } = await import('./lib/supabase');
     logSupabaseProductionReadiness();
 

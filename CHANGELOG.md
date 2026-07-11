@@ -2,7 +2,20 @@
 
 All notable changes to Merlinus are documented here.
 
-## [3.0.1] — 2026-07-10
+## [3.0.1] — 2026-07-11
+
+### Security Hardening Sprint (Phase 6.1–6.4) — **complete**
+
+Enterprise multi-dealership security pass after third-party-style audit. Full notes: [docs/Security-Fortress.md](docs/Security-Fortress.md).
+
+| Phase | Summary |
+|-------|---------|
+| **6.1** | Remove hard-coded owner secrets; create-only owner seed (no password overwrite); admin reset forces `mustChangePassword`; re-validate `ownerMayEnterDealership` on session rebuild; explicit platform operator allowlist (`APEX_PLATFORM_OWNER_EMAILS`) |
+| **6.2** | Apex RLS default-deny (`app.rls_soft_open`); Technician / UsageLog / DealerGroupMembership RLS; control-plane `withRlsBypass`; Grok proxy short-lived HMAC tokens + timing-safe verify |
+| **6.3** | Manager/admin auto dealership context + `getRlsDb`; allowlist-only audit metadata + `roNumberHash`; fail-closed `ro.list`; companion rate limits; production auth KV fallback warnings |
+| **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates; this changelog |
+
+**Roadmap (not blocking sprint close):** operator MFA, enterprise SSO, independent pen test after production deploy of 6.1–6.4 + RLS migrations.
 
 ### DealerGroup & group owner dashboard
 

@@ -21,8 +21,11 @@ export const PRODUCTION_SCANNING_REQUIRED_ENV_VARS = [
   'GROK_API_KEY',
 ] as const;
 
-/** H8: KV recommended in production for distributed rate limiting across serverless instances. */
-const PRODUCTION_RECOMMENDED_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
+/**
+ * Phase 6.4 — Vercel KV / Upstash required for production distributed rate limiting
+ * (especially auth.login / password routes). Without KV, multi-instance limits are per-instance only.
+ */
+export const PRODUCTION_KV_ENV_VARS = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'] as const;
 
 export interface EnvironmentValidationResult {
   missing: string[];
@@ -147,15 +150,25 @@ export function validateEnvironment(options: { throwOnError?: boolean; productio
     }
   }
 
-  const kvConfigured =
-    Boolean(process.env.KV_REST_API_URL?.trim()) && Boolean(process.env.KV_REST_API_TOKEN?.trim());
+  const kvUrl = process.env.KV_REST_API_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  const kvConfigured = Boolean(kvUrl && kvToken);
   if (!kvConfigured) {
-    warnings.push('KV_REST_API_URL/KV_REST_API_TOKEN not configured — distributed rate limiting disabled');
-  } else if (isProduction) {
-    for (const key of PRODUCTION_RECOMMENDED_ENV_VARS) {
-      if (!process.env[key]?.trim()) {
-        warnings.push(`${key} not configured — distributed rate limiting disabled`);
-      }
+    if (isProduction) {
+      warnings.push(
+        'KV_REST_API_URL + KV_REST_API_TOKEN required in production — without Vercel KV/Upstash, auth rate limits fall back to per-instance memory (weaker multi-instance protection). Connect a KV store in Vercel → Storage → KV.'
+      );
+    } else {
+      warnings.push(
+        'KV_REST_API_URL/KV_REST_API_TOKEN not configured — distributed rate limiting disabled (in-memory fallback OK for local/dev)'
+      );
+    }
+  } else {
+    if (kvUrl && !/^https:\/\//i.test(kvUrl)) {
+      warnings.push('KV_REST_API_URL should be an https:// Upstash/Vercel KV REST endpoint');
+    }
+    if (kvToken && kvToken.length < 16) {
+      warnings.push('KV_REST_API_TOKEN looks too short — verify the REST token from the Vercel KV dashboard');
     }
   }
 

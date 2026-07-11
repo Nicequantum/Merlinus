@@ -200,16 +200,19 @@ Sensitive routes (owner enter/exit/summary, RO create) call `writeAuditedAccess`
 | Admin password reset | `revokeSessionsAfterCredentialChange` (JWT + refresh + Clerk) |
 | Integration | `tests/integration/security-fortress.test.ts` |
 
-### Phase 6.4 — finalize Security Fortress
+### Phase 6.4 — finalize Security Fortress + Hardening Sprint
 
 | Piece | Behavior |
 |-------|----------|
 | Advisors / templates / technicians / knowledge-base | `getRlsDb` + dealership context; mutations fail-closed audited |
 | Login / refresh / Clerk link | `writeAuditedAccess` |
 | Enter dealership | `requireOwnerNational` (must exit rooftop before re-enter) |
-| Docs | `docs/Security-Fortress.md` + pre-rollout Phase 6 complete gate |
+| Production KV | Documented + boot warnings when auth rate limits lack distributed KV |
+| Roadmap | MFA/SSO + independent pen test (see Security-Fortress.md) |
+| Docs | `docs/Security-Fortress.md` + CHANGELOG Hardening Sprint + pre-rollout complete gates |
 
-**Phase 6.0 status: complete.**
+**Phase 6.0 Security Fortress: complete.**  
+**Security Hardening Sprint (6.1–6.4): complete.**
 
 ---
 

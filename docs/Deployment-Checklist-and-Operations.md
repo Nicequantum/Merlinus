@@ -46,7 +46,7 @@ Open [http://localhost:3000](http://localhost:3000) after configuring environmen
 | `SEARCH_HMAC_KEY` | Yes | HMAC key for RO blind-index — 64 hex chars, must differ from encryption key |
 | `GROK_API_KEY` | For AI | xAI API key (server-side only) |
 | `BLOB_READ_WRITE_TOKEN` | For uploads | Private diagnostic image storage |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Production | Distributed rate limiting |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | **Production required** | Distributed rate limiting (auth multi-instance). Connect Vercel KV; missing → `rate_limit.auth_kv_required` / boot `rate_limit.production_kv_missing` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Production | Sentry error monitoring |
 | `NEXT_PUBLIC_APP_URL` | Yes | Production dealership URL |
 | `DEALERSHIP_DISPLAY_NAME` | Per site | PDF headers and UI branding |

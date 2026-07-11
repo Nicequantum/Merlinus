@@ -749,11 +749,18 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
   const envSrc = readFileSync(resolve(process.cwd(), 'src/lib/env.ts'), 'utf8');
   const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
   if (
-    envSrc.includes('PRODUCTION_RECOMMENDED_ENV_VARS') &&
+    (envSrc.includes('PRODUCTION_KV_ENV_VARS') || envSrc.includes('KV_REST_API_URL')) &&
     rateSrc.includes('memoryRateLimitConfig') &&
-    rateSrc.includes('rate_limit.kv_fallback_memory')
+    rateSrc.includes('rate_limit.kv_fallback_memory') &&
+    rateSrc.includes('isAuthRateLimitRoute') &&
+    rateSrc.includes('auth_kv_required')
   ) {
-    record('High Priority', 'H8 KV rate limiting', 'pass', 'KV preferred in production; KV errors use in-memory fallback');
+    record(
+      'High Priority',
+      'H8 KV rate limiting',
+      'pass',
+      'KV preferred in production; auth routes log loud fallback warnings'
+    );
   } else {
     record('High Priority', 'H8 KV rate limiting', 'fail', 'Rate limit production hardening incomplete');
   }
@@ -2127,9 +2134,12 @@ function checkApexPhase64FortressComplete(): void {
       text.includes('Phase 6.0') &&
       text.includes('writeAuditedAccess') &&
       text.includes('withSessionRls') &&
-      text.includes('revokeAllSessionsForTechnician');
+      text.includes('revokeAllSessionsForTechnician') &&
+      text.includes('Security Hardening Sprint') &&
+      text.includes('MFA') &&
+      text.includes('pen test');
     if (ok) {
-      record('APEX 6.4', 'Security Fortress docs', 'pass', 'docs/Security-Fortress.md complete');
+      record('APEX 6.4', 'Security Fortress docs', 'pass', 'docs/Security-Fortress.md complete + roadmap');
     } else {
       record('APEX 6.4', 'Security Fortress docs', 'fail', 'Security-Fortress.md incomplete');
     }
@@ -2172,6 +2182,85 @@ function checkApexPhase64FortressComplete(): void {
     } else {
       record('APEX 6.4', 'Fortress integration suite', 'fail', 'security-fortress.test.ts incomplete');
     }
+  }
+
+  // Hardening sprint gates (6.1–6.3)
+  const seed = resolve(process.cwd(), 'src/lib/apex/seedOwnerAccounts.ts');
+  if (existsSync(seed)) {
+    const src = readFileSync(seed, 'utf8');
+    if (
+      !src.includes('devPassword') &&
+      !src.includes('Bressette') &&
+      src.includes('ensureNationalOwnerAccount')
+    ) {
+      record('APEX 6.4', 'Owner credential hygiene', 'pass', 'No hard-coded owner passwords; create-only seed');
+    } else {
+      record('APEX 6.4', 'Owner credential hygiene', 'fail', 'seedOwnerAccounts still has hard-coded secrets');
+    }
+  }
+
+  const rlsCtx = resolve(process.cwd(), 'src/lib/apex/rlsContext.ts');
+  if (existsSync(rlsCtx)) {
+    const src = readFileSync(rlsCtx, 'utf8');
+    if (src.includes('rls_soft_open') && src.includes('isApexPlatformMode')) {
+      record('APEX 6.4', 'RLS default-deny Apex', 'pass', 'Apex enforce + Merlinus soft-open');
+    } else {
+      record('APEX 6.4', 'RLS default-deny Apex', 'fail', 'rlsContext missing Phase 6.2 default-deny');
+    }
+  }
+
+  const migrate62 = resolve(
+    process.cwd(),
+    'prisma/migrations/20250715120000_apex_phase6_2_rls_default_deny/migration.sql'
+  );
+  if (existsSync(migrate62) && readFileSync(migrate62, 'utf8').includes('Technician')) {
+    record('APEX 6.4', 'Technician RLS migration', 'pass', 'Phase 6.2 default-deny + Technician policies');
+  } else {
+    record('APEX 6.4', 'Technician RLS migration', 'fail', 'Missing 6.2 RLS migration');
+  }
+
+  const proxyAuth = resolve(process.cwd(), 'src/lib/grokProxyAuth.ts');
+  if (existsSync(proxyAuth)) {
+    const src = readFileSync(proxyAuth, 'utf8');
+    if (src.includes('timingSafeEqual') && src.includes('createGrokProxyAccessToken')) {
+      record('APEX 6.4', 'Grok proxy hardening', 'pass', 'Short-lived HMAC tokens + timing-safe verify');
+    } else {
+      record('APEX 6.4', 'Grok proxy hardening', 'fail', 'grokProxyAuth incomplete');
+    }
+  } else {
+    record('APEX 6.4', 'Grok proxy hardening', 'fail', 'Missing grokProxyAuth.ts');
+  }
+
+  const rateSrc = readFileSync(resolve(process.cwd(), 'src/lib/rate-limit.ts'), 'utf8');
+  if (
+    rateSrc.includes('isAuthRateLimitRoute') &&
+    rateSrc.includes('auth_kv_required') &&
+    rateSrc.includes('companionPublish')
+  ) {
+    record('APEX 6.4', 'Auth KV + companion limits', 'pass', 'Production auth KV warnings + companion rate limits');
+  } else {
+    record('APEX 6.4', 'Auth KV + companion limits', 'fail', 'rate-limit Phase 6.3/6.4 incomplete');
+  }
+
+  const meta = readFileSync(resolve(process.cwd(), 'src/lib/auditMetadataSanitize.ts'), 'utf8');
+  if (meta.includes('hashRoNumberForAudit') && meta.includes('ALLOWED_STRING_KEYS')) {
+    record('APEX 6.4', 'Audit allowlist metadata', 'pass', 'Allowlist-only audit metadata + RO hash');
+  } else {
+    record('APEX 6.4', 'Audit allowlist metadata', 'fail', 'auditMetadataSanitize incomplete');
+  }
+
+  const roList = readFileSync(resolve(process.cwd(), 'src/app/api/repair-orders/route.ts'), 'utf8');
+  if (roList.includes("action: 'ro.list'") && roList.includes('requireAuditedAccess')) {
+    record('APEX 6.4', 'RO list fail-closed audit', 'pass', 'ro.list fail-closed on bulk list');
+  } else {
+    record('APEX 6.4', 'RO list fail-closed audit', 'fail', 'RO list missing ro.list audit');
+  }
+
+  const changelog = resolve(process.cwd(), 'CHANGELOG.md');
+  if (existsSync(changelog) && readFileSync(changelog, 'utf8').includes('Security Hardening Sprint')) {
+    record('APEX 6.4', 'Changelog hardening sprint', 'pass', 'CHANGELOG documents security hardening sprint');
+  } else {
+    record('APEX 6.4', 'Changelog hardening sprint', 'fail', 'CHANGELOG missing Security Hardening Sprint section');
   }
 
   // Aggregate gate: all Phase 6.x modules present
