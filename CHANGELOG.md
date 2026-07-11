@@ -28,6 +28,8 @@ Enterprise multi-dealership security pass after third-party-style audit. **Code 
 | **6.4** | Production KV setup docs + boot readiness logs; MFA/SSO + pen-test roadmap; pre-rollout complete gates |
 | **6.5** | Apex production **fail-closed** without KV (503); MFA/SSO **implementation guidance**; final pre-rollout gates (no hard-coded credentials, RLS default-deny) |
 
+**Migration note:** Phase 6.2 RLS policy on `DealerGroupMembership` must reference Postgres column `"technician_id"` (not camelCase `"technicianId"`) — corrected in `20250715120000_apex_phase6_2_rls_default_deny`.
+
 **Production readiness:** ship with Vercel KV on Apex production, RLS + Phase 7.3 migrations applied, and pre-rollout **APEX 6.1–6.5** green.  
 **Follow-on (product / ops, not code blockers):** deliver MFA/SSO features; independent pen test after production deploy.
 
