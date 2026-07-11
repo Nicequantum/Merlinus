@@ -485,6 +485,9 @@ CREATE POLICY usage_log_tenant_all ON "UsageLog"
 
 -- =============================================================================
 -- NEW: DealerGroupMembership (group owner portfolio)
+-- Columns are snake_case via Prisma @map (see 20250714120000_apex_dealer_group):
+--   technician_id, dealer_group_id, is_primary, is_active, created_at
+-- Do NOT use camelCase "technicianId" here — Postgres column is "technician_id".
 -- =============================================================================
 ALTER TABLE "DealerGroupMembership" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "DealerGroupMembership" FORCE ROW LEVEL SECURITY;
@@ -498,7 +501,7 @@ CREATE POLICY dealer_group_membership_all ON "DealerGroupMembership"
       AND COALESCE(NULLIF(current_setting('app.rls_enforced', true), ''), 'off') <> 'on'
     )
     OR current_setting('app.rls_bypass', true) = 'on'
-    OR "technicianId" = NULLIF(current_setting('app.technician_id', true), '')
+    OR "technician_id" = NULLIF(current_setting('app.technician_id', true), '')
     OR current_setting('app.scope_mode', true) = 'national'
   )
   WITH CHECK (
@@ -507,6 +510,6 @@ CREATE POLICY dealer_group_membership_all ON "DealerGroupMembership"
       AND COALESCE(NULLIF(current_setting('app.rls_enforced', true), ''), 'off') <> 'on'
     )
     OR current_setting('app.rls_bypass', true) = 'on'
-    OR "technicianId" = NULLIF(current_setting('app.technician_id', true), '')
+    OR "technician_id" = NULLIF(current_setting('app.technician_id', true), '')
     OR current_setting('app.scope_mode', true) = 'national'
   );
