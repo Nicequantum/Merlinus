@@ -63,7 +63,45 @@ function roleScopedRoWhere(session: ImageAccessSession) {
 }
 
 /**
+ * H9 — targeted pathname lookup: filter by JSON text contains, then exact-parse match.
+ * Avoids loading the full dealership RO table for single-path access checks.
+ */
+export async function repairOrderContainsPathname(
+  session: ImageAccessSession,
+  pathname: string
+): Promise<boolean> {
+  if (!pathname) return false;
+  const db = getRlsDb();
+  const scope = roleScopedRoWhere(session);
+
+  // Pre-filter with string contains (indexed table scan bound), then exact JSON parse.
+  const candidates = await db.repairOrder.findMany({
+    where: {
+      ...scope,
+      OR: [
+        { xentryImageUrls: { contains: pathname } },
+        { repairLines: { some: { xentryImageUrls: { contains: pathname } } } },
+      ],
+    },
+    select: {
+      xentryImageUrls: true,
+      repairLines: { select: { xentryImageUrls: true } },
+    },
+    take: 25,
+  });
+
+  for (const ro of candidates) {
+    if (pathnamesFromImageJson(ro.xentryImageUrls).includes(pathname)) return true;
+    for (const line of ro.repairLines) {
+      if (pathnamesFromImageJson(line.xentryImageUrls).includes(pathname)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Phase 7.1 H4 — one RO query, build attached pathname set in memory (no per-path N+1).
+ * Used when checking many pathnames at once (extract / attach flows).
  */
 async function loadAttachedPathnames(session: ImageAccessSession): Promise<Set<string>> {
   const db = getRlsDb();
@@ -154,8 +192,8 @@ export async function userCanAccessImage(
   pathname: string
 ): Promise<boolean> {
   if (!pathname) return false;
-  const attached = await loadAttachedPathnames(session);
-  if (attached.has(pathname)) return true;
+  // H9 — single-path: targeted contains query (not full RO table scan).
+  if (await repairOrderContainsPathname(session, pathname)) return true;
   const recent = await loadRecentUploadPathnames(session, [pathname]);
   return recent.has(pathname);
 }

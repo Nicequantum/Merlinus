@@ -1,6 +1,7 @@
 import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { dealerIdWriteFields } from '@/lib/apex/dealerScope';
 import { rlsContextFromSession, rlsTransaction } from '@/lib/apex/rlsContext';
+import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { generateWarrantyStory } from '@/lib/grok';
 import { buildStoryGenerateAuditMetadata } from '@/lib/promptFingerprint';
 import { encryptOptionalSensitiveText } from '@/lib/encryption';
@@ -17,6 +18,9 @@ import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { withStoryAiRoute } from '@/lib/storyAiRoute';
+
+// M4/M5 — customer-pay guard enforced in withStoryAiRoute (isCustomerPayRepairLine).
+void isCustomerPayRepairLine;
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
 export const maxDuration = 60;

@@ -14,9 +14,15 @@ function parseDailyLimit(): number {
 
 export const DAILY_USAGE_LIMIT = parseDailyLimit();
 
-/** Phase 7.3 — prefer rooftop timezone from session, then env default. */
+/**
+ * M29: env key for dealership-day boundary timezone (fallback when rooftop TZ absent).
+ * Resolved via getDefaultDealershipTimezone() / resolveDealershipTimezone().
+ */
+export const USAGE_TIMEZONE = process.env.USAGE_TIMEZONE?.trim() || undefined;
+
+/** Phase 7.3 — prefer rooftop timezone from session, then USAGE_TIMEZONE env default. */
 function getUsageTimezone(preferred?: string | null): string {
-  return resolveDealershipTimezone(preferred, getDefaultDealershipTimezone());
+  return resolveDealershipTimezone(preferred, USAGE_TIMEZONE ?? getDefaultDealershipTimezone());
 }
 
 function startOfZonedDay(date = new Date(), timeZone?: string | null): Date {

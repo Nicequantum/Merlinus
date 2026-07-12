@@ -766,7 +766,11 @@ async function checkHighPriorityAuditFixes(): Promise<void> {
   }
 
   const imageSrc = readFileSync(resolve(process.cwd(), 'src/lib/imageAccess.ts'), 'utf8');
-  if (imageSrc.includes('repairOrderContainsPathname') && imageSrc.includes('findMany')) {
+  if (
+    imageSrc.includes('repairOrderContainsPathname') &&
+    imageSrc.includes('findMany') &&
+    imageSrc.includes('contains: pathname')
+  ) {
     record('High Priority', 'H9 image access query', 'pass', 'Targeted pathname lookup (no full RO scan)');
   } else {
     record('High Priority', 'H9 image access query', 'fail', 'Image access still scans all repair orders');
@@ -838,7 +842,12 @@ function checkMediumAuditFixes(): void {
     resolve(process.cwd(), 'src/app/api/repair-orders/[id]/lines/[lineId]/generate-story/route.ts'),
     'utf8'
   );
-  if (genSrc.includes('buildStoryGenerateAuditMetadata') && genSrc.includes('isCustomerPayRepairLine')) {
+  const storyShell = readFileSync(resolve(process.cwd(), 'src/lib/storyAiRoute.ts'), 'utf8');
+  if (
+    genSrc.includes('buildStoryGenerateAuditMetadata') &&
+    (genSrc.includes('isCustomerPayRepairLine') || storyShell.includes('isCustomerPayRepairLine')) &&
+    (genSrc.includes('withStoryAiRoute') || genSrc.includes('withAuth'))
+  ) {
     record('Medium', 'M4–M6 warranty AI audit', 'pass', 'Customer pay guard + prompt fingerprint');
   } else {
     record('Medium', 'M4–M6 warranty AI audit', 'fail', 'Warranty AI medium fixes incomplete');
@@ -1381,7 +1390,8 @@ async function checkSecurityAndConfig(): Promise<void> {
     const rel = file.replace(apiRoot + '\\', '').replace(apiRoot + '/', '').replace(/\\/g, '/');
     const content = readFileSync(file, 'utf8');
     const isPublic = [...publicAllowlist].some((allowed) => rel.endsWith(allowed));
-    const hasWithAuth = content.includes('withAuth(');
+    // withStoryAiRoute wraps withAuth (Phase 7.3 story shell for generate/score/review/certify).
+    const hasWithAuth = content.includes('withAuth(') || content.includes('withStoryAiRoute(');
     const hasSvixWebhookVerification =
       content.includes('verifyWebhook(') && content.includes('@clerk/nextjs/webhooks');
     const hasApexPreAuth =
