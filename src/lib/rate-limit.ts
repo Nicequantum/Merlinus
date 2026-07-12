@@ -2,7 +2,8 @@
  * Distributed per-IP rate limiting for API routes (KV INCR + EXPIRE sliding window).
  *
  * KV configured and healthy: distributed limits via Upstash/Vercel KV.
- * Apex production without KV: fail closed (503) — Phase 6.5.
+ * Apex production without KV env: fail closed (503) — Phase 6.5.
+ * Apex production with KV env but store errors: memory fallback + loud error (login stays up).
  * Merlinus / local: per-instance in-memory fallback when KV missing.
  *
  * Routes pass a stable `routeKey` plus an optional limit override through `withAuth` / `checkRateLimit`.
@@ -107,8 +108,26 @@ export function resetMemoryRateLimitStoreForTests(): void {
   memoryStore.clear();
 }
 
+/**
+ * True when a Redis/KV REST pair is available for @vercel/kv (or Upstash REST).
+ * Accepts both Vercel KV and Upstash marketplace env names.
+ */
 export function isKvConfigured(): boolean {
-  return Boolean(process.env.KV_REST_API_URL?.trim() && process.env.KV_REST_API_TOKEN?.trim());
+  const url =
+    process.env.KV_REST_API_URL?.trim() || process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token =
+    process.env.KV_REST_API_TOKEN?.trim() || process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  return Boolean(url && token);
+}
+
+/** Ensure @vercel/kv sees standard env names when only Upstash marketplace vars are set. */
+function ensureVercelKvEnvAliases(): void {
+  if (!process.env.KV_REST_API_URL?.trim() && process.env.UPSTASH_REDIS_REST_URL?.trim()) {
+    process.env.KV_REST_API_URL = process.env.UPSTASH_REDIS_REST_URL.trim();
+  }
+  if (!process.env.KV_REST_API_TOKEN?.trim() && process.env.UPSTASH_REDIS_REST_TOKEN?.trim()) {
+    process.env.KV_REST_API_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN.trim();
+  }
 }
 
 /** GitHub Actions / local test runners — used for health-check and logging context. */
@@ -206,13 +225,18 @@ function memoryRateLimitConfig(config: RateLimitConfig): RateLimitConfig {
   };
 }
 
-/** Phase 6.5 — Apex production must not silently degrade to per-instance memory limits. */
+/**
+ * Phase 6.5 — Apex production must configure KV (no silent "never set it up").
+ * Missing env → 503. Runtime KV outage (quota, network) → memory fallback + loud log
+ * so owner login is not hard-down when Upstash hits max-request limits.
+ */
 function apexProductionRequiresKv(): boolean {
   return isProductionEnv() && isApexPlatformMode();
 }
 
+/** Public message — avoid raw env var names (client redaction turns them into noise). */
 const APEX_KV_REQUIRED_MESSAGE =
-  'Distributed rate limiting is not available. Apex production requires Vercel KV (KV_REST_API_URL + KV_REST_API_TOKEN). Contact your administrator.';
+  'Distributed rate limiting is not available. Apex production requires a configured rate-limit store (Vercel KV / Upstash). Contact your administrator.';
 
 export async function checkRateLimit(
   request: Request,
@@ -226,6 +250,7 @@ export async function checkRateLimit(
   const apexProd = apexProductionRequiresKv();
 
   if (!isKvConfigured()) {
+    // Only fail closed when KV was never wired — ops must connect Vercel Storage → KV.
     if (apexProd) {
       logger.error('rate_limit.apex_kv_required', {
         message:
@@ -246,21 +271,21 @@ export async function checkRateLimit(
   }
 
   try {
+    ensureVercelKvEnvAliases();
     const result = await checkKvRateLimit(key, config, { routeKey, request });
     logRateLimitDecision(routeKey, request, 'kv');
     return result;
   } catch (error) {
+    // KV is configured but unhealthy (quota, network, auth). Prefer degraded login over total outage.
     logKvRateLimitError(routeKey, request, ip, error);
     if (apexProd) {
-      logger.error('rate_limit.apex_kv_unavailable', {
+      logger.error('rate_limit.apex_kv_unavailable_fallback', {
         message:
-          'Apex production KV unavailable — refusing request (fail-closed). Investigate Upstash/Vercel KV health.',
+          'Apex production KV unavailable — falling back to in-memory rate limits so auth stays available. Investigate Upstash/Vercel KV health or quota.',
         error: error instanceof Error ? error.message : 'unknown',
         ...getRateLimitRuntimeSnapshot(request, routeKey),
       });
-      return apiError(APEX_KV_REQUIRED_MESSAGE, 503);
-    }
-    if (production && authSensitive) {
+    } else if (production && authSensitive) {
       logger.error('rate_limit.auth_kv_unavailable_fallback', {
         message:
           'KV unavailable for auth rate limits in production — falling back to in-memory. Investigate Upstash/Vercel KV health.',

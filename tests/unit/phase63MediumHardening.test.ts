@@ -61,6 +61,8 @@ describe('Phase 6.3 medium security hardening', () => {
     assert.match(src, /auth_kv_required/);
     assert.match(src, /auth_kv_unavailable_fallback/);
     assert.match(src, /apex_kv_required/);
+    // Apex: missing KV → 503; configured-but-down → memory fallback (not total outage).
+    assert.match(src, /apex_kv_unavailable_fallback/);
     assert.match(src, /apexProductionRequiresKv/);
     assert.equal(isAuthRateLimitRoute('auth.login'), true);
     assert.equal(isAuthRateLimitRoute('ros.list'), false);

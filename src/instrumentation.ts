@@ -44,7 +44,7 @@ export async function register() {
     if (isProductionEnv() && isApexPlatformMode() && !isKvConfigured()) {
       logger.error('rate_limit.apex_kv_required', {
         message:
-          'Apex production missing KV_REST_API_URL / KV_REST_API_TOKEN. Rate limits refuse traffic (503). Connect Vercel KV (Upstash) and redeploy.',
+          'Apex production missing KV_REST_API_URL / KV_REST_API_TOKEN. Auth and API rate limits refuse traffic (503) until Vercel KV is connected. Storage → Create KV → connect project → redeploy.',
       });
     } else if (isProductionEnv() && !isKvConfigured()) {
       logger.error('rate_limit.production_kv_missing', {
