@@ -144,15 +144,34 @@ describe('Phase 7.2 H12 — RLS runtime contracts', () => {
   });
 
   test('rlsContextFromSession denies national owner PII active dealership', () => {
-    const ctx = rlsContextFromSession({
-      technicianId: 'owner-1',
-      role: 'owner',
-      dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
-      scopeMode: 'national',
-      isOwner: true,
-    });
-    assert.equal(ctx.activeDealershipId, null);
-    assert.equal(ctx.scopeMode, 'national');
+    // resolveSessionScopeMode only honors national scope in Apex mode.
+    // Isolate env so CI (no PLATFORM_MODE) and local Apex .env.local both pass.
+    const saved = {
+      platform: process.env.PLATFORM_MODE,
+      publicPlatform: process.env.NEXT_PUBLIC_PLATFORM_MODE,
+      apexEnv: process.env.APEX_ENV,
+    };
+    try {
+      process.env.PLATFORM_MODE = 'apex';
+      process.env.NEXT_PUBLIC_PLATFORM_MODE = 'apex';
+      delete process.env.APEX_ENV;
+      const ctx = rlsContextFromSession({
+        technicianId: 'owner-1',
+        role: 'owner',
+        dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
+        scopeMode: 'national',
+        isOwner: true,
+      });
+      assert.equal(ctx.activeDealershipId, null);
+      assert.equal(ctx.scopeMode, 'national');
+    } finally {
+      if (saved.platform === undefined) delete process.env.PLATFORM_MODE;
+      else process.env.PLATFORM_MODE = saved.platform;
+      if (saved.publicPlatform === undefined) delete process.env.NEXT_PUBLIC_PLATFORM_MODE;
+      else process.env.NEXT_PUBLIC_PLATFORM_MODE = saved.publicPlatform;
+      if (saved.apexEnv === undefined) delete process.env.APEX_ENV;
+      else process.env.APEX_ENV = saved.apexEnv;
+    }
   });
 
   test('RLS migrations and setRlsContext still present', () => {
