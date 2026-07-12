@@ -2,6 +2,11 @@ import * as Sentry from '@sentry/nextjs';
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Polyfill ALS on globalThis so Edge-safe requestContext can use it without node: imports.
+    const { AsyncLocalStorage } = await import('node:async_hooks');
+    (globalThis as typeof globalThis & { AsyncLocalStorage?: typeof AsyncLocalStorage }).AsyncLocalStorage =
+      AsyncLocalStorage;
+
     await import('./sentry.server.config');
 
     const { loadApexEnvFile, isApexPlatformEnvActive } = await import('./lib/apex/loadApexEnv');

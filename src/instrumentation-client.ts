@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { clientLog } from '@/lib/clientLog';
-import { getSentryDsn, scrubSentryEventForClient } from '@/lib/sentryInit';
+// Client-safe scrub module only (server init uses Node ALS request ids separately).
+import { getSentryDsn, scrubSentryEventForClient } from '@/lib/sentryScrub';
 
 const dsn = getSentryDsn();
 

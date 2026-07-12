@@ -115,15 +115,21 @@ describe('Phase 7.2 observability (H8–H11)', () => {
   });
 
   test('H8 — Sentry init scrubs and client uses beforeSend', () => {
+    const scrub = readSrc('src/lib/sentryScrub.ts');
+    assert.match(scrub, /scrubSentryEventInPlace|scrubSentryEvent/);
+    assert.match(scrub, /redactForLog/);
+    assert.match(scrub, /Authorization|cookie/i);
+    // Client-safe module must not pull Node builtins (Vercel client bundle).
+    assert.doesNotMatch(scrub, /node:crypto|node:async_hooks|requestContext/);
     const server = readSrc('src/lib/sentryInit.ts');
-    assert.match(server, /scrubSentryEventInPlace|scrubSentryEvent/);
-    assert.match(server, /redactForLog/);
-    assert.match(server, /Authorization|cookie/i);
     assert.match(server, /beforeSend\s*\(/);
+    assert.match(server, /getRequestId|requestId/);
     const client = readSrc('src/instrumentation-client.ts');
     // Method form (not property shorthand) so scrub runs and event is returned.
     assert.match(client, /beforeSend\s*\(/);
     assert.match(client, /scrubSentryEventForClient/);
+    assert.match(client, /@\/lib\/sentryScrub/);
+    assert.doesNotMatch(client, /from ['"]@\/lib\/sentryInit['"]/);
   });
 
   test('logger redacts and attaches requestId field', () => {
