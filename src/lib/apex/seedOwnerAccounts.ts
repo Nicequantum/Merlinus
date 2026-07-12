@@ -160,12 +160,17 @@ async function ensureNationalOwnerAccount(
     // Do not touch passwordHash, consent, or credentials. Optionally re-assert owner role
     // only when the account is already an owner and was soft-deactivated incorrectly —
     // still never rewrite password.
-    if (existing.role === 'owner' && existing.email !== email) {
-      await getRlsDb().technician.update({
-        where: { id: existing.id },
-        data: { email },
-      });
-    }
+    // Seed owners are env long-lived credentials (not temporary provision passwords) —
+    // clear forced rotation so integration/CI can exercise owner APIs after db:seed.
+    await getRlsDb().technician.update({
+      where: { id: existing.id },
+      data: {
+        ...(existing.role === 'owner' && existing.email !== email ? { email } : {}),
+        mustChangePassword: false,
+        isActive: true,
+        deletedAt: null,
+      },
+    });
     return { id: existing.id, email: existing.email, created: false };
   }
 
@@ -182,8 +187,9 @@ async function ensureNationalOwnerAccount(
       apexUsername: null,
       dealershipId: APEX_NATIONAL_DEALERSHIP_ID,
       dealerId: null,
-      mustChangePassword: true,
-      passwordChangedAt: null,
+      // Seed credentials are known/env-managed — not one-time provision temps.
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
       ...seedCompliance,
     },
   });
@@ -253,6 +259,7 @@ async function seedApexOwnerAccountsInner(config: ApexOwnerSeedConfig): Promise<
           deletedAt: null,
           d7Number: null,
           dealershipId: primaryDealership.id,
+          mustChangePassword: false,
         },
       });
     } else {
@@ -276,8 +283,9 @@ async function seedApexOwnerAccountsInner(config: ApexOwnerSeedConfig): Promise<
           isActive: true,
           d7Number: null,
           dealershipId: primaryDealership.id,
-          mustChangePassword: true,
-          passwordChangedAt: null,
+          // Seed multi-rooftop account — ready for selector flows without forced rotation.
+          mustChangePassword: false,
+          passwordChangedAt: new Date(),
           ...seedCompliance,
         },
       });

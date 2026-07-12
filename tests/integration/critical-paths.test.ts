@@ -21,6 +21,10 @@ import {
   restoreTechnicianCompliance,
   type TechnicianComplianceSnapshot,
 } from '../helpers/integrationCompliance';
+import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/criticalPathMocks';
 
@@ -41,6 +45,7 @@ const GROK_STORY =
 
 /** HTTP integration coverage for login, RO vision extract, and story generation routes. */
 describe('critical path HTTP routes', () => {
+  let previousPlatformMode: string | undefined;
   let technicianId = '';
   let dealershipId = '';
   let techToken = '';
@@ -51,6 +56,7 @@ describe('critical path HTTP routes', () => {
   const originalFetch = globalThis.fetch;
 
   before(async () => {
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
     process.env.GROK_API_KEY = process.env.GROK_API_KEY || 'test-key-for-integration';
 
     globalThis.fetch = mock.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -145,6 +151,7 @@ describe('critical path HTTP routes', () => {
     if (originalCompliance) {
       await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
     }
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

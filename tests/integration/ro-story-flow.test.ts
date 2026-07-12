@@ -7,6 +7,10 @@ import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { encryptPII } from '../../src/lib/encryption';
 import { dbToRepairLine, dbToRepairOrder, repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { createRepairOrderSchema, parseBody } from '../../src/lib/validation';
+import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
 
 const prisma = new PrismaClient();
 const TEST_RO_NUMBER = `ITEST-${Date.now().toString().slice(-6)}`;
@@ -15,6 +19,7 @@ const GROK_STORY =
   'Customer Complaint: Check engine light on.\nCause: P0300 documented in technician notes.\nCorrection: Replaced ignition coil per findings.';
 
 describe('RO → story generation integration', () => {
+  let previousPlatformMode: string | undefined;
   let technicianId = '';
   let dealershipId = '';
   let roId = '';
@@ -22,6 +27,7 @@ describe('RO → story generation integration', () => {
   const originalFetch = globalThis.fetch;
 
   before(async () => {
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
     process.env.GROK_API_KEY = process.env.GROK_API_KEY || 'test-key-for-integration';
 
     globalThis.fetch = mock.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -50,6 +56,7 @@ describe('RO → story generation integration', () => {
     if (roId) {
       await prisma.repairOrder.delete({ where: { id: roId } }).catch(() => undefined);
     }
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

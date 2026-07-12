@@ -21,6 +21,10 @@ import { SESSION_COOKIE } from '../../src/lib/auth';
 import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
+import {
   JOURNEY_INTEGRATION_D7,
   provisionJourneyTechnician,
 } from '../helpers/integrationCompliance';
@@ -59,6 +63,7 @@ function pickSessionToken(response: Response, fallback: string): string {
 
 /** End-to-end technician workflow: login → compliance → scan → story → audit → certify. */
 describe('technician journey (E2E integration)', () => {
+  let previousPlatformMode: string | undefined;
   let technicianId = '';
   let dealershipId = '';
   let techName = '';
@@ -68,6 +73,7 @@ describe('technician journey (E2E integration)', () => {
   const extractPathname = `benz-tech/journey-${Date.now()}.png`;
   const originalFetch = globalThis.fetch;
   before(async () => {
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
     process.env.GROK_API_KEY = process.env.GROK_API_KEY || 'test-key-for-integration';
 
     globalThis.fetch = mock.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -136,6 +142,7 @@ describe('technician journey (E2E integration)', () => {
     await prisma.technician
       .delete({ where: { d7Number: JOURNEY_INTEGRATION_D7 } })
       .catch(() => undefined);
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

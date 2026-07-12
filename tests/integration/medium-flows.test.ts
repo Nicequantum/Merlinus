@@ -7,6 +7,10 @@ import { GET as getLogout } from '../../src/app/api/auth/logout/route';
 import { POST as postApplyCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/apply-customer-pay-template/route';
 import { POST as postClearCustomerPay } from '../../src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
+import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
 import { createCompliantSessionToken } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 
@@ -14,6 +18,7 @@ const prisma = new PrismaClient();
 
 /** M27: integration coverage for health, security-status, logout, and Customer Pay apply. */
 describe('medium-priority route flows', () => {
+  let previousPlatformMode: string | undefined;
   let managerId = '';
   let dealershipId = '';
   let managerToken = '';
@@ -22,16 +27,26 @@ describe('medium-priority route flows', () => {
   let testLineId = '';
 
   before(async () => {
-    const dealership = await prisma.dealership.findFirst();
-    assert.ok(dealership, 'Seed dealership required');
-    dealershipId = dealership.id;
-
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
+    // Prefer the pilot seed rooftop — never pick the national sentinel (__apex_national__).
+    const managerD7 = (process.env.ADMIN_SEED_D7?.trim() || 'D7HARRIH').toUpperCase();
     const manager = await prisma.technician.findFirst({
-      where: { dealershipId, role: 'manager', isActive: true },
+      where: {
+        isActive: true,
+        deletedAt: null,
+        role: 'manager',
+        OR: [{ d7Number: managerD7 }, { dealershipId: 'seed-dealership' }],
+      },
+      include: { dealership: true },
     });
-    assert.ok(manager, 'Seed manager required');
+    assert.ok(manager, 'Seed manager required — run npm run db:seed first');
     managerId = manager.id;
-    managerToken = await createCompliantSessionToken(prisma, manager, dealership.name);
+    dealershipId = manager.dealershipId;
+    managerToken = await createCompliantSessionToken(
+      prisma,
+      manager,
+      manager.dealership?.name ?? 'Seed Dealership'
+    );
 
     const cpTemplate = await prisma.template.findFirst({
       where: { isCustomerPay: true },
@@ -84,6 +99,7 @@ describe('medium-priority route flows', () => {
     if (testRoId) {
       await prisma.repairOrder.delete({ where: { id: testRoId } }).catch(() => undefined);
     }
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

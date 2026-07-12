@@ -21,6 +21,18 @@ export function enableApexPlatformModeForTests(): string | undefined {
   return previous;
 }
 
+/**
+ * Merlinus integration suites mint benz_tech_session JWTs.
+ * When local .env.local has PLATFORM_MODE=apex (or a prior suite left it set),
+ * resolvePlatformSessionContext ignores those cookies and returns 401.
+ * Force merlinus for the duration of legacy-cookie suites.
+ */
+export function enableMerlinusPlatformModeForTests(): string | undefined {
+  const previous = process.env.PLATFORM_MODE;
+  process.env.PLATFORM_MODE = 'merlinus';
+  return previous;
+}
+
 export function restorePlatformMode(previous: string | undefined): void {
   if (previous === undefined) {
     delete process.env.PLATFORM_MODE;

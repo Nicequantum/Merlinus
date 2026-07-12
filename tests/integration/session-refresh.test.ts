@@ -20,6 +20,10 @@ import {
 import { getCanonicalSeedPassword } from '../../src/lib/seedDatabase';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
 import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
+import {
   captureTechnicianCompliance,
   ensureTechnicianCompliance,
   restoreTechnicianCompliance,
@@ -31,6 +35,7 @@ import { clearCriticalPathMocks, runWithNextRouteContext } from '../setup/critic
 const prisma = new PrismaClient();
 
 describe('JWT session refresh (H4)', () => {
+  let previousPlatformMode: string | undefined;
   let technicianId = '';
   let dealershipId = '';
   let techName = '';
@@ -38,6 +43,7 @@ describe('JWT session refresh (H4)', () => {
   let originalCompliance: TechnicianComplianceSnapshot | null = null;
 
   before(async () => {
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
     const techD7 = (process.env.TECH_SEED_D7?.trim() || 'D7TECH001').toUpperCase();
     const technician = await prisma.technician.findUnique({ where: { d7Number: techD7 } });
     assert.ok(technician, 'Seed technician required — run npm run db:seed first');
@@ -58,6 +64,7 @@ describe('JWT session refresh (H4)', () => {
       await restoreTechnicianCompliance(prisma, technicianId, originalCompliance);
     }
     clearCriticalPathMocks();
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

@@ -16,6 +16,11 @@ import { createSessionToken } from '../../src/lib/auth';
 import { CONSENT_REQUIRED_ERROR } from '../../src/lib/errors';
 import { repairLineToDbFields, repairOrderToDbFields } from '../../src/lib/roMapper';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '../../src/types';
+import {
+  enableMerlinusPlatformModeForTests,
+  restorePlatformMode,
+} from '../helpers/apexIntegration';
+import { createCompliantSessionToken } from '../helpers/integrationCompliance';
 import { buildAuthenticatedRequest, readJsonResponse } from '../helpers/routeTest';
 
 const prisma = new PrismaClient();
@@ -28,6 +33,7 @@ const integrationOnboarding = {
 };
 
 describe('tenant isolation (route handlers)', () => {
+  let previousPlatformMode: string | undefined;
   let dealershipAId = '';
   let dealershipBId = '';
   let techAId = '';
@@ -41,6 +47,7 @@ describe('tenant isolation (route handlers)', () => {
   const privatePathname = 'benz-tech/tenant-isolation-private.jpg';
 
   before(async () => {
+    previousPlatformMode = enableMerlinusPlatformModeForTests();
     // Synthetic tenant fixtures — never use seed/default passwords in source (H11).
     const integrationPassword =
       process.env.INTEGRATION_TEST_PASSWORD?.trim() || `tenant-isolation-${Date.now()}`;
@@ -60,56 +67,71 @@ describe('tenant isolation (route handlers)', () => {
     });
     dealershipBId = dealershipB.id;
 
+    const readyAccount = {
+      isActive: true as const,
+      deletedAt: null as Date | null,
+      mustChangePassword: false,
+      isAdmin: false,
+      ...integrationOnboarding,
+    };
+
     const techA = await prisma.technician.upsert({
       where: { d7Number: 'D7TENANTA' },
-      update: { dealershipId: dealershipAId, ...integrationOnboarding },
+      update: { dealershipId: dealershipAId, ...readyAccount },
       create: {
         d7Number: 'D7TENANTA',
         email: 'd7tenanta@benz-tech.local',
         name: 'Tenant Tech A',
         passwordHash,
         role: 'technician',
-        isActive: true,
         dealershipId: dealershipAId,
-        ...integrationOnboarding,
+        ...readyAccount,
       },
     });
     techAId = techA.id;
 
     const techB = await prisma.technician.upsert({
       where: { d7Number: 'D7TENANTB' },
-      update: { dealershipId: dealershipBId, ...integrationOnboarding },
+      update: { dealershipId: dealershipBId, ...readyAccount },
       create: {
         d7Number: 'D7TENANTB',
         email: 'd7tenantb@benz-tech.local',
         name: 'Tenant Tech B',
         passwordHash,
         role: 'technician',
-        isActive: true,
         dealershipId: dealershipBId,
-        ...integrationOnboarding,
+        ...readyAccount,
       },
     });
     techBId = techB.id;
 
     const managerB = await prisma.technician.upsert({
       where: { d7Number: 'D7TENMGRB' },
-      update: { dealershipId: dealershipBId, ...integrationOnboarding },
+      update: { dealershipId: dealershipBId, ...readyAccount },
       create: {
         d7Number: 'D7TENMGRB',
         email: 'd7tenmgrb@benz-tech.local',
         name: 'Tenant Manager B',
         passwordHash,
         role: 'manager',
-        isActive: true,
         dealershipId: dealershipBId,
-        ...integrationOnboarding,
+        ...readyAccount,
       },
     });
 
     const techNoConsent = await prisma.technician.upsert({
       where: { d7Number: 'D7TENNOCN' },
-      update: { dealershipId: dealershipAId, consentAt: null, consentVersion: null },
+      update: {
+        dealershipId: dealershipAId,
+        isActive: true,
+        deletedAt: null,
+        mustChangePassword: false,
+        isAdmin: false,
+        consentAt: null,
+        consentVersion: null,
+        legalDisclaimerAt: null,
+        legalDisclaimerVersion: null,
+      },
       create: {
         d7Number: 'D7TENNOCN',
         email: 'd7tennocn@benz-tech.local',
@@ -117,54 +139,37 @@ describe('tenant isolation (route handlers)', () => {
         passwordHash,
         role: 'technician',
         isActive: true,
+        isAdmin: false,
+        mustChangePassword: false,
         dealershipId: dealershipAId,
         consentAt: null,
         consentVersion: null,
       },
     });
 
-    techAToken = await createSessionToken({
-      technicianId: techA.id,
-      d7Number: techA.d7Number,
-      name: techA.name,
-      role: techA.role,
-      dealershipId: dealershipAId,
-      dealershipName: dealershipA.name,
-      consentAt: techA.consentAt?.toISOString() ?? null,
-      sessionVersion: techA.sessionVersion,
-    });
+    // H13: JWT claims require isAdmin + full compliance shape — use shared helper.
+    techAToken = await createCompliantSessionToken(prisma, techA, dealershipA.name);
+    techBToken = await createCompliantSessionToken(prisma, techB, dealershipB.name);
+    managerBToken = await createCompliantSessionToken(prisma, managerB, dealershipB.name);
 
-    techBToken = await createSessionToken({
-      technicianId: techB.id,
-      d7Number: techB.d7Number,
-      name: techB.name,
-      role: techB.role,
-      dealershipId: dealershipBId,
-      dealershipName: dealershipB.name,
-      consentAt: techB.consentAt?.toISOString() ?? null,
-      sessionVersion: techB.sessionVersion,
+    // No-consent fixture: mint a JWT with null consent (helper would stamp consent on).
+    const techNoConsentFresh = await prisma.technician.findUniqueOrThrow({
+      where: { id: techNoConsent.id },
     });
-
-    managerBToken = await createSessionToken({
-      technicianId: managerB.id,
-      d7Number: managerB.d7Number,
-      name: managerB.name,
-      role: managerB.role,
-      dealershipId: dealershipBId,
-      dealershipName: dealershipB.name,
-      consentAt: managerB.consentAt?.toISOString() ?? null,
-      sessionVersion: managerB.sessionVersion,
-    });
-
     techNoConsentToken = await createSessionToken({
-      technicianId: techNoConsent.id,
-      d7Number: techNoConsent.d7Number,
-      name: techNoConsent.name,
-      role: techNoConsent.role,
+      technicianId: techNoConsentFresh.id,
+      d7Number: techNoConsentFresh.d7Number,
+      name: techNoConsentFresh.name,
+      role: techNoConsentFresh.role,
+      isAdmin: techNoConsentFresh.isAdmin,
       dealershipId: dealershipAId,
       dealershipName: dealershipA.name,
       consentAt: null,
-      sessionVersion: techNoConsent.sessionVersion,
+      consentVersion: null,
+      legalDisclaimerAt: null,
+      legalDisclaimerVersion: null,
+      sessionVersion: techNoConsentFresh.sessionVersion,
+      mustChangePassword: false,
     });
 
     const roInput = {
@@ -240,6 +245,7 @@ describe('tenant isolation (route handlers)', () => {
     await prisma.dealership.deleteMany({
       where: { id: { in: ['tenant-test-a', 'tenant-test-b'] } },
     });
+    restorePlatformMode(previousPlatformMode);
     await prisma.$disconnect();
   });
 

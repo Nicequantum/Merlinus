@@ -112,6 +112,8 @@ async function ensureCanonicalSeedAccount(input: SeedAccountInput): Promise<void
     isActive: true,
     deletedAt: null,
     dealershipId: input.dealershipId,
+    // Canonical seed logins are env-managed for CI/local — not temporary provision temps.
+    mustChangePassword: false,
     ...seedConsentOnly,
   };
 
