@@ -48,12 +48,14 @@ const TARGETS = [
     id: 'seed-dealership',
     name: 'Apex Test Platform',
     templateId: 'mercedes-rooftop-v1',
+    storyBrand: 'mercedes' as const,
     notes: 'Mercedes-specific testing (D7 login, Xentry). Original pilot without franchise code.',
   },
   {
     id: 'seed-dealership-2',
     name: 'Apex Generic Test',
     templateId: 'generic-rooftop-v1',
+    storyBrand: 'generic' as const,
     notes: 'Generic/neutral testing (apex username login, no logo). Former Newport seed rooftop.',
   },
 ] as const;
@@ -75,6 +77,7 @@ async function main(): Promise<void> {
         select: {
           id: true,
           name: true,
+          storyBrand: true,
           dealerId: true,
           dealer: { select: { code: true, name: true } },
           _count: { select: { technicians: true } },
@@ -83,52 +86,58 @@ async function main(): Promise<void> {
 
       if (!existing) {
         if (dryRun) {
-          console.log(`[dry-run] would CREATE ${target.id} → "${target.name}" (${target.templateId})`);
+          console.log(
+            `[dry-run] would CREATE ${target.id} → "${target.name}" (${target.templateId}, storyBrand=${target.storyBrand})`
+          );
           continue;
         }
         await prisma.dealership.create({
-          data: { id: target.id, name: target.name },
+          data: { id: target.id, name: target.name, storyBrand: target.storyBrand },
         });
         console.log(`CREATED ${target.id}`);
-        console.log(`  name:     "${target.name}"`);
-        console.log(`  template: ${target.templateId} (operational — not stored on row)`);
-        console.log(`  note:     ${target.notes}`);
+        console.log(`  name:       "${target.name}"`);
+        console.log(`  template:   ${target.templateId} (operational — not stored on row)`);
+        console.log(`  storyBrand: ${target.storyBrand}`);
+        console.log(`  note:       ${target.notes}`);
         console.log('');
         continue;
       }
 
       console.log(`${target.id}`);
-      console.log(`  before:   "${existing.name}"`);
-      console.log(`  after:    "${target.name}"`);
-      console.log(`  template: ${target.templateId} (operational — not stored on row)`);
-      console.log(`  dealer:   ${existing.dealer?.code ?? '(none — pilot seed)'}`);
-      console.log(`  staff:    ${existing._count.technicians} technician(s)`);
-      console.log(`  note:     ${target.notes}`);
+      console.log(`  before:     "${existing.name}"`);
+      console.log(`  after:      "${target.name}"`);
+      console.log(`  template:   ${target.templateId} (operational — not stored on row)`);
+      console.log(`  storyBrand: ${existing.storyBrand ?? '(unset)'} → ${target.storyBrand}`);
+      console.log(`  dealer:     ${existing.dealer?.code ?? '(none — pilot seed)'}`);
+      console.log(`  staff:      ${existing._count.technicians} technician(s)`);
+      console.log(`  note:       ${target.notes}`);
 
-      if (existing.name === target.name) {
-        console.log('  status:   already up to date\n');
+      const nameOk = existing.name === target.name;
+      const brandOk = existing.storyBrand === target.storyBrand;
+      if (nameOk && brandOk) {
+        console.log('  status:     already up to date\n');
         continue;
       }
 
       if (dryRun) {
-        console.log('  status:   would rename\n');
+        console.log('  status:     would update name/storyBrand\n');
         continue;
       }
 
       await prisma.dealership.update({
         where: { id: target.id },
-        data: { name: target.name },
+        data: { name: target.name, storyBrand: target.storyBrand },
       });
-      console.log('  status:   renamed\n');
+      console.log('  status:     updated\n');
     }
 
     if (!dryRun) {
       console.log('Done. Team test rooftops:');
-      console.log('  • Apex Test Platform  (seed-dealership)   → mercedes-rooftop-v1');
-      console.log('  • Apex Generic Test   (seed-dealership-2) → generic-rooftop-v1');
+      console.log('  • Apex Test Platform  (seed-dealership)   → mercedes story pack');
+      console.log('  • Apex Generic Test   (seed-dealership-2) → generic story pack');
       console.log('');
       console.log('Sign in as national owner and refresh the rooftop list to see new names.');
-      console.log('Note: VITIMB / VITIVOLVO franchise rooftops are unchanged.');
+      console.log('Note: VITIMB / VITIVOLVO franchise rooftops are unchanged (default mercedes).');
     }
   } finally {
     await prisma.$disconnect();

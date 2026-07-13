@@ -35,7 +35,7 @@ export async function POST(
       customerPayMessage:
         'Customer Pay stories do not require AI quality review. Edit the text directly if needed.',
     },
-    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line, storyPack }) => {
       const parsed = await parseRequestBody(req, reviewStorySchema);
       if ('error' in parsed) return parsed.error;
 
@@ -46,7 +46,7 @@ export async function POST(
 
       let review;
       try {
-        review = await reviewWarrantyStory(mapped, line, warrantyStory);
+        review = await reviewWarrantyStory(mapped, line, warrantyStory, { pack: storyPack });
         if (review.parseFailed) {
           logger.error('story.review.parse_failed', {
             repairOrderId: id,

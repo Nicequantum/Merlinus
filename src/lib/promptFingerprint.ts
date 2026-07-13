@@ -1,6 +1,11 @@
 import { createHash } from 'crypto';
 import { MI_AUDIT_GUIDELINES, MI_GENERATION_STYLE_RULES } from '@/prompts/miAuditGuidelines';
-import { SYSTEM_PROMPT } from '@/prompts/warrantyStory';
+import {
+  DEFAULT_STORY_BRAND,
+  resolveStoryBrandPack,
+  TRUTH_POLICY_ID,
+  type StoryBrandId,
+} from '@/prompts/story';
 import { getDealershipPromptRules, PROMPT_VERSION } from '@/prompts/version';
 
 /** M6: Hash a string for audit metadata without storing raw sensitive content. */
@@ -14,17 +19,29 @@ export interface PromptAuditFingerprint {
   dealershipRulesHash: string | null;
   miGuidelinesHash: string;
   miStyleRulesHash: string;
+  storyBrand: StoryBrandId | string;
+  packVersion: string;
+  truthPolicy: typeof TRUTH_POLICY_ID;
 }
 
 /** M6: Record which prompt building blocks were active — not just static PROMPT_VERSION. */
-export function buildPromptAuditFingerprint(): PromptAuditFingerprint {
+export function buildPromptAuditFingerprint(options?: {
+  storyBrand?: StoryBrandId | string | null;
+  packVersion?: string;
+}): PromptAuditFingerprint {
   const dealershipRules = getDealershipPromptRules();
+  const pack = resolveStoryBrandPack(options?.storyBrand ?? DEFAULT_STORY_BRAND, {
+    preferDefaultMercedes: true,
+  });
   return {
     promptVersion: PROMPT_VERSION,
-    systemPromptHash: hashPromptFragment(SYSTEM_PROMPT),
+    systemPromptHash: hashPromptFragment(pack.systemPrompt),
     dealershipRulesHash: dealershipRules ? hashPromptFragment(dealershipRules) : null,
     miGuidelinesHash: hashPromptFragment(MI_AUDIT_GUIDELINES),
     miStyleRulesHash: hashPromptFragment(MI_GENERATION_STYLE_RULES),
+    storyBrand: pack.id,
+    packVersion: options?.packVersion ?? pack.packVersion,
+    truthPolicy: TRUTH_POLICY_ID,
   };
 }
 
@@ -38,8 +55,13 @@ export function buildStoryGenerateAuditMetadata(input: {
   qualityScore: number | null;
   qualityGrade: string | null;
   serviceAdvisorId: string | null;
+  storyBrand?: StoryBrandId | string | null;
+  packVersion?: string;
 }): Record<string, unknown> {
-  const fingerprint = buildPromptAuditFingerprint();
+  const fingerprint = buildPromptAuditFingerprint({
+    storyBrand: input.storyBrand,
+    packVersion: input.packVersion,
+  });
   return {
     repairOrderId: input.repairOrderId,
     lineNumber: input.lineNumber,

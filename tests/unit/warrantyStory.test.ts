@@ -11,6 +11,14 @@ import {
   buildWarrantyStoryUserMessage,
   selectVeteranPersona,
 } from '../../src/prompts/warrantyStory';
+import { PROMPT_VERSION } from '../../src/prompts/version';
+import {
+  GENERIC_FORBIDDEN_TERMS,
+  GENERIC_STORY_PACK,
+  MERCEDES_STORY_PACK,
+  resolveStoryBrandPack,
+  STRICT_TRUTH_RULES,
+} from '../../src/prompts/story';
 import type { RepairLine, RepairOrder } from '../../src/types';
 
 const baseRo: RepairOrder = {
@@ -25,7 +33,7 @@ const baseRo: RepairOrder = {
     mileageOut: '28458',
   },
   customer: { name: 'John Smith' },
-  complaints: ['# A CHECK ENGINE LIGHT ON'],
+  complaints: ['# A CHECK ENGINE LIGHT ON — ADVISOR INACCURATE'],
   repairLines: [],
 };
 
@@ -33,7 +41,7 @@ const baseLine: RepairLine = {
   id: 'line-1',
   lineNumber: 1,
   description: 'Engine diagnosis',
-  customerConcern: 'CHECK ENGINE LIGHT ON',
+  customerConcern: 'CHECK ENGINE LIGHT ON — SHOULD NOT APPEAR IN PROMPT',
   technicianNotes: 'Found P0300. Source voltage 12.4V. Performed guided test on cylinder 3.',
   xentryImages: [],
   extractedData: {
@@ -47,12 +55,13 @@ const baseLine: RepairLine = {
 };
 
 describe('warranty story prompts', () => {
-  test('SYSTEM_PROMPT enforces master-technician 3C quality at v3.0.0', () => {
+  test(`SYSTEM_PROMPT enforces master-technician 3C quality at v${PROMPT_VERSION}`, () => {
     assert.match(SYSTEM_PROMPT, /Merlin/i);
-    assert.match(SYSTEM_PROMPT, /v3\.0\.0/);
+    assert.match(SYSTEM_PROMPT, new RegExp(`v${PROMPT_VERSION.replace(/\./g, '\\.')}`));
     assert.match(SYSTEM_PROMPT, /3C|Concern|Cause|Correction/i);
     assert.match(SYSTEM_PROMPT, /Quick Test/i);
     assert.match(SYSTEM_PROMPT, /Critical Quality Rules/i);
+    assert.match(SYSTEM_PROMPT, /STRICT TRUTH RULES/i);
     assert.match(THREE_C_GENERATION_RULES, /Master Technician/i);
     assert.match(THREE_C_GENERATION_RULES, /\[NOT DOCUMENTED\]/);
     assert.match(THREE_C_GENERATION_RULES, /Never invent codes/i);
@@ -84,11 +93,11 @@ describe('warranty story prompts', () => {
   test('STORY_TEMPLATES reference diagnostic workflow elements', () => {
     assert.ok(STORY_TEMPLATES.length >= 5);
     for (const template of STORY_TEMPLATES) {
-      assert.match(template, /workflow|drive|Quick Test|voltage|XENTRY|guided test|verification|complaint/i);
+      assert.match(template, /workflow|drive|Quick Test|voltage|XENTRY|guided test|verification|complaint|findings/i);
     }
   });
 
-  test('buildWarrantyStoryUserMessage includes persona, line data, and full workflow instruction', () => {
+  test('buildWarrantyStoryUserMessage includes persona, notes, diagnostics; omits customer complaint', () => {
     const message = buildWarrantyStoryUserMessage(baseRo, baseLine);
     assert.match(message, /Line 1/i);
     assert.match(message, /28450→28458/);
@@ -98,9 +107,69 @@ describe('warranty story prompts', () => {
     assert.match(message, /10-step/i);
     assert.match(message, /never copy verbatim/i);
     assert.match(message, /<<<TECHNICIAN_NOTES>>/);
+    assert.match(message, /TRUTH POLICY/i);
+    assert.doesNotMatch(message, /RO_COMPLAINTS/);
+    assert.doesNotMatch(message, /Complaint for this line/i);
+    assert.doesNotMatch(message, /SHOULD NOT APPEAR IN PROMPT/);
+    assert.doesNotMatch(message, /ADVISOR INACCURATE/);
   });
 
   test('WARRANTY_STORY_MAX_TOKENS allows full workflow narratives', () => {
     assert.ok(WARRANTY_STORY_MAX_TOKENS >= 4096);
+  });
+});
+
+describe('multi-brand story packs', () => {
+  test('strict truth rules ban inventing and customer complaint as evidence', () => {
+    assert.match(STRICT_TRUTH_RULES, /Never invent/i);
+    assert.match(STRICT_TRUTH_RULES, /Customer Complaint/i);
+    assert.match(STRICT_TRUTH_RULES, /OUT OF SCOPE/i);
+  });
+
+  test('mercedes pack retains XENTRY Quick Test workflow', () => {
+    const pack = MERCEDES_STORY_PACK;
+    assert.equal(pack.id, 'mercedes');
+    assert.match(pack.systemPrompt, /XENTRY/i);
+    assert.match(pack.systemPrompt, /Quick Test/i);
+    assert.equal(pack.workflowSteps.length, 10);
+    assert.match(pack.diagnosticsSourceLabel, /Xentry/i);
+  });
+
+  test('generic pack has no Mercedes-only product language', () => {
+    const pack = GENERIC_STORY_PACK;
+    assert.equal(pack.id, 'generic');
+    const authored = [
+      pack.systemPrompt,
+      pack.workflowSteps.join('\n'),
+      pack.workflowSummary,
+      pack.personas.map((p) => p.voice).join('\n'),
+      pack.quality.scoreSystemPrompt,
+      pack.quality.scoreRetrySystemPrompt,
+      pack.quality.reviewSystemPrompt,
+    ].join('\n');
+    for (const term of GENERIC_FORBIDDEN_TERMS) {
+      assert.equal(
+        authored.includes(term),
+        false,
+        `generic pack must not contain forbidden term: ${term}`
+      );
+    }
+    assert.match(pack.systemPrompt, /diagnostic equipment/i);
+    assert.match(pack.systemPrompt, /system scan/i);
+    assert.match(pack.systemPrompt, /battery maintainer/i);
+  });
+
+  test('resolveStoryBrandPack defaults mercedes and fails safe to generic for unknown', () => {
+    assert.equal(resolveStoryBrandPack(null).id, 'mercedes');
+    assert.equal(resolveStoryBrandPack('mercedes').id, 'mercedes');
+    assert.equal(resolveStoryBrandPack('generic').id, 'generic');
+    assert.equal(resolveStoryBrandPack('bmw-future').id, 'generic');
+  });
+
+  test('generic user message uses diagnostic photos label', () => {
+    const message = buildWarrantyStoryUserMessage(baseRo, baseLine, { brand: 'generic' });
+    assert.match(message, /diagnostic photos/i);
+    assert.doesNotMatch(message, /Xentry photos/i);
+    assert.doesNotMatch(message, /RO_COMPLAINTS/);
   });
 });

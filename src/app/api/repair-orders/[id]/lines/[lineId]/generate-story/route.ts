@@ -42,18 +42,19 @@ export async function POST(
       customerPayMessage:
         'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
     },
-    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
-      const pipelineAudit = auditStoryGenerationPipeline(mapped, line);
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line, storyBrand, storyPack }) => {
+      const pipelineAudit = auditStoryGenerationPipeline(mapped, line, { brand: storyBrand });
       logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
 
       let warrantyStory: string;
       let cdkSanitized = false;
       try {
         const grokStartedAt = Date.now();
-        const rawStory = await generateWarrantyStory(mapped, line);
+        const rawStory = await generateWarrantyStory(mapped, line, { pack: storyPack });
         logPerformance('grok.story.generate.route', Date.now() - grokStartedAt, {
           model: pipelineAudit.model,
           promptChars: pipelineAudit.totalPromptChars,
+          storyBrand,
         });
         const cleaned = sanitizeForCDKWithMeta(rawStory);
         warrantyStory = cleaned.text;
@@ -85,6 +86,8 @@ export async function POST(
                   qualityScore: null,
                   qualityGrade: null,
                   serviceAdvisorId: null,
+                  storyBrand,
+                  packVersion: storyPack.packVersion,
                 }),
                 ipAddress: getRequestIp(req),
               },

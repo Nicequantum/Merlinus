@@ -5,7 +5,11 @@ import {
   STORY_GENERATE_ROUTE_MAX_DURATION_S,
 } from '@/lib/timeouts';
 import {
-  SYSTEM_PROMPT,
+  DEFAULT_STORY_BRAND,
+  resolveStoryBrandPack,
+  type StoryBrandId,
+} from '@/prompts/story';
+import {
   WARRANTY_STORY_MAX_TOKENS,
   buildWarrantyStoryUserMessage,
 } from '@/prompts/warrantyStory';
@@ -21,6 +25,8 @@ export interface StoryGenerationPipelineAudit {
   maxOutputTokens: number;
   preGrokDbOps: string[];
   excludedFromPrompt: string[];
+  storyBrand?: StoryBrandId | string;
+  packVersion?: string;
   timeouts: {
     grokMs: number;
     routeMaxDurationS: number;
@@ -34,25 +40,36 @@ export function resolveStoryReasoningEffort(model: string): string {
   return 'not sent';
 }
 
-export function auditStoryGenerationPipeline(ro: RepairOrder, line: RepairLine): StoryGenerationPipelineAudit {
-  const userMessage = buildWarrantyStoryUserMessage(ro, line);
+export function auditStoryGenerationPipeline(
+  ro: RepairOrder,
+  line: RepairLine,
+  options?: { brand?: string | null }
+): StoryGenerationPipelineAudit {
+  const pack = resolveStoryBrandPack(options?.brand ?? DEFAULT_STORY_BRAND, {
+    preferDefaultMercedes: true,
+  });
+  const userMessage = buildWarrantyStoryUserMessage(ro, line, { pack });
+  const systemPromptChars = pack.systemPrompt.length;
   return {
     model: GROK_STORY_MODEL,
     reasoningEffort: resolveStoryReasoningEffort(GROK_STORY_MODEL),
-    systemPromptChars: SYSTEM_PROMPT.length,
+    systemPromptChars,
     userMessageChars: userMessage.length,
-    totalPromptChars: SYSTEM_PROMPT.length + userMessage.length,
+    totalPromptChars: systemPromptChars + userMessage.length,
     maxOutputTokens: WARRANTY_STORY_MAX_TOKENS,
     preGrokDbOps: ['prisma.repairOrder.findUnique (RO + lines)', 'dbToRepairOrder field decrypt'],
     excludedFromPrompt: [
       'knowledgeBase',
       'historyContext',
       'advisorIntelligence',
-
       'storyTemplates',
       'roLevelOcr',
       'allRepairLineDescriptions',
+      'customerComplaint',
+      'roAdvisorComplaints',
     ],
+    storyBrand: pack.id,
+    packVersion: pack.packVersion,
     timeouts: {
       grokMs: STORY_GENERATE_GROK_MS,
       routeMaxDurationS: STORY_GENERATE_ROUTE_MAX_DURATION_S,

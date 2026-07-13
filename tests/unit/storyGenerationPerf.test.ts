@@ -71,7 +71,8 @@ describe('story generation performance settings', () => {
 
   test('score system prompt uses compact MI criteria', () => {
     assert.match(STORY_SCORE_SYSTEM_PROMPT, /MI 2\.0 scoring/i);
-    assert.ok(STORY_SCORE_SYSTEM_PROMPT.length < 1_800);
+    // Compact relative to full MI guidelines; room for truth-policy note
+    assert.ok(STORY_SCORE_SYSTEM_PROMPT.length < 2_400);
   });
 
   test('generation phase messages cover story writing only', () => {

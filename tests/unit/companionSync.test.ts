@@ -140,13 +140,14 @@ describe('desktop companion sync', () => {
   it('scores warranty stories with full-structure retry instead of throwing on parse failure', () => {
     const grok = readSrc('src/lib/grok.ts');
     const prompts = readSrc('src/prompts/storyQuality.ts');
+    const mercedesQuality = readSrc('src/prompts/story/brands/mercedes/quality/scoreCriteria.ts');
     const workflow = readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts');
-    assert.ok(grok.includes('STORY_SCORE_RETRY_SYSTEM_PROMPT'));
+    assert.ok(grok.includes('getStoryScoreRetrySystemPrompt'));
     assert.ok(grok.includes('isStoryQualityDetailMissing'));
     assert.ok(grok.includes('grok.story.score_retry'));
-    assert.ok(prompts.includes('strengths: 2-4 specific strengths'));
-    assert.ok(prompts.includes('auditRisks: 1-4 critical MI 2.0 rejection risks'));
-    assert.ok(prompts.includes('Submitted story is authoritative'));
+    assert.ok(mercedesQuality.includes('strengths: 2-4 specific strengths'));
+    assert.ok(mercedesQuality.includes('auditRisks: 1-4 critical MI 2.0 rejection risks'));
+    assert.ok(mercedesQuality.includes('Submitted story is authoritative'));
     assert.ok(prompts.includes('authoritative — score only this text as submitted'));
     assert.ok(workflow.includes('scoredAgainstStory: storyText'));
     assert.equal(grok.includes("throw new Error('AI quality score returned unreadable JSON.')"), false);

@@ -17,6 +17,7 @@ import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { CONSENT_VERSION, LEGAL_DISCLAIMER_VERSION } from '@/types';
+import { storyBrandFromTemplateBrand } from '@/lib/storyBrand/resolveStoryBrand';
 
 /** Rooftops that must never be provision targets. */
 export const PROVISION_DENY_DEALERSHIP_IDS = new Set([
@@ -534,6 +535,7 @@ export async function provisionDealer(input: ProvisionDealerInput): Promise<Prov
       data: {
         name: rooftopName,
         dealerId: dealer.id,
+        storyBrand: storyBrandFromTemplateBrand(template.brand),
       },
     });
 

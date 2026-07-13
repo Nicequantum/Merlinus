@@ -5,13 +5,13 @@ import {
   isGrokProxyConfigured,
 } from '@/lib/grokApiKey.shared';
 import { createGrokProxyAccessToken } from '@/lib/grokProxyAuth';
-import { GROK_CHAT_MODEL, GROK_STORY_MODEL } from '@/lib/grokModels';
+import { GROK_CHAT_MODEL, GROK_STORY_MODEL, GROK_STORY_REVIEW_MODEL } from '@/lib/grokModels';
 import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
 import {
-  STORY_REVIEW_SYSTEM_PROMPT,
-  STORY_SCORE_RETRY_SYSTEM_PROMPT,
-  STORY_SCORE_SYSTEM_PROMPT,
+  getStoryReviewSystemPrompt,
+  getStoryScoreRetrySystemPrompt,
+  getStoryScoreSystemPrompt,
   buildStoryReviewUserMessage,
   buildStoryScoreUserMessage,
   isStoryQualityDetailMissing,
@@ -28,7 +28,12 @@ import {
 } from '@/prompts/customerPayDynamic';
 import { PROMPT_VERSION } from '@/prompts/version';
 import {
-  SYSTEM_PROMPT,
+  DEFAULT_STORY_BRAND,
+  resolveStoryBrandPack,
+  type StoryBrandId,
+  type StoryBrandPack,
+} from '@/prompts/story';
+import {
   WARRANTY_STORY_MAX_TOKENS,
   WARRANTY_STORY_TEMPERATURE,
   buildWarrantyStoryUserMessage,
@@ -419,11 +424,28 @@ export async function generateDynamicCustomerPayNarrative(
   return baseTemplate;
 }
 
-export async function generateWarrantyStory(ro: RepairOrder, line: RepairLine): Promise<string> {
-  const userMessage = buildWarrantyStoryUserMessage(ro, line);
+export type StoryAiOptions = {
+  brand?: StoryBrandId | string | null;
+  pack?: StoryBrandPack;
+};
+
+function resolveStoryAiPack(options?: StoryAiOptions): StoryBrandPack {
+  return (
+    options?.pack ??
+    resolveStoryBrandPack(options?.brand ?? DEFAULT_STORY_BRAND, { preferDefaultMercedes: true })
+  );
+}
+
+export async function generateWarrantyStory(
+  ro: RepairOrder,
+  line: RepairLine,
+  options?: StoryAiOptions
+): Promise<string> {
+  const pack = resolveStoryAiPack(options);
+  const userMessage = buildWarrantyStoryUserMessage(ro, line, { pack });
   const story = await grokChat(
     [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: pack.systemPrompt },
       { role: 'user', content: userMessage },
     ],
     {
@@ -446,12 +468,13 @@ async function requestStoryQualityScore(
   line: RepairLine,
   warrantyStory: string,
   systemPrompt: string,
-  perfLabel: string
+  perfLabel: string,
+  pack: StoryBrandPack
 ): Promise<StoryQualityResult> {
   const raw = await grokChat(
     [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: buildStoryScoreUserMessage(ro, line, warrantyStory) },
+      { role: 'user', content: buildStoryScoreUserMessage(ro, line, warrantyStory, { pack }) },
     ],
     {
       model: GROK_STORY_MODEL,
@@ -471,14 +494,17 @@ async function requestStoryQualityScore(
 export async function scoreWarrantyStory(
   ro: RepairOrder,
   line: RepairLine,
-  warrantyStory: string
+  warrantyStory: string,
+  options?: StoryAiOptions
 ): Promise<StoryQualityResult> {
+  const pack = resolveStoryAiPack(options);
   const first = await requestStoryQualityScore(
     ro,
     line,
     warrantyStory,
-    STORY_SCORE_SYSTEM_PROMPT,
-    'grok.story.score'
+    getStoryScoreSystemPrompt({ pack }),
+    'grok.story.score',
+    pack
   );
   const firstOk =
     !isStoryQualityParseFailure(first) && !isStoryQualityDetailMissing(first);
@@ -493,8 +519,9 @@ export async function scoreWarrantyStory(
     ro,
     line,
     warrantyStory,
-    STORY_SCORE_RETRY_SYSTEM_PROMPT,
-    'grok.story.score_retry'
+    getStoryScoreRetrySystemPrompt({ pack }),
+    'grok.story.score_retry',
+    pack
   );
   const best = pickRicherStoryQuality(first, retry);
   const bestOk =
@@ -517,14 +544,17 @@ export async function scoreWarrantyStory(
 export async function reviewWarrantyStory(
   ro: RepairOrder,
   line: RepairLine,
-  warrantyStory: string
+  warrantyStory: string,
+  options?: StoryAiOptions
 ): Promise<StoryReviewResult> {
+  const pack = resolveStoryAiPack(options);
   const raw = await grokChat(
     [
-      { role: 'system', content: STORY_REVIEW_SYSTEM_PROMPT },
-      { role: 'user', content: buildStoryReviewUserMessage(ro, line, warrantyStory) },
+      { role: 'system', content: getStoryReviewSystemPrompt({ pack }) },
+      { role: 'user', content: buildStoryReviewUserMessage(ro, line, warrantyStory, { pack }) },
     ],
     {
+      model: GROK_STORY_REVIEW_MODEL,
       temperature: 0.15,
       max_tokens: 1400,
       timeoutMs: STORY_REVIEW_GROK_MS,

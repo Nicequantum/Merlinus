@@ -37,7 +37,7 @@ export async function POST(
       perfEvent: 'route.story.score',
       customerPayMessage: 'Customer Pay stories do not require AI quality scoring.',
     },
-    async ({ request: req, session, repairOrderId: id, lineId, mapped, line }) => {
+    async ({ request: req, session, repairOrderId: id, lineId, mapped, line, storyPack }) => {
       const parsed = await parseRequestBody(req, reviewStorySchema);
       if ('error' in parsed) return parsed.error;
 
@@ -48,7 +48,7 @@ export async function POST(
 
       let quality: StoryQualityResult;
       try {
-        const scored = await scoreWarrantyStory(mapped, line, warrantyStory);
+        const scored = await scoreWarrantyStory(mapped, line, warrantyStory, { pack: storyPack });
         quality = { ...scored, scoredAgainstStory: warrantyStory };
         if (isStoryQualityParseFailure(quality)) {
           logger.error('story.score.parse_failed', {

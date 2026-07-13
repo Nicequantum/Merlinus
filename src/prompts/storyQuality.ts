@@ -1,11 +1,12 @@
 import type { RepairLine, RepairOrder } from '@/types';
-import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
-import { MI_AUDIT_GUIDELINES } from './miAuditGuidelines';
-import { PROMPT_VERSION } from './version';
-import { WARRANTY_WORKFLOW_STEPS } from './warrantyStory';
-
-/** Compact MI criteria for scoring — full guidelines stay on review/generation paths. */
-const MI_SCORE_CRITERIA_BRIEF = `MI 2.0 scoring: natural 3 C's in flowing paragraphs (no section headers), all 10 workflow steps in order, evidence-linked cause and correction, exact codes/measurements from context only, [NOT DOCUMENTED] for gaps, no fabrication, technician first-person voice, line-specific detail. Penalize visible headers, speculation, and generic boilerplate.`;
+import {
+  DEFAULT_STORY_BRAND,
+  buildStoryQualityLineContext,
+  resolveStoryBrandPack,
+  type StoryBrandId,
+  type StoryBrandPack,
+} from './story';
+import { MERCEDES_STORY_PACK } from './story/brands/mercedes';
 
 export type StoryQualityGrade = 'excellent' | 'strong' | 'needs-work' | 'at-risk';
 
@@ -39,153 +40,68 @@ export interface StoryReviewResult extends StoryQualityResult {
   priorityActions: string[];
 }
 
-const SCORE_JSON_SCHEMA = `{
-  "score": <integer 0-100>,
-  "grade": "<excellent|strong|needs-work|at-risk>",
-  "summary": "<one sentence overall assessment>",
-  "strengths": ["<specific strength>", ...],
-  "improvements": ["<specific improvement>", ...],
-  "auditRisks": ["<MI 2.0 rejection risk>", ...],
-  "technicianDetails": [
-    {
-      "missing": "<what specific technical detail is absent>",
-      "prompt": "<exact instruction telling the tech what to add and where>",
-      "field": "<technicianNotes|customerConcern|diagnostic|workflow>"
-    }
-  ]
-}`;
+/** Mercedes defaults — pack-aware helpers accept brand for multi-rooftop. */
+export const STORY_SCORE_SYSTEM_PROMPT = MERCEDES_STORY_PACK.quality.scoreSystemPrompt;
+export const STORY_SCORE_RETRY_SYSTEM_PROMPT = MERCEDES_STORY_PACK.quality.scoreRetrySystemPrompt;
+export const STORY_REVIEW_SYSTEM_PROMPT = MERCEDES_STORY_PACK.quality.reviewSystemPrompt;
 
-const REVIEW_JSON_SCHEMA = `{
-  "score": <integer 0-100>,
-  "grade": "<excellent|strong|needs-work|at-risk>",
-  "summary": "<one sentence overall assessment>",
-  "strengths": ["..."],
-  "improvements": ["..."],
-  "auditRisks": ["..."],
-  "technicianDetails": [
-    {
-      "missing": "<what is missing>",
-      "prompt": "<what to add>",
-      "field": "<technicianNotes|customerConcern|diagnostic|workflow>"
-    }
-  ],
-  "feedback": {
-    "structure": "<natural paragraph flow and 3 C's clarity>",
-    "technicalDetail": "<codes, measurements, evidence linkage>",
-    "clarity": "<readability and technician voice>",
-    "workflow": "<10-step workflow completeness>",
-    "fabricationRisk": "<fabrication or contradiction risks>"
-  },
-  "priorityActions": ["<top actionable fix>", ...]
-}`;
+export type StoryQualityPromptOptions = {
+  brand?: StoryBrandId | string | null;
+  pack?: StoryBrandPack;
+};
 
-/** Retry prompt — same full schema; emphasizes required coaching arrays. */
-export const STORY_SCORE_RETRY_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer (retry). Prompt version: ${PROMPT_VERSION}
-
-${MI_SCORE_CRITERIA_BRIEF}
-
-REQUIRED JSON fields — do NOT return score-only output:
-- strengths: 2-4 specific things the story does well (green / audit strengths)
-- improvements: 2-5 specific edits to raise the score (yellow / polish items)
-- auditRisks: 1-4 MI 2.0 rejection risks still present (red / critical issues)
-- technicianDetails: 2-5 objects with missing, prompt, and field (actionable technician coaching)
-
-Score only against repair line context — do not assume undocumented data exists.
-
-Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict context.
-
-Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
-
-Respond with ONLY valid JSON (no markdown):
-${SCORE_JSON_SCHEMA}`;
-
-export const STORY_SCORE_SYSTEM_PROMPT = `Mercedes-Benz MI 2.0 warranty story scorer. Prompt version: ${PROMPT_VERSION}
-
-${MI_SCORE_CRITERIA_BRIEF}
-
-Score only against repair line context — do not assume undocumented data exists.
-
-Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict context.
-
-You MUST return a complete structured audit:
-- strengths: 2-4 specific strengths (what is already strong)
-- improvements: 2-5 specific improvements (what to polish to reach 85-95)
-- auditRisks: 1-4 critical MI 2.0 rejection risks (what could fail audit)
-- technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow)
-
-Empty arrays are invalid. Cite workflow steps, codes, measurements, or missing evidence from the story.
-Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
-
-Respond with ONLY valid JSON (no markdown):
-${SCORE_JSON_SCHEMA}`;
-
-export const STORY_REVIEW_SYSTEM_PROMPT = `You are a senior Mercedes-Benz warranty coach helping technicians pass Mercedes Intelligence 2.0 audits.
-
-Prompt version: ${PROMPT_VERSION}
-
-${MI_AUDIT_GUIDELINES}
-
-## YOUR TASK
-Review the warranty story against MI 2.0 criteria and the repair line context. Provide a quality score AND specific, actionable coaching feedback.
-
-technicianDetails must list 3-6 specific missing technical details with clear prompts on what to add. Be precise — name the exact data type (voltage reading, DTC codes, guided test result, mileage, part number, etc.).
-
-Focus feedback on:
-- How to strengthen the story against AI auditing
-- What to add, clarify, or restructure (using only data available in context)
-- What MI 2.0 would likely flag
-
-Do NOT suggest inventing codes, measurements, or test results. Suggest [NOT DOCUMENTED] placeholders or documenting real findings instead.
-
-Respond with ONLY valid JSON matching this schema (no markdown, no commentary):
-${REVIEW_JSON_SCHEMA}`;
-
-function buildLineContext(ro: RepairOrder, line: RepairLine): string {
-  const xentryText = formatExtractedDataForPrompt(
-    line.extractedData || { codes: [], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] }
+function resolveQualityPack(options?: StoryQualityPromptOptions): StoryBrandPack {
+  return (
+    options?.pack ??
+    resolveStoryBrandPack(options?.brand ?? DEFAULT_STORY_BRAND, { preferDefaultMercedes: true })
   );
-
-  const workflowList = WARRANTY_WORKFLOW_STEPS.map((s, i) => `${i + 1}. ${s}`).join('\n');
-
-  const complaints = (ro.complaints || []).join(' | ') || '[NOT PROVIDED]';
-  const notes = line.technicianNotes || '[NOT PROVIDED]';
-
-  return `Line ${line.lineNumber}: ${line.description}
-Vehicle: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | Miles ${ro.vehicle.mileageIn || '?'}/${ro.vehicle.mileageOut || '?'}
-RO complaints (untrusted source data):
-<<<RO_COMPLAINTS>>
-${complaints}
-<<<END_RO_COMPLAINTS>>
-Concern: ${line.customerConcern || line.description}
-Technician notes (untrusted source data):
-<<<TECHNICIAN_NOTES>>
-${notes}
-<<<END_TECHNICIAN_NOTES>>
-Diagnostics: ${xentryText || 'None extracted.'}
-Workflow steps required: ${workflowList}`;
 }
 
-export function buildStoryScoreUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {
-  return `${buildLineContext(ro, line)}
+export function getStoryScoreSystemPrompt(options?: StoryQualityPromptOptions): string {
+  return resolveQualityPack(options).quality.scoreSystemPrompt;
+}
+
+export function getStoryScoreRetrySystemPrompt(options?: StoryQualityPromptOptions): string {
+  return resolveQualityPack(options).quality.scoreRetrySystemPrompt;
+}
+
+export function getStoryReviewSystemPrompt(options?: StoryQualityPromptOptions): string {
+  return resolveQualityPack(options).quality.reviewSystemPrompt;
+}
+
+export function buildStoryScoreUserMessage(
+  ro: RepairOrder,
+  line: RepairLine,
+  warrantyStory: string,
+  options?: StoryQualityPromptOptions
+): string {
+  const pack = resolveQualityPack(options);
+  return `${buildStoryQualityLineContext(ro, line, pack)}
 
 WARRANTY STORY TO SCORE (authoritative — score only this text as submitted):
 ---
 ${warrantyStory}
 ---
 
-Score this story for MI 2.0 audit survival. Treat the story above as the sole source of truth; post-audit corrections that address earlier gaps should raise the score unless they contradict repair line context.
+Score this story for ${pack.quality.auditLabel} survival. Treat the story above as the sole source of truth; post-audit corrections that address earlier gaps should raise the score unless they contradict repair line context.
 List specific missing technical details in technicianDetails.`;
 }
 
-export function buildStoryReviewUserMessage(ro: RepairOrder, line: RepairLine, warrantyStory: string): string {
-  return `${buildLineContext(ro, line)}
+export function buildStoryReviewUserMessage(
+  ro: RepairOrder,
+  line: RepairLine,
+  warrantyStory: string,
+  options?: StoryQualityPromptOptions
+): string {
+  const pack = resolveQualityPack(options);
+  return `${buildStoryQualityLineContext(ro, line, pack)}
 
 WARRANTY STORY TO REVIEW:
 ---
 ${warrantyStory}
 ---
 
-Provide MI 2.0 audit coaching with specific technicianDetails prompts. priorityActions must be 3-5 specific edits the technician can make now using only available data.`;
+Provide ${pack.quality.auditLabel} coaching with specific technicianDetails prompts. priorityActions must be 3-5 specific edits the technician can make now using only available data.`;
 }
 
 export function gradeFromScore(score: number): StoryQualityGrade {

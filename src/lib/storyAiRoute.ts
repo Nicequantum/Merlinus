@@ -14,6 +14,9 @@ import { dbToRepairOrder } from '@/lib/roMapper';
 import { parseRouteParams, repairOrderLineParamsSchema } from '@/lib/validation';
 import type { RepairLine, RepairOrder } from '@/types';
 import type { SessionPayload } from '@/lib/auth';
+import { storyBrandFromDealership } from '@/lib/storyBrand/resolveStoryBrand';
+import { resolveStoryBrandPack, type StoryBrandId, type StoryBrandPack } from '@/prompts/story';
+import { getRlsDb } from '@/lib/apex/rlsContext';
 
 type StoryRouteRo = NonNullable<Awaited<ReturnType<typeof loadStoryRouteRepairOrder>>>;
 
@@ -28,6 +31,9 @@ export interface StoryAiRouteContext {
   mapped: RepairOrder;
   line: RepairLine;
   dbLine: StoryRouteRo['repairLines'][number];
+  /** Resolved multi-brand story pack for this rooftop */
+  storyBrand: StoryBrandId;
+  storyPack: StoryBrandPack;
 }
 
 export interface StoryAiRouteOptions {
@@ -84,6 +90,19 @@ export async function withStoryAiRoute(
         );
       }
 
+      let storyBrand = storyBrandFromDealership(null);
+      try {
+        const dealership = await getRlsDb().dealership.findFirst({
+          where: { id: session.dealershipId },
+          select: { storyBrand: true },
+        });
+        storyBrand = storyBrandFromDealership(dealership);
+      } catch {
+        // Pre-migration or missing column — default mercedes (safe for existing pilots)
+        storyBrand = storyBrandFromDealership(null);
+      }
+      const storyPack = resolveStoryBrandPack(storyBrand, { preferDefaultMercedes: true });
+
       return handler({
         request,
         session,
@@ -93,6 +112,8 @@ export async function withStoryAiRoute(
         mapped,
         line,
         dbLine,
+        storyBrand,
+        storyPack,
       });
     },
     {
