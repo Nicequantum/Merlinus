@@ -39,9 +39,18 @@ describe('Apex Grok proxy foundation (Phase 6.2)', () => {
     const grokSrc = readSrc('src/lib/grok.ts');
     assert.match(grokSrc, /shouldUseApexGrokProxy/);
     assert.match(grokSrc, /transport: 'direct'/);
+    assert.match(grokSrc, /createGrokProxyAccessToken/);
     assert.doesNotMatch(grokSrc, /import 'server-only'/);
     const { isGrokProxyConfigured } = await import('../../src/lib/grokApiKey.shared');
     assert.equal(isGrokProxyConfigured(), false);
+  });
+
+  it('does not self-proxy when GROK_API_KEY is present without GROK_PROXY_URL', () => {
+    // Hosts that only set GROK_PROXY_API_KEY for inbound auth must still call xAI directly.
+    const grokSrc = readSrc('src/lib/grok.ts');
+    assert.match(grokSrc, /getGrokProxyBaseUrl/);
+    assert.match(grokSrc, /createGrokProxyAccessToken/);
+    assert.match(grokSrc, /x-vercel-protection-bypass/);
   });
 
   it('mints and verifies short-lived proxy tokens with timing-safe verify', async () => {

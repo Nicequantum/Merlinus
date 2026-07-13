@@ -4,6 +4,7 @@ import {
   getGrokProxyBaseUrl,
   isGrokProxyConfigured,
 } from '@/lib/grokApiKey.shared';
+import { createGrokProxyAccessToken } from '@/lib/grokProxyAuth';
 import { GROK_CHAT_MODEL, GROK_STORY_MODEL } from '@/lib/grokModels';
 import { DIAGNOSTIC_EXTRACTION_PROMPT } from '@/prompts/diagnosticExtraction';
 import { RO_EXTRACTION_PROMPT } from '@/prompts/roExtraction';
@@ -61,9 +62,25 @@ function assertGrokServerRuntime(caller: string): void {
   }
 }
 
-/** Merlinus/Tiverton — direct xAI. Apex dealer nodes — optional centralized proxy when configured. */
+/**
+ * Use the centralized Grok proxy only for dealer nodes that lack a local xAI key
+ * (or that explicitly set GROK_PROXY_URL to a remote host).
+ *
+ * Hosts with GROK_API_KEY call api.x.ai directly — GROK_PROXY_API_KEY alone is for
+ * *inbound* /api/grok/proxy auth, not for looping server→self (which 401s under
+ * Vercel Deployment Protection and static-bearer-disabled policy).
+ */
 function shouldUseApexGrokProxy(): boolean {
-  return isGrokProxyConfigured();
+  if (!isGrokProxyConfigured()) return false;
+  const remoteProxy = Boolean(getGrokProxyBaseUrl());
+  try {
+    getGrokApiKey();
+    // Local xAI key present: only use proxy when an explicit remote base is configured.
+    return remoteProxy;
+  } catch {
+    // No local GROK_API_KEY — dealer node must use the proxy.
+    return true;
+  }
 }
 
 function resolveApexGrokProxyEndpoint(): string {
@@ -186,16 +203,28 @@ async function grokChatViaApexProxy(
     throw new Error('GROK_PROXY_API_KEY is not configured');
   }
 
+  // Proxy route rejects static bearer unless GROK_PROXY_ALLOW_STATIC_BEARER=true.
+  // Always mint short-lived HMAC tokens (Phase 6.2/6.4 fortress policy).
+  const accessToken = createGrokProxyAccessToken(60, proxyKey);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+  // Same-project or protected preview/prod: bypass Vercel Deployment Protection when configured.
+  const bypass =
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim() ||
+    process.env.GROK_PROXY_VERCEL_BYPASS_SECRET?.trim();
+  if (bypass) {
+    headers['x-vercel-protection-bypass'] = bypass;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), context.timeoutMs);
 
   try {
     const response = await fetch(resolveApexGrokProxyEndpoint(), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${proxyKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });

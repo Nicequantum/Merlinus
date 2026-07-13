@@ -136,8 +136,14 @@ export function mapGrokRouteError(error: unknown, featureLabel: string): RouteEr
       };
     }
     if (statusCode === 401 || statusCode === 403) {
+      const protection =
+        /protect(ed|ion)|deployment protection|authentication required|vercel/i.test(
+          detail || message
+        );
       return {
-        message: `${featureLabel} failed — AI API key rejected (HTTP ${statusCode}).${detailSuffix} Contact your service manager.`,
+        message: protection
+          ? `${featureLabel} failed — AI gateway blocked (HTTP ${statusCode} deployment protection).${detailSuffix} Contact your service manager.`
+          : `${featureLabel} failed — AI API key rejected (HTTP ${statusCode}).${detailSuffix} Contact your service manager.`,
         status: 503,
         logDetail,
       };
