@@ -43,7 +43,7 @@ const REVIEW_JSON_SCHEMA = `{
 }`;
 
 /** Compact MI criteria for scoring — full guidelines stay on review path. */
-const MI_SCORE_CRITERIA_BRIEF = `MI 2.0 scoring: natural 3 C's in flowing paragraphs (no section headers), all 10 workflow steps in order, evidence-linked cause and correction, exact codes/measurements from context only, [NOT DOCUMENTED] for gaps, no fabrication, technician first-person voice, line-specific detail. Penalize visible headers, speculation, and generic boilerplate. Customer Complaint fields are withheld by policy — do not penalize for missing advisor complaint text.`;
+const MI_SCORE_CRITERIA_BRIEF = `MI 2.0 scoring: natural 3 C's in flowing paragraphs (no section headers), workflow steps present in chronological narrative, evidence-linked cause and correction, codes/measurements as documented in the STORY (and supporting notes), [NOT DOCUMENTED] only when still missing, no fabrication, technician first-person voice, line-specific detail. Credit post-audit story improvements that document previously missing steps (source voltage, system scan, guided tests, verification). Penalize visible headers, speculation, and generic boilerplate. Customer Complaint fields are withheld by policy — do not penalize for missing advisor complaint text.`;
 
 export const MERCEDES_QUALITY: StoryBrandQualityPrompts = {
   auditLabel: 'MI 2.0',
@@ -51,17 +51,17 @@ export const MERCEDES_QUALITY: StoryBrandQualityPrompts = {
 
 ${MI_SCORE_CRITERIA_BRIEF}
 
-Score only against repair line context — do not assume undocumented data exists.
+Score the submitted story text. Supporting notes/diagnostics provide context; content present in the story counts as documented.
 
-Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict context.
+Submitted story is authoritative. Post-audit edits fixing earlier gaps are improvements, not fabrication, unless they contradict notes/diagnostics.
 
 You MUST return a complete structured audit:
 - strengths: 2-4 specific strengths (what is already strong)
-- improvements: 2-5 specific improvements (what to polish to reach 85-95)
-- auditRisks: 1-4 critical MI 2.0 rejection risks (what could fail audit)
-- technicianDetails: 2-5 missing technical details with exact add instructions and field (technicianNotes|customerConcern|diagnostic|workflow)
+- improvements: 0-5 specific improvements (what to polish to reach 85-95) — use fewer when the story is already strong
+- auditRisks: 0-4 critical MI 2.0 rejection risks — use empty array when none remain
+- technicianDetails: 0-5 missing technical details still absent from the STORY — use empty array when gaps are closed
 
-Empty arrays are invalid. Cite workflow steps, codes, measurements, or missing evidence from the story.
+Do not invent new gaps that the story already documents in first-person prose. Empty technicianDetails is valid when the narrative is complete.
 Grades: excellent 90-100, strong 75-89, needs-work 60-74, at-risk below 60.
 
 Respond with ONLY valid JSON (no markdown):
@@ -74,7 +74,7 @@ ${MI_SCORE_CRITERIA_BRIEF}
 REQUIRED JSON fields — do NOT return score-only output:
 - strengths: 2-4 specific things the story does well (green / audit strengths)
 - improvements: 2-5 specific edits to raise the score (yellow / polish items)
-- auditRisks: 1-4 MI 2.0 rejection risks still present (red / critical issues)
+- auditRisks: 1-4 critical MI 2.0 rejection risks still present (red / critical issues)
 - technicianDetails: 2-5 objects with missing, prompt, and field (actionable technician coaching)
 
 Score only against repair line context — do not assume undocumented data exists.

@@ -301,7 +301,9 @@ export function useROStoryWorkflow(
           return next;
         });
 
-        const { quality } = await api.scoreStory(roId, lineId, storyText);
+        const { quality } = await api.scoreStory(roId, lineId, storyText, {
+          technicianNotes: targetLine?.technicianNotes,
+        });
         if (seq !== refs.scoreStorySeqRef.current) return;
 
         const activeRO = refs.roRef.current;

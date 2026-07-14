@@ -46,9 +46,25 @@ export async function POST(
         return apiError('Warranty story text is required for scoring.', 400);
       }
 
+      // Prefer client notes snapshot so CORRECTIONS_ALREADY_APPLIED + score reconcile
+      // still work when RO PUT is slightly behind Add Tech Details.
+      const clientNotes =
+        typeof parsed.data.technicianNotes === 'string' && parsed.data.technicianNotes.trim()
+          ? parsed.data.technicianNotes
+          : undefined;
+      const lineForScore = clientNotes ? { ...line, technicianNotes: clientNotes } : line;
+      const mappedForScore = clientNotes
+        ? {
+            ...mapped,
+            repairLines: mapped.repairLines.map((l) => (l.id === lineId ? lineForScore : l)),
+          }
+        : mapped;
+
       let quality: StoryQualityResult;
       try {
-        const scored = await scoreWarrantyStory(mapped, line, warrantyStory, { pack: storyPack });
+        const scored = await scoreWarrantyStory(mappedForScore, lineForScore, warrantyStory, {
+          pack: storyPack,
+        });
         quality = { ...scored, scoredAgainstStory: warrantyStory };
         if (isStoryQualityParseFailure(quality)) {
           logger.error('story.score.parse_failed', {

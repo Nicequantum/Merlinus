@@ -6,6 +6,10 @@ import {
   formatTechnicianDetailForStory,
   formatTechnicianDetailInsert,
 } from '@/lib/storyDetailText';
+import {
+  integrateTechnicianDetailsIntoStory,
+  toAuditCorrection,
+} from '@/lib/storyAuditIntegration';
 
 export type TechnicianDetailFieldPatch = Partial<
   Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>
@@ -24,17 +28,16 @@ function fieldPrefix(field: TechnicianDetailPrompt['field']): string {
 }
 
 /**
- * Map AI coaching into editable line fields.
- * Always patches warrantyStory (scored text) so re-audit can credit improvements.
- * Also updates notes with pending-corrections fence for conservative regenerate.
+ * Apply one audit coaching item into notes + story.
+ * Story integration is workflow-aware (not a trailing dump).
  */
 export function applyTechnicianDetail(
   line: Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>,
   detail: TechnicianDetailPrompt
 ): TechnicianDetailFieldPatch {
   const notesBody = formatTechnicianDetailInsert(detail);
-  const storyBody = formatTechnicianDetailForStory(detail);
-  if (!notesBody && !storyBody) return {};
+  const correction = toAuditCorrection(detail);
+  if (!notesBody && !correction) return {};
 
   const patch: TechnicianDetailFieldPatch = {};
 
@@ -45,8 +48,8 @@ export function applyTechnicianDetail(
     patch.technicianNotes = appendUniqueDetailText(line.technicianNotes || '', tagged);
   }
 
-  if (storyBody) {
-    patch.warrantyStory = appendUniqueDetailText(line.warrantyStory || '', storyBody);
+  if (correction) {
+    patch.warrantyStory = integrateTechnicianDetailsIntoStory(line.warrantyStory || '', [detail]);
   }
 
   const notesBase = patch.technicianNotes ?? line.technicianNotes ?? '';
@@ -55,31 +58,28 @@ export function applyTechnicianDetail(
   return patch;
 }
 
-/** Apply every detail in order; later items see earlier appends. */
+/** Apply every coaching item; story is fully re-woven for audit recognition. */
 export function applyAllTechnicianDetails(
   line: Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>,
   details: TechnicianDetailPrompt[]
 ): TechnicianDetailFieldPatch {
   let notes = line.technicianNotes || '';
   let concern = line.customerConcern || '';
-  let story = line.warrantyStory || '';
 
   for (const detail of details) {
     const notesBody = formatTechnicianDetailInsert(detail);
-    const storyBody = formatTechnicianDetailForStory(detail);
-
     if (detail.field === 'customerConcern' && notesBody) {
       concern = appendUniqueDetailText(concern, notesBody);
     } else if (notesBody) {
       const tagged = `${AUDIT_ENHANCEMENT_NOTES_MARKER} ${fieldPrefix(detail.field)}${notesBody}`;
       notes = appendUniqueDetailText(notes, tagged);
     }
-    if (storyBody) {
-      story = appendUniqueDetailText(story, storyBody);
-    }
   }
 
   notes = mergePendingCorrectionsIntoNotes(notes, details);
+
+  // Single weave pass for the full story — correct workflow placement for each detail.
+  const story = integrateTechnicianDetailsIntoStory(line.warrantyStory || '', details);
 
   const result: TechnicianDetailFieldPatch = {};
   if (notes !== (line.technicianNotes || '')) result.technicianNotes = notes;

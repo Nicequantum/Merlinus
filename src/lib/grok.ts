@@ -19,6 +19,7 @@ import {
   parseStoryQualityResponse,
   pickRicherStoryQuality,
   parseStoryReviewResponse,
+  reconcileStoryQualityWithAppliedCorrections,
   type StoryQualityResult,
   type StoryReviewResult,
 } from '@/prompts/storyQuality';
@@ -554,7 +555,13 @@ async function requestStoryQualityScore(
   if (!raw.trim()) {
     logger.warn('grok.story.score_empty_response', { perfLabel, model: GROK_STORY_MODEL });
   }
-  return parseStoryQualityResponse(raw);
+  const parsed = parseStoryQualityResponse(raw);
+  // Credit Add Tech Details / pending corrections even when the model rephrases the same gaps.
+  return reconcileStoryQualityWithAppliedCorrections(
+    parsed,
+    warrantyStory,
+    line.technicianNotes || ''
+  );
 }
 
 export async function scoreWarrantyStory(

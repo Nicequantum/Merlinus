@@ -1,4 +1,11 @@
 import type { RepairLine, RepairOrder } from '@/types';
+import { extractRequiredCorrectionsFromNotes } from '@/lib/storyRegenerateGuard';
+import {
+  countAppliedCorrectionsPresentInStory,
+  isGapResolvedInStory,
+  recommendationResolvedByApplied,
+  toAuditCorrection,
+} from '@/lib/storyAuditIntegration';
 import {
   DEFAULT_STORY_BRAND,
   buildStoryQualityLineContext,
@@ -73,23 +80,142 @@ export function buildStoryScoreUserMessage(
   ro: RepairOrder,
   line: RepairLine,
   warrantyStory: string,
-  options?: StoryQualityPromptOptions
+  options?: StoryQualityPromptOptions & { addressedGaps?: string }
 ): string {
   const pack = resolveQualityPack(options);
+  const list = extractRequiredCorrectionsFromNotes(line.technicianNotes || '');
+  const addressed =
+    options?.addressedGaps?.trim() ||
+    (list.length ? list.map((c, i) => `${i + 1}. ${c}`).join('\n') : '');
+
+  const addressedBlock = addressed
+    ? `
+===CORRECTIONS_ALREADY_APPLIED_TO_STORY===
+The technician applied the following audit corrections into the warranty story above. If the story text supports each item (even partially), you MUST credit it, raise the score, and MUST NOT re-list it in technicianDetails / improvements / auditRisks:
+${addressed}
+===END_CORRECTIONS_ALREADY_APPLIED_TO_STORY===
+`
+    : '';
+
   return `${buildStoryQualityLineContext(ro, line, pack)}
 
 WARRANTY STORY TO SCORE (authoritative — score THIS text as submitted):
 ---
 ${warrantyStory}
 ---
-
+${addressedBlock}
 Score this story for ${pack.quality.auditLabel} survival.
 CRITICAL SCORING RULES:
-- The warranty story above is the sole scored artifact. Credit every workflow step, code, measurement, and technical detail that appears in the story.
-- If this story includes details that address earlier audit gaps (including text added after a prior audit or after "Add Tech Details"), raise the score and do NOT re-list those items in technicianDetails / improvements / auditRisks.
-- Only flag gaps that are still absent from the warranty story text itself.
-- Post-audit corrections that address earlier gaps should raise the score unless they contradict notes/diagnostics.
+- The warranty story above is the sole scored artifact. Credit every workflow step, code, measurement, and technical detail that appears in the story text.
+- First-person lines such as "I checked source voltage...", "I performed guided diagnostic testing...", "I documented fault codes..." fully satisfy those workflow gaps when present.
+- If CORRECTIONS_ALREADY_APPLIED_TO_STORY is listed and the story contains matching content, treat those gaps as closed — do not re-flag them.
+- Raise the score for post-audit / Add Tech Details improvements when those fixes are present in the story. Only list technicianDetails for gaps STILL absent from the story.
+- Do not penalize as fabrication when the story documents details also present in technician notes or the applied-corrections list.
+- Prefer empty technicianDetails when the story is complete enough for a strong/excellent grade.
 List specific missing technical details in technicianDetails only for content still missing from the story.`;
+}
+
+/**
+ * Drop technicianDetails that the story already documents (post-process safety net
+ * when the model re-lists fixed gaps with rephrased wording).
+ */
+export function filterResolvedTechnicianDetails(
+  story: string,
+  details: TechnicianDetailPrompt[],
+  appliedCorrectionTexts: string[] = []
+): TechnicianDetailPrompt[] {
+  return details.filter((d) => !isGapResolvedInStory(story, d, appliedCorrectionTexts));
+}
+
+function filterResolvedTextList(
+  items: string[],
+  story: string,
+  appliedCorrectionTexts: string[]
+): string[] {
+  return items.filter((item) => !recommendationResolvedByApplied(item, story, appliedCorrectionTexts));
+}
+
+/**
+ * Bump score when prior gaps are closed in the story text.
+ * Prefer counting applied corrections present in the story (theme-aware) over
+ * sticky model scores that re-list the same themes under new wording.
+ */
+export function adjustScoreForResolvedGaps(
+  result: StoryQualityResult,
+  story: string,
+  priorDetailCount: number,
+  appliedCorrectionTexts: string[] = []
+): StoryQualityResult {
+  const remaining = filterResolvedTechnicianDetails(
+    story,
+    result.technicianDetails,
+    appliedCorrectionTexts
+  );
+  const appliedPresent = countAppliedCorrectionsPresentInStory(story, appliedCorrectionTexts);
+  const closedFromFilter = Math.max(0, priorDetailCount - remaining.length);
+  const closed = Math.max(closedFromFilter, appliedPresent);
+
+  const improvements = filterResolvedTextList(result.improvements, story, appliedCorrectionTexts);
+  const auditRisks = filterResolvedTextList(result.auditRisks, story, appliedCorrectionTexts);
+
+  const listsChanged =
+    remaining.length !== result.technicianDetails.length ||
+    improvements.length !== result.improvements.length ||
+    auditRisks.length !== result.auditRisks.length;
+
+  if (closed === 0 && !listsChanged) {
+    return result;
+  }
+
+  // Credit closed gaps aggressively enough that Add All → Audit shows a real lift
+  // (+5 each, cap 25). Floor bump when ≥2 applied corrections are in the story.
+  const bonus = Math.min(25, closed * 5);
+  let score = Math.min(100, result.score + bonus);
+  if (appliedPresent >= 2 && score < result.score + 8) {
+    score = Math.min(100, result.score + Math.max(bonus, 8));
+  }
+  if (remaining.length === 0 && appliedPresent >= 1) {
+    // All re-flagged coaching items closed — ensure at least "strong" band when base was mid
+    score = Math.max(score, Math.min(100, Math.max(result.score + 10, 75)));
+  }
+
+  const grade = gradeFromScore(score);
+  return {
+    ...result,
+    score,
+    grade,
+    technicianDetails: remaining,
+    improvements,
+    auditRisks,
+    summary:
+      closed > 0
+        ? `${result.summary} Applied corrections closed ${closed} prior gap(s); score adjusted for documented workflow fixes.`.trim()
+        : result.summary,
+  };
+}
+
+/**
+ * Full post-process after model score: credit applied corrections from notes
+ * and drop re-flagged gaps that the story already documents by theme.
+ */
+export function reconcileStoryQualityWithAppliedCorrections(
+  result: StoryQualityResult,
+  warrantyStory: string,
+  technicianNotes: string
+): StoryQualityResult {
+  const applied = extractRequiredCorrectionsFromNotes(technicianNotes || '');
+  const filteredDetails = filterResolvedTechnicianDetails(
+    warrantyStory,
+    result.technicianDetails,
+    applied
+  );
+  const priorCount = Math.max(applied.length, result.technicianDetails.length);
+  return adjustScoreForResolvedGaps(
+    { ...result, technicianDetails: filteredDetails },
+    warrantyStory,
+    priorCount,
+    applied
+  );
 }
 
 export function buildStoryReviewUserMessage(

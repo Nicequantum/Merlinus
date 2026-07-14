@@ -191,7 +191,7 @@ export function LineView({
     // Immediate persist so regenerate (server) sees notes + story corrections.
     onUpdateLine(patch, { immediate: true });
     toast.success(
-      'Detail added — tap Generate to improve the existing story with this fix, then Audit Story.'
+      'Detail woven into the story — tap Audit Story to refresh the score (optional: Generate to polish).'
     );
   };
 
@@ -203,7 +203,7 @@ export function LineView({
     }
     onUpdateLine(patch, { immediate: true });
     toast.success(
-      `Added ${details.length} correction${details.length === 1 ? '' : 's'} — tap Generate to improve the existing story (keeps all prior details), then Audit Story.`
+      `Wove ${details.length} correction${details.length === 1 ? '' : 's'} into the story at the correct steps — tap Audit Story now to refresh the score.`
     );
   };
 

@@ -214,9 +214,9 @@ export function StoryQualityPanel({
                 )}
               </div>
               <p className="text-xs text-benz-secondary mb-3 leading-snug">
-                {MI_PRODUCT_LABEL} flagged these gaps. Each Add button saves the correction into notes and the
-                story. Then tap <strong>Generate</strong> — edit mode strengthens the existing story with those
-                fixes (it does not rewrite from scratch) — then <strong>Audit Story</strong>.
+                {MI_PRODUCT_LABEL} flagged these gaps. <strong>Add All Tech Details</strong> weaves each fix into
+                the story at the correct diagnostic step. Then tap <strong>Audit Story</strong> immediately — the
+                score should rise and fixed items should drop off. Optional: Generate to polish wording.
               </p>
               <ul className="space-y-3">
                 {details.map((detail, index) => {

@@ -3,10 +3,12 @@
  * Primary path for regenerate reliability: integrate corrections into prior story.
  */
 
+import { appendUniqueDetailText } from '@/lib/storyDetailText';
 import {
-  appendUniqueDetailText,
-  formatTechnicianDetailForStory,
-} from '@/lib/storyDetailText';
+  integrateTechnicianDetailsIntoStory,
+  toAuditCorrection,
+  weaveCorrectionIntoStory,
+} from '@/lib/storyAuditIntegration';
 import type { TechnicianDetailPrompt } from '@/types';
 import {
   AUDIT_ENHANCEMENT_NOTES_MARKER,
@@ -101,70 +103,34 @@ export function extractRequiredCorrectionsFromNotes(notes: string): string[] {
 
 /**
  * Insert a single correction into the story at a sensible workflow location
- * (before verification / disconnect / end), not only as a dead appendix.
+ * using the same audit-recognizable prose as Add Tech Details.
  */
 export function insertCorrectionIntoStory(story: string, correction: string): string {
-  const prose = formatTechnicianDetailForStory({
-    missing: '',
+  const detail: TechnicianDetailPrompt = {
+    missing: correction.slice(0, 120),
     prompt: correction,
-    field: 'technicianNotes',
-  } as TechnicianDetailPrompt);
-  if (!prose || storyContainsCorrection(story, prose)) return story;
-
-  const insertBefore = [
-    /\bfinal verification\b/i,
-    /\bverification (test )?drive\b/i,
-    /\bfinal road test\b/i,
-    /\bfinal test drive\b/i,
-    /\bdisconnect\b/i,
-    /\bcleared (fault )?codes\b/i,
-  ];
-
-  for (const re of insertBefore) {
-    const idx = story.search(re);
-    if (idx > 20) {
-      const before = story.slice(0, idx).trimEnd();
-      const after = story.slice(idx).trimStart();
-      const joiner = /[.!?]$/.test(before) ? ' ' : '. ';
-      return `${before}${joiner}${prose} ${after}`.replace(/ +/g, ' ').trim();
-    }
-  }
-
-  // If story still has NOT DOCUMENTED, prefer replacing first occurrence with the prose
-  if (/\[NOT DOCUMENTED\]/i.test(story)) {
-    return story.replace(/\[NOT DOCUMENTED\]/i, prose.replace(/\.$/, ''));
-  }
-
-  return appendUniqueDetailText(story, prose);
+    field: 'workflow',
+  };
+  const audit = toAuditCorrection(detail);
+  if (!audit) return story;
+  if (storyContainsCorrection(story, audit.prose)) return story;
+  return weaveCorrectionIntoStory(story, audit);
 }
 
 /**
  * Deterministic editor: keep prior story, surgically integrate every correction.
- * This is the reliable path that must raise completeness for re-audit.
+ * Delegates to workflow-aware integration so MI audit can credit the fixes.
  */
 export function applyCorrectionsToStoryDeterministically(
   priorStory: string,
   corrections: string[]
 ): string {
-  let result = priorStory.trim();
-  if (!result && corrections.length === 0) return '';
-  if (!result) {
-    return corrections
-      .map((c) =>
-        formatTechnicianDetailForStory({
-          missing: '',
-          prompt: c,
-          field: 'technicianNotes',
-        } as TechnicianDetailPrompt)
-      )
-      .filter(Boolean)
-      .join(' ');
-  }
-
-  for (const c of corrections) {
-    result = insertCorrectionIntoStory(result, c);
-  }
-  return result;
+  const details: TechnicianDetailPrompt[] = corrections.map((c) => ({
+    missing: c.slice(0, 120),
+    prompt: c,
+    field: 'workflow' as const,
+  }));
+  return integrateTechnicianDetailsIntoStory(priorStory, details);
 }
 
 /**

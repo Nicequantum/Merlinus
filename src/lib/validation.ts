@@ -301,6 +301,8 @@ export type ProvisionDealerHttpBody = z.infer<typeof provisionDealerHttpSchema>;
 
 export const reviewStorySchema = z.object({
   warrantyStory: safeText(STORY_TEXT_MAX_CHARS),
+  /** Client snapshot so audit credits pending corrections even if PUT lags. */
+  technicianNotes: safeTextOptional(50_000),
 });
 
 export const certifyStorySchema = z.object({

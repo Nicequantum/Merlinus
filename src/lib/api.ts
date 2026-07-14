@@ -395,12 +395,22 @@ export const api = {
       }
     ),
 
-  scoreStory: (roId: string, lineId: string, warrantyStory: string) =>
+  scoreStory: (
+    roId: string,
+    lineId: string,
+    warrantyStory: string,
+    options?: { technicianNotes?: string }
+  ) =>
     apiFetch<{ quality: StoryQualityResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/score-story`,
       {
         method: 'POST',
-        body: JSON.stringify({ warrantyStory }),
+        body: JSON.stringify({
+          warrantyStory,
+          ...(options?.technicianNotes !== undefined
+            ? { technicianNotes: options.technicianNotes }
+            : {}),
+        }),
         timeoutMs: STORY_SCORE_CLIENT_MS,
         maxRetries: 0,
       }
