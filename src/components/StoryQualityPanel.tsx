@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -8,17 +8,24 @@ import {
   ChevronUp,
   ClipboardList,
   Loader2,
+  Plus,
   Shield,
   Sparkles,
   Target,
   Wrench,
 } from 'lucide-react';
-import type { StoryQualityResult, StoryReviewResult } from '@/types';
+import { MI_PRODUCT_LABEL } from '@/lib/grokModels';
+import { technicianDetailActionLabel } from '@/lib/applyTechnicianDetails';
+import type { StoryQualityResult, StoryReviewResult, TechnicianDetailPrompt } from '@/types';
 
 interface StoryQualityPanelProps {
   quality: StoryQualityResult;
   review?: StoryReviewResult | null;
   panelKey: string;
+  /** Apply one coaching detail into the mapped line field (notes / concern). */
+  onApplyTechnicianDetail?: (detail: TechnicianDetailPrompt, index: number) => void;
+  /** Apply every coaching detail in one click. */
+  onApplyAllTechnicianDetails?: (details: TechnicianDetailPrompt[]) => void;
 }
 
 interface StoryQualityLoadingProps {
@@ -36,13 +43,6 @@ const GRADE_LABELS: Record<StoryQualityResult['grade'], string> = {
   strong: 'Strong — Minor Polish',
   'needs-work': 'Needs Work',
   'at-risk': 'At Risk',
-};
-
-const FIELD_LABELS: Record<string, string> = {
-  technicianNotes: 'Technician Notes',
-  customerConcern: 'Customer Concern',
-  diagnostic: 'Diagnostic Evidence',
-  workflow: 'Workflow Steps',
 };
 
 function scoreTier(score: number): 'excellent' | 'strong' | 'needs-work' | 'at-risk' {
@@ -105,16 +105,46 @@ export function StoryQualityStaleBanner({ onAudit }: StoryQualityStaleProps) {
   );
 }
 
-export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPanelProps) {
+export function StoryQualityPanel({
+  quality,
+  review,
+  panelKey,
+  onApplyTechnicianDetail,
+  onApplyAllTechnicianDetails,
+}: StoryQualityPanelProps) {
   const [expanded, setExpanded] = useState(true);
   const [showReviewDetail, setShowReviewDetail] = useState(!!review);
+  const [appliedIndexes, setAppliedIndexes] = useState<Set<number>>(() => new Set());
 
   useEffect(() => {
     setExpanded(true);
     setShowReviewDetail(!!review);
+    setAppliedIndexes(new Set());
   }, [panelKey, review]);
 
   const ringClass = scoreRingClass(quality.score);
+  const details = quality.technicianDetails;
+  const canApply = Boolean(onApplyTechnicianDetail || onApplyAllTechnicianDetails);
+  const allApplied = useMemo(
+    () => details.length > 0 && details.every((_, i) => appliedIndexes.has(i)),
+    [details, appliedIndexes]
+  );
+
+  const handleApplyOne = (detail: TechnicianDetailPrompt, index: number) => {
+    if (!onApplyTechnicianDetail) return;
+    onApplyTechnicianDetail(detail, index);
+    setAppliedIndexes((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+  };
+
+  const handleApplyAll = () => {
+    if (!onApplyAllTechnicianDetails || details.length === 0) return;
+    onApplyAllTechnicianDetails(details);
+    setAppliedIndexes(new Set(details.map((_, i) => i)));
+  };
 
   return (
     <div className="benz-card p-4">
@@ -151,36 +181,79 @@ export function StoryQualityPanel({ quality, review, panelKey }: StoryQualityPan
           {quality.strengths.length === 0 &&
             quality.improvements.length === 0 &&
             quality.auditRisks.length === 0 &&
-            quality.technicianDetails.length === 0 && (
+            details.length === 0 && (
               <p className="text-sm text-benz-secondary leading-snug">
                 Detailed MI feedback did not load. Tap Audit Story again to refresh the green, yellow, and red
                 coaching sections.
               </p>
             )}
 
-          {quality.technicianDetails.length > 0 && (
+          {details.length > 0 && (
             <div className="benz-alert-info rounded-xl p-3.5 border">
-              <div className="text-xs uppercase tracking-wider font-semibold text-benz-blue mb-2 flex items-center gap-1.5">
-                <Wrench size={12} /> Add Technician Details
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="text-xs uppercase tracking-wider font-semibold text-benz-blue flex items-center gap-1.5">
+                  <Wrench size={12} /> Add Technician Details
+                </div>
+                {canApply && onApplyAllTechnicianDetails && (
+                  <button
+                    type="button"
+                    onClick={handleApplyAll}
+                    disabled={allApplied}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-benz-blue/40 bg-benz-blue/10 px-2.5 py-1.5 text-xs font-semibold text-benz-blue disabled:opacity-50 touch-target"
+                  >
+                    {allApplied ? (
+                      <>
+                        <CheckCircle2 size={12} /> All added
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={12} /> Add All Tech Details
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
               <p className="text-xs text-benz-secondary mb-3 leading-snug">
-                MI 4.3 flagged these specific gaps. Add the missing details to your notes or story before submission.
+                {MI_PRODUCT_LABEL} flagged these specific gaps. Tap a button to insert the detail into the matching
+                field (notes / concern). Re-run Audit Story after you regenerate or edit the narrative.
               </p>
               <ul className="space-y-3">
-                {quality.technicianDetails.map((detail, index) => (
-                  <li key={`${detail.missing}-${index}`} className="text-xs leading-relaxed">
-                    <div className="flex items-start gap-2">
-                      <ClipboardList size={14} className="text-benz-blue shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-semibold text-benz-amber">{detail.missing}</div>
-                        <div className="text-benz-silver mt-0.5">{detail.prompt}</div>
-                        <div className="text-xs text-benz-muted mt-1">
-                          Add to: {FIELD_LABELS[detail.field] || detail.field}
+                {details.map((detail, index) => {
+                  const applied = appliedIndexes.has(index);
+                  return (
+                    <li key={`${detail.missing}-${index}`} className="text-xs leading-relaxed">
+                      <div className="flex items-start gap-2">
+                        <ClipboardList size={14} className="text-benz-blue shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-benz-amber">{detail.missing}</div>
+                          <div className="text-benz-silver mt-0.5">{detail.prompt}</div>
+                          {canApply && onApplyTechnicianDetail ? (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyOne(detail, index)}
+                              disabled={applied}
+                              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-benz-blue/30 bg-benz-surface px-2.5 py-1.5 text-xs font-medium text-benz-blue disabled:opacity-60 touch-target"
+                            >
+                              {applied ? (
+                                <>
+                                  <CheckCircle2 size={12} className="text-benz-green" /> Added
+                                </>
+                              ) : (
+                                <>
+                                  <Plus size={12} /> {technicianDetailActionLabel(detail.field)}
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <div className="text-xs text-benz-muted mt-1">
+                              Add to: {technicianDetailActionLabel(detail.field).replace(/^Add to /, '')}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

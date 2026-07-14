@@ -46,4 +46,21 @@ describe('manual story audit workflow', () => {
     assert.match(panel, /Writing your warranty narrative/);
     assert.doesNotMatch(panel, /Generating story and scoring/i);
   });
+
+  test('StoryQualityPanel wires Add All and per-detail apply actions', () => {
+    const panel = readFileSync(join(process.cwd(), 'src/components/StoryQualityPanel.tsx'), 'utf8');
+    assert.match(panel, /onApplyTechnicianDetail/);
+    assert.match(panel, /onApplyAllTechnicianDetails/);
+    assert.match(panel, /Add All Tech Details/);
+    assert.match(panel, /technicianDetailActionLabel/);
+  });
+
+  test('LineView wires tech-detail apply handlers into quality panel', () => {
+    const lineView = readFileSync(join(process.cwd(), 'src/components/LineView.tsx'), 'utf8');
+    assert.match(lineView, /handleApplyTechnicianDetail/);
+    assert.match(lineView, /handleApplyAllTechnicianDetails/);
+    assert.match(lineView, /onApplyAllTechnicianDetails/);
+    assert.match(lineView, /GENERATE_STORY_BUTTON_LABEL|MI_PRODUCT_LABEL/);
+    assert.doesNotMatch(lineView, /Generate MI 4\.3/);
+  });
 });

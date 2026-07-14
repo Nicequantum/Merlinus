@@ -6,6 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { OFFLINE_ERROR } from '@/lib/errors';
+import { MI_PRODUCT_LABEL } from '@/lib/grokModels';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
 
@@ -358,7 +359,7 @@ export function useROStoryWorkflow(
       refs.storyReviewInFlightRef.current = true;
       setters.setReviewingLineId(lineId);
       setters.setIsReviewing(true);
-      toast.message('Running full MI 4.3 review…');
+      toast.message(`Running full ${MI_PRODUCT_LABEL} review…`);
 
       try {
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
@@ -415,7 +416,7 @@ export function useROStoryWorkflow(
           }),
           { skipPersist: true }
         );
-        toast.success(`MI 4.3 review complete — ${review.score}/100 (${review.grade})`);
+        toast.success(`${MI_PRODUCT_LABEL} review complete — ${review.score}/100 (${review.grade})`);
       } catch (error: unknown) {
         if (seq === refs.reviewStorySeqRef.current) {
           clientLog.error('story.review_failed', error);

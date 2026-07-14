@@ -40,6 +40,7 @@ import type {
   RepairOrder,
   StoryQualityResult,
   StoryReviewResult,
+  TechnicianDetailPrompt,
   TemplateCategory,
 } from '@/types';
 
@@ -47,12 +48,16 @@ import { useLineViewCertificationForm } from '@/hooks/lineView/useLineViewCertif
 import { useLineViewPdfExport } from '@/hooks/lineView/useLineViewPdfExport';
 import { useStoryGenerationPhase } from '@/hooks/useStoryGenerationPhase';
 import {
-
   complaintLabel,
   getWarrantyStoryTextareaValue,
   readWarrantyStoryText,
 } from '@/lib/lineViewUtils';
 import { copyFormattedStory } from '@/utils/pdfExport';
+import {
+  applyAllTechnicianDetails,
+  applyTechnicianDetail,
+} from '@/lib/applyTechnicianDetails';
+import { GENERATE_STORY_BUTTON_LABEL, MI_PRODUCT_LABEL } from '@/lib/grokModels';
 
 interface LineViewProps {
   ro: RepairOrder;
@@ -176,6 +181,28 @@ export function LineView({
     const base = line.description?.trim() || 'Warranty Story';
     return base.length > 80 ? `${base.slice(0, 77)}…` : base;
   }, [line.description]);
+
+  const handleApplyTechnicianDetail = (detail: TechnicianDetailPrompt) => {
+    const patch = applyTechnicianDetail(line, detail);
+    if (Object.keys(patch).length === 0) {
+      toast.message('Nothing to add for this item.');
+      return;
+    }
+    onUpdateLine(patch);
+    toast.success('Detail added — re-generate or edit the story, then re-run Audit Story.');
+  };
+
+  const handleApplyAllTechnicianDetails = (details: TechnicianDetailPrompt[]) => {
+    const patch = applyAllTechnicianDetails(line, details);
+    if (Object.keys(patch).length === 0) {
+      toast.message('Those details are already in your notes.');
+      return;
+    }
+    onUpdateLine(patch);
+    toast.success(
+      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} — re-generate or edit, then re-audit.`
+    );
+  };
 
   const handleInsertTemplate = (content: string, _title: string, category: TemplateCategory) => {
     // Warranty templates append to the story field — Customer Pay uses onApplyCustomerPayTemplate instead.
@@ -356,7 +383,7 @@ export function LineView({
                     {generationPhase.message}
                   </>
                 ) : (
-                  'Generate MI 4.3'
+                  GENERATE_STORY_BUTTON_LABEL
                 )}
               </button>
               {isGenerating && (
@@ -406,7 +433,7 @@ export function LineView({
           <p className="benz-hint text-center">
             {isCustomerPayLine
               ? 'Customer Pay templates skip AI — pick another template or edit the story below.'
-              : 'Generate MI 4.3–ready stories, review with AI, edit, then save to grow your knowledge base.'}
+              : `Generate ${MI_PRODUCT_LABEL}–ready stories, review with AI, edit, then save to grow your knowledge base.`}
           </p>
           {isGenerating && !isCustomerPayLine && !line.warrantyStory?.trim() && (
             <StoryQualityLoadingPanel
@@ -426,7 +453,7 @@ export function LineView({
                 ? 'Pick an instant template from the library — no AI wait time.'
                 : 'Generate with Grok or browse templates to start your 3 C\'s narrative.'
             }
-            actionLabel={isCustomerPayLine ? 'Browse Customer Pay templates' : 'Generate MI 4.3'}
+            actionLabel={isCustomerPayLine ? 'Browse Customer Pay templates' : GENERATE_STORY_BUTTON_LABEL}
             onAction={() => (isCustomerPayLine ? setShowTemplateLibrary(true) : handleGenerateStory())}
             className="benz-story-empty-state"
           />
@@ -489,6 +516,8 @@ export function LineView({
                     quality={storyQuality}
                     review={storyReview}
                     panelKey={`${line.id}:${storyQuality.scoredAgainstStory ?? ''}:${storyQuality.score}`}
+                    onApplyTechnicianDetail={(detail) => handleApplyTechnicianDetail(detail)}
+                    onApplyAllTechnicianDetails={handleApplyAllTechnicianDetails}
                   />
                 )}
                 {!isGenerating && !isScoring && !isReviewing && !storyQuality && storyQualityStale && (

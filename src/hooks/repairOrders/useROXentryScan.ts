@@ -13,6 +13,7 @@ import {
   visionPipelineBlockedMessage,
 } from '@/hooks/visionPipeline';
 import { clientLog } from '@/lib/clientLog';
+import { MI_PRODUCT_LABEL } from '@/lib/grokModels';
 import { isRequestAborted } from '@/lib/requestAbort';
 import { xentryImageNeedsAnalysis } from '@/lib/xentryAnalysisState';
 import { warmupOcrWorker } from '@/services/ocr';
@@ -359,7 +360,7 @@ export function useROXentryScan({
       return;
     }
     toast.success(
-      `${fileCount} diagnostic photo${fileCount === 1 ? '' : 's'} processed — tap Generate MI 4.3 to use extracted data.`
+      `${fileCount} diagnostic photo${fileCount === 1 ? '' : 's'} processed — tap Generate ${MI_PRODUCT_LABEL} to use extracted data.`
     );
   }, []);
 
