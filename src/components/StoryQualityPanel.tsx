@@ -214,8 +214,9 @@ export function StoryQualityPanel({
                 )}
               </div>
               <p className="text-xs text-benz-secondary mb-3 leading-snug">
-                {MI_PRODUCT_LABEL} flagged these specific gaps. Tap a button to insert the detail into the matching
-                field (notes / concern). Re-run Audit Story after you regenerate or edit the narrative.
+                {MI_PRODUCT_LABEL} flagged these gaps. Each Add button inserts the detail into the warranty story
+                (and supporting notes). Then tap <strong>Audit Story</strong> again — the score should rise for
+                gaps that are now present in the narrative.
               </p>
               <ul className="space-y-3">
                 {details.map((detail, index) => {

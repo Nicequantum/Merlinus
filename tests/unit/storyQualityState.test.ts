@@ -28,4 +28,13 @@ describe('story quality state', () => {
     assert.equal(storiesMatchForAudit(raw, cdk), true);
     assert.equal(isStoryQualityCurrent({ scoredAgainstStory: raw } as never, cdk), true);
   });
+
+  it('does not treat scoredAgainstStory matching itself as free pass for a different live story', () => {
+    // Regression: UI used isStoryQualityCurrent(quality, quality.scoredAgainstStory) which is always true.
+    const quality = {
+      scoredAgainstStory: 'Original audited story text',
+    } as never;
+    assert.equal(isStoryQualityCurrent(quality, 'Original audited story text'), true);
+    assert.equal(isStoryQualityCurrent(quality, 'Original audited story text\n\nAdded tech detail.'), false);
+  });
 });

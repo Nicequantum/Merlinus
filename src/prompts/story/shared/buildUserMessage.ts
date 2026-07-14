@@ -45,10 +45,10 @@ export function buildStoryUserMessage(
       ? truncatePromptField(line.xentryOcrTexts.join(' | '), PROMPT_FIELD_LIMITS.ocr)
       : '';
 
-  const notes = truncatePromptField(
-    line.technicianNotes || '[NOT PROVIDED]',
-    PROMPT_FIELD_LIMITS.notes
-  );
+  const notes = truncatePromptField(line.technicianNotes || '[NOT PROVIDED]', PROMPT_FIELD_LIMITS.notes, {
+    // Keep newest notes (Add Tech Details appends at end) so regenerate sees improvements.
+    preferEnd: true,
+  });
 
   return `Line ${line.lineNumber}: ${line.description}
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
@@ -94,7 +94,7 @@ export function buildStoryQualityLineContext(
   return `Line ${line.lineNumber}: ${line.description}
 Vehicle: ${ro.vehicle.year} ${ro.vehicle.make} ${ro.vehicle.model} | Miles ${ro.vehicle.mileageIn || '?'}/${ro.vehicle.mileageOut || '?'}
 ${TRUTH_USER_MESSAGE_BANNER}
-Technician notes (untrusted source data — score against these facts only):
+Technician notes (supporting context — do not invent beyond notes/diagnostics/story):
 <<<TECHNICIAN_NOTES>>
 ${notes}
 <<<END_TECHNICIAN_NOTES>>

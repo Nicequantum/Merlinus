@@ -49,9 +49,9 @@ export function deriveCurrentLineStoryState({
     const storyText = currentLine?.warrantyStory?.trim() ?? '';
     const quality = storyQualityByLine[currentLineId] ?? currentLine?.storyQualityAudit ?? null;
     if (!quality) return null;
+    // Only show score when it matches the on-screen story — never fall back to
+    // scoredAgainstStory alone (that always matched itself and froze the panel at the old audit).
     if (storyText && isStoryQualityCurrent(quality, storyText)) return quality;
-    const baseline = quality.scoredAgainstStory?.trim() ?? '';
-    if (baseline && isStoryQualityCurrent(quality, baseline)) return quality;
     return null;
   })();
 

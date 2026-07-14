@@ -188,19 +188,20 @@ export function LineView({
       toast.message('Nothing to add for this item.');
       return;
     }
+    // Patches warrantyStory (scored text) + notes so re-audit can credit the change.
     onUpdateLine(patch);
-    toast.success('Detail added — re-generate or edit the story, then re-run Audit Story.');
+    toast.success('Detail added to the story — tap Audit Story again to refresh the score.');
   };
 
   const handleApplyAllTechnicianDetails = (details: TechnicianDetailPrompt[]) => {
     const patch = applyAllTechnicianDetails(line, details);
     if (Object.keys(patch).length === 0) {
-      toast.message('Those details are already in your notes.');
+      toast.message('Those details are already in the story/notes.');
       return;
     }
     onUpdateLine(patch);
     toast.success(
-      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} — re-generate or edit, then re-audit.`
+      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} to the story — tap Audit Story again.`
     );
   };
 

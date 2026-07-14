@@ -58,6 +58,26 @@ describe('deriveCompanionLineStoryState', () => {
     assert.equal(result.storyQualityStale, false);
   });
 
+  it('hides quality after story changes (Add Tech Details / regenerate) so stale audit cannot freeze', () => {
+    const ro = makeRO([
+      makeLine({
+        warrantyStory: 'Technician inspected brakes and found worn pads.\n\nSource voltage 12.4V.',
+        storyQualityAudit: quality,
+      }),
+    ]);
+    const result = deriveCompanionLineStoryState({
+      ro,
+      activeLineId: 'line-1',
+      storyQuality: quality,
+      storyReview: null,
+      storyQualityStale: true,
+      storyCertification: null,
+    });
+
+    assert.equal(result.storyQuality, null);
+    assert.equal(result.storyQualityStale, true);
+  });
+
   it('resolves certification from line.storyCertification when hook record is missing', () => {
     const ro = makeRO([
       makeLine({

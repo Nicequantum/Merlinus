@@ -1,12 +1,24 @@
 /** Field caps — enough diagnostic context without bloating the user message. */
 export const PROMPT_FIELD_LIMITS = {
   ocr: 500,
-  notes: 900,
-  concern: 400,
+  /** Raised so "Add Tech Details" appends are not chopped off at the end. */
+  notes: 2_500,
+  concern: 600,
 } as const;
 
-export function truncatePromptField(text: string, maxLen: number): string {
+/**
+ * Truncate for prompts.
+ * preferEnd=true keeps the newest content (tech-detail appends land at the end).
+ */
+export function truncatePromptField(
+  text: string,
+  maxLen: number,
+  options?: { preferEnd?: boolean }
+): string {
   const trimmed = text.trim();
   if (trimmed.length <= maxLen) return trimmed;
+  if (options?.preferEnd) {
+    return `…${trimmed.slice(-(maxLen - 1))}`;
+  }
   return `${trimmed.slice(0, maxLen)}…`;
 }

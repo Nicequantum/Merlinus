@@ -26,13 +26,14 @@ function useStableDraft(value: string, fieldKey: string, suppressExternalSync: b
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fieldKey-only reset
   }, [fieldKey]);
 
+  // Accept external updates (regenerate, Apply Tech Details, templates) even while focused.
+  // Typing is safe: onChange already sets lastEmittedRef, so value === lastEmittedRef and we skip.
   useEffect(() => {
     if (suppressExternalSync) return;
-    if (isFocusedRef.current) return;
     if (value === lastEmittedRef.current) return;
     lastEmittedRef.current = value;
     setDraft(value);
-  }, [value, suppressExternalSync]);
+  }, [value, suppressExternalSync, lastEmittedRef]);
 
   const commit = useCallback((next: string, el?: HTMLTextAreaElement) => {
     if (el && isFocusedRef.current) {

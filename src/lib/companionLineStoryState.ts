@@ -53,13 +53,14 @@ function resolveQualityForLine(
   const candidate = fromHook ?? audit ?? null;
   if (!candidate) return null;
 
+  // Bind quality only when it matches the live story on the line.
   if (storyText && isStoryQualityCurrent(candidate, storyText)) {
     return candidate;
   }
 
-  const baseline = candidate.scoredAgainstStory?.trim() ?? '';
-  if (baseline && isStoryQualityCurrent(candidate, baseline)) {
-    return candidate;
+  // Companion race: line story not synced yet — allow hook quality with a baseline only when story is empty.
+  if (!storyText && fromHook?.scoredAgainstStory?.trim()) {
+    return fromHook;
   }
 
   return null;
@@ -68,12 +69,16 @@ function resolveQualityForLine(
 function resolveQualityStale(
   line: RepairLine,
   quality: StoryQualityResult | null,
-  fromHookStale: boolean
+  fromHookStale: boolean,
+  rawCandidate: StoryQualityResult | null
 ): boolean {
-  if (!quality) return false;
+  if (fromHookStale) return true;
   const storyText = line.warrantyStory?.trim() ?? '';
-  if (!storyText) return fromHookStale;
-  return fromHookStale || !isStoryQualityCurrent(quality, storyText);
+  if (!storyText) return false;
+  // Prefer resolved quality; if null because of mismatch, still detect stale vs raw candidate.
+  const check = quality ?? rawCandidate;
+  if (!check?.scoredAgainstStory?.trim()) return false;
+  return !isStoryQualityCurrent(check, storyText);
 }
 
 /** Merge hook-level story state with persisted line fields for the desktop companion. */
@@ -100,6 +105,7 @@ export function deriveCompanionLineStoryState({
     };
   }
 
+  const rawCandidate = storyQuality ?? activeLine.storyQualityAudit ?? null;
   const resolvedQuality = resolveQualityForLine(activeLine, storyQuality);
   const resolvedCertification = resolveCertificationForLine(activeLine, storyCertification);
 
@@ -107,7 +113,12 @@ export function deriveCompanionLineStoryState({
     activeLine,
     storyQuality: resolvedQuality,
     storyReview: resolvedQuality ? storyReview : null,
-    storyQualityStale: resolveQualityStale(activeLine, resolvedQuality, storyQualityStale),
+    storyQualityStale: resolveQualityStale(
+      activeLine,
+      resolvedQuality,
+      storyQualityStale,
+      rawCandidate
+    ),
     storyCertification: resolvedCertification,
   };
 }

@@ -78,13 +78,18 @@ export function buildStoryScoreUserMessage(
   const pack = resolveQualityPack(options);
   return `${buildStoryQualityLineContext(ro, line, pack)}
 
-WARRANTY STORY TO SCORE (authoritative — score only this text as submitted):
+WARRANTY STORY TO SCORE (authoritative — score THIS text as submitted):
 ---
 ${warrantyStory}
 ---
 
-Score this story for ${pack.quality.auditLabel} survival. Treat the story above as the sole source of truth; post-audit corrections that address earlier gaps should raise the score unless they contradict repair line context.
-List specific missing technical details in technicianDetails.`;
+Score this story for ${pack.quality.auditLabel} survival.
+CRITICAL SCORING RULES:
+- The warranty story above is the sole scored artifact. Credit every workflow step, code, measurement, and technical detail that appears in the story.
+- If this story includes details that address earlier audit gaps (including text added after a prior audit or after "Add Tech Details"), raise the score and do NOT re-list those items in technicianDetails / improvements / auditRisks.
+- Only flag gaps that are still absent from the warranty story text itself.
+- Post-audit corrections that address earlier gaps should raise the score unless they contradict notes/diagnostics.
+List specific missing technical details in technicianDetails only for content still missing from the story.`;
 }
 
 export function buildStoryReviewUserMessage(
