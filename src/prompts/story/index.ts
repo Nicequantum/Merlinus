@@ -11,7 +11,15 @@ export {
   buildStoryUserMessage,
   buildStoryQualityLineContext,
   selectPersonaFromPack,
+  shouldRegenerateStory,
+  REGENERATE_PRIOR_STORY_MIN_CHARS,
+  type BuildStoryUserMessageOptions,
 } from './shared/buildUserMessage';
+export {
+  STORY_REGENERATE_SYSTEM_ADDENDUM,
+  STORY_REGENERATE_USER_HEADER,
+  AUDIT_ENHANCEMENT_NOTES_MARKER,
+} from './shared/regenerateRules';
 export {
   STORY_BRAND_IDS,
   STORY_BRAND_PACKS,

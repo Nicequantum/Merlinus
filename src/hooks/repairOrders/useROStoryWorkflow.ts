@@ -167,12 +167,19 @@ export function useROStoryWorkflow(
       refs.storyGenerationInFlightRef.current = true;
       setters.setGeneratingLineId(lineId);
       setters.setIsGenerating(true);
-      toast.message('Generating warranty story…');
+      const preLine = refs.roRef.current?.repairLines.find((l) => l.id === lineId);
+      const isRevisionPass = Boolean(preLine?.warrantyStory?.trim() && preLine.warrantyStory.trim().length >= 40);
+      toast.message(
+        isRevisionPass
+          ? 'Rewriting story with your tech details…'
+          : 'Generating warranty story…'
+      );
 
       try {
         if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();
         if (refs.storyScoringInFlightRef.current) deps.invalidateScoreRequests();
         // Never block generation on a stuck save queue (was causing multi-minute waits).
+        // Critical before revision: notes + interim story enhancements must hit the server.
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
         const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
@@ -225,7 +232,11 @@ export function useROStoryWorkflow(
         refs.storyGenerationInFlightRef.current = false;
         setters.setIsGenerating(false);
         setters.setGeneratingLineId(null);
-        toast.success('Warranty story generated — tap Audit Story when ready for MI scoring');
+        toast.success(
+          isRevisionPass
+            ? 'Story rewritten with tech details — tap Audit Story to refresh the score'
+            : 'Warranty story generated — tap Audit Story when ready for MI scoring'
+        );
       } catch (error: unknown) {
         if (seq === refs.generateStorySeqRef.current) {
           clientLog.error('story.generate_failed', error);

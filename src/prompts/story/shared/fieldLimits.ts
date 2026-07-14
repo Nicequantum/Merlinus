@@ -4,6 +4,8 @@ export const PROMPT_FIELD_LIMITS = {
   /** Raised so "Add Tech Details" appends are not chopped off at the end. */
   notes: 2_500,
   concern: 600,
+  /** Prior story on revision passes — full narrative for intelligent rewrite. */
+  priorStory: 6_000,
 } as const;
 
 /**

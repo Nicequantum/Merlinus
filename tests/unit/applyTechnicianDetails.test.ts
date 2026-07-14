@@ -30,6 +30,7 @@ describe('applyTechnicianDetails', () => {
       field: 'diagnostic',
     };
     const patch = applyTechnicianDetail(line, diagnostic);
+    assert.match(patch.technicianNotes || '', /\[Audit enhancement\]/);
     assert.match(patch.technicianNotes || '', /\[Diagnostic\]/);
     assert.match(patch.technicianNotes || '', /cylinder 3/i);
     assert.match(patch.warrantyStory || '', /cylinder 3/i);
@@ -66,6 +67,7 @@ describe('applyTechnicianDetails', () => {
     const once = applyAllTechnicianDetails(line, details);
     assert.match(once.warrantyStory || '', /12\.4V|voltage/i);
     assert.match(once.warrantyStory || '', /road test/i);
+    assert.match(once.technicianNotes || '', /\[Audit enhancement\]/);
     assert.match(once.technicianNotes || '', /\[Workflow\]/);
 
     const twice = applyAllTechnicianDetails(

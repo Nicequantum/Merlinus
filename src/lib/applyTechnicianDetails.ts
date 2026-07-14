@@ -1,4 +1,5 @@
 import type { RepairLine, TechnicianDetailPrompt } from '@/types';
+import { AUDIT_ENHANCEMENT_NOTES_MARKER } from '@/prompts/story/shared/regenerateRules';
 
 export type TechnicianDetailFieldPatch = Partial<
   Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>
@@ -82,11 +83,13 @@ export function applyTechnicianDetail(
   if (detail.field === 'customerConcern' && notesBody) {
     patch.customerConcern = appendUniqueDetailText(line.customerConcern || '', notesBody);
   } else if (notesBody) {
-    const tagged = `${fieldPrefix(detail.field)}${notesBody}`;
+    // Tagged for regenerate prompts — must be woven into the rewrite, not left as an appendix.
+    const tagged = `${AUDIT_ENHANCEMENT_NOTES_MARKER} ${fieldPrefix(detail.field)}${notesBody}`;
     patch.technicianNotes = appendUniqueDetailText(line.technicianNotes || '', tagged);
   }
 
   if (storyBody) {
+    // Interim append so re-audit can credit content; regenerate rewrites this into prose.
     patch.warrantyStory = appendUniqueDetailText(line.warrantyStory || '', storyBody);
   }
 

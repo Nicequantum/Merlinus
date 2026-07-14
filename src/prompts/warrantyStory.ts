@@ -8,6 +8,7 @@ import {
   buildStoryUserMessage,
   DEFAULT_STORY_BRAND,
   resolveStoryBrandPack,
+  shouldRegenerateStory,
   type StoryBrandId,
   type StoryBrandPack,
 } from './story';
@@ -19,11 +20,18 @@ import {
   MERCEDES_WORKFLOW_STEPS,
   MERCEDES_WORKFLOW_SUMMARY,
 } from './story/brands/mercedes';
-import { selectPersonaFromPack } from './story/shared/buildUserMessage';
+import {
+  selectPersonaFromPack,
+  type BuildStoryUserMessageOptions,
+} from './story/shared/buildUserMessage';
 import { PROMPT_FIELD_LIMITS as SHARED_FIELD_LIMITS } from './story/shared/fieldLimits';
+import { STORY_REGENERATE_SYSTEM_ADDENDUM } from './story/shared/regenerateRules';
 
 /** Higher temperature for natural voice variation between lines and technicians. */
 export const WARRANTY_STORY_TEMPERATURE = 0.42;
+
+/** Slightly cooler on revision passes — favor fidelity to notes + prior story over freestyle. */
+export const WARRANTY_STORY_REGENERATE_TEMPERATURE = 0.32;
 
 /** Room for long 3C narratives with complete diagnostic workflow and measurements. */
 export const WARRANTY_STORY_MAX_TOKENS = 4096;
@@ -62,11 +70,13 @@ export const STORY_TEMPLATES = [
 export type BuildWarrantyStoryOptions = {
   brand?: StoryBrandId | string | null;
   pack?: StoryBrandPack;
-};
+} & BuildStoryUserMessageOptions;
 
 /**
  * Build generate user message with strict truth filter (no Customer Complaint / RO complaints).
  * Defaults to Mercedes pack when brand is omitted (legacy callers / pilot).
+ * When the line already has a substantial warranty story, builds a REVISION prompt that
+ * integrates prior narrative + tech-detail additions (not a notes-only first pass).
  */
 export function buildWarrantyStoryUserMessage(
   ro: RepairOrder,
@@ -78,11 +88,24 @@ export function buildWarrantyStoryUserMessage(
     resolveStoryBrandPack(options?.brand ?? DEFAULT_STORY_BRAND, {
       preferDefaultMercedes: true,
     });
-  return buildStoryUserMessage(ro, line, pack);
+  const { brand: _b, pack: _p, ...messageOptions } = options ?? {};
+  return buildStoryUserMessage(ro, line, pack, messageOptions);
 }
 
-export function getStorySystemPrompt(brand?: StoryBrandId | string | null): string {
-  return resolveStoryBrandPack(brand ?? DEFAULT_STORY_BRAND, {
+export function getStorySystemPrompt(
+  brand?: StoryBrandId | string | null,
+  options?: { regenerate?: boolean; line?: RepairLine }
+): string {
+  const pack = resolveStoryBrandPack(brand ?? DEFAULT_STORY_BRAND, {
     preferDefaultMercedes: true,
-  }).systemPrompt;
+  });
+  const regen =
+    options?.regenerate === true ||
+    (options?.line ? shouldRegenerateStory(options.line) : false);
+  if (!regen) return pack.systemPrompt;
+  return `${pack.systemPrompt}
+
+${STORY_REGENERATE_SYSTEM_ADDENDUM}`;
 }
+
+export { shouldRegenerateStory, STORY_REGENERATE_SYSTEM_ADDENDUM };

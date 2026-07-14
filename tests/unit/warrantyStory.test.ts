@@ -98,7 +98,7 @@ describe('warranty story prompts', () => {
   });
 
   test('buildWarrantyStoryUserMessage includes persona, notes, diagnostics; omits customer complaint', () => {
-    const message = buildWarrantyStoryUserMessage(baseRo, baseLine);
+    const message = buildWarrantyStoryUserMessage(baseRo, baseLine, { mode: 'generate' });
     assert.match(message, /Line 1/i);
     assert.match(message, /28450→28458/);
     assert.match(message, /P0300/);
@@ -112,6 +112,24 @@ describe('warranty story prompts', () => {
     assert.doesNotMatch(message, /Complaint for this line/i);
     assert.doesNotMatch(message, /SHOULD NOT APPEAR IN PROMPT/);
     assert.doesNotMatch(message, /ADVISOR INACCURATE/);
+    assert.doesNotMatch(message, /PRIOR_WARRANTY_STORY/);
+  });
+
+  test('regenerate pass includes prior story and revision instructions', () => {
+    const lineWithStory = {
+      ...baseLine,
+      warrantyStory:
+        'Road tested the vehicle and confirmed misfire. Connected XENTRY. Found P0300. [NOT DOCUMENTED] for source voltage.',
+      technicianNotes:
+        'Found P0300. Source voltage 12.4V.\n[Audit enhancement] [Diagnostic] Guided test result for cylinder 3 elevated.',
+    };
+    const message = buildWarrantyStoryUserMessage(baseRo, lineWithStory, { mode: 'auto' });
+    assert.match(message, /REVISION PASS|PRIOR_WARRANTY_STORY/i);
+    assert.match(message, /Road tested the vehicle/);
+    assert.match(message, /AUDIT_ENHANCEMENTS|Guided test result/i);
+    assert.match(message, /integrate|woven|rewrite/i);
+    assert.match(message, /<<<TECHNICIAN_NOTES>>/);
+    assert.doesNotMatch(message, /RO_COMPLAINTS/);
   });
 
   test('WARRANTY_STORY_MAX_TOKENS allows full workflow narratives', () => {

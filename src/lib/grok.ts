@@ -35,8 +35,11 @@ import {
 } from '@/prompts/story';
 import {
   WARRANTY_STORY_MAX_TOKENS,
+  WARRANTY_STORY_REGENERATE_TEMPERATURE,
   WARRANTY_STORY_TEMPERATURE,
   buildWarrantyStoryUserMessage,
+  getStorySystemPrompt,
+  shouldRegenerateStory,
 } from '@/prompts/warrantyStory';
 
 export { PROMPT_VERSION };
@@ -442,18 +445,26 @@ export async function generateWarrantyStory(
   options?: StoryAiOptions
 ): Promise<string> {
   const pack = resolveStoryAiPack(options);
-  const userMessage = buildWarrantyStoryUserMessage(ro, line, { pack });
+  const isRegen = shouldRegenerateStory(line, { mode: 'auto' });
+  const userMessage = buildWarrantyStoryUserMessage(ro, line, {
+    pack,
+    mode: isRegen ? 'regenerate' : 'generate',
+  });
+  const systemPrompt = isRegen
+    ? getStorySystemPrompt(pack.id, { regenerate: true, line })
+    : pack.systemPrompt;
+
   const story = await grokChat(
     [
-      { role: 'system', content: pack.systemPrompt },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
     {
       model: GROK_STORY_MODEL,
-      temperature: WARRANTY_STORY_TEMPERATURE,
+      temperature: isRegen ? WARRANTY_STORY_REGENERATE_TEMPERATURE : WARRANTY_STORY_TEMPERATURE,
       max_tokens: WARRANTY_STORY_MAX_TOKENS,
       timeoutMs: STORY_GENERATE_GROK_MS,
-      perfLabel: 'grok.story.generate',
+      perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
     }
   );
   const trimmed = story?.trim();

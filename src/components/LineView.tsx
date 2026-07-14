@@ -190,7 +190,9 @@ export function LineView({
     }
     // Patches warrantyStory (scored text) + notes so re-audit can credit the change.
     onUpdateLine(patch);
-    toast.success('Detail added to the story — tap Audit Story again to refresh the score.');
+    toast.success(
+      'Detail added — tap Generate again to rewrite the full story with this detail, then Audit Story.'
+    );
   };
 
   const handleApplyAllTechnicianDetails = (details: TechnicianDetailPrompt[]) => {
@@ -201,7 +203,7 @@ export function LineView({
     }
     onUpdateLine(patch);
     toast.success(
-      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} to the story — tap Audit Story again.`
+      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} — tap Generate to rewrite the full story integrating them, then Audit Story.`
     );
   };
 
