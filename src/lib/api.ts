@@ -381,10 +381,18 @@ export const api = {
       signal: options?.signal,
     }),
 
-  generateStory: (roId: string, lineId: string) =>
+  generateStory: (
+    roId: string,
+    lineId: string,
+    body?: { technicianNotes?: string; warrantyStory?: string }
+  ) =>
     apiFetch<{ warrantyStory: string; quality: StoryQualityResult | null; cdkSanitized?: boolean }>(
       `/api/repair-orders/${roId}/lines/${lineId}/generate-story`,
-      { method: 'POST', timeoutMs: STORY_GENERATE_CLIENT_MS }
+      {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+        timeoutMs: STORY_GENERATE_CLIENT_MS,
+      }
     ),
 
   scoreStory: (roId: string, lineId: string, warrantyStory: string) =>

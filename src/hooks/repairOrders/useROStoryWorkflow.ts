@@ -201,7 +201,11 @@ export function useROStoryWorkflow(
         deps.clearLineCertification(lineId);
         deps.invalidateReviewRequests();
         deps.invalidateScoreRequests();
-        const { warrantyStory, cdkSanitized } = await api.generateStory(latestRO.id, lineId);
+        // Send client-side notes + story so regenerate never races a lagging PUT.
+        const { warrantyStory, cdkSanitized } = await api.generateStory(latestRO.id, lineId, {
+          technicianNotes: targetLine.technicianNotes,
+          warrantyStory: targetLine.warrantyStory,
+        });
         if (seq !== refs.generateStorySeqRef.current) return;
 
         setters.setLastGeneratedStoryByLine((prev) => ({ ...prev, [lineId]: warrantyStory }));

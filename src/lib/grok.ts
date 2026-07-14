@@ -447,41 +447,65 @@ export async function generateWarrantyStory(
   const pack = resolveStoryAiPack(options);
   const priorStory = line.warrantyStory?.trim() ?? '';
   const isRegen = shouldRegenerateStory(line, { mode: 'auto' });
-  const userMessage = buildWarrantyStoryUserMessage(ro, line, {
-    pack,
-    mode: isRegen ? 'regenerate' : 'generate',
-  });
-  const systemPrompt = isRegen
-    ? getStorySystemPrompt(pack.id, { regenerate: true, line })
-    : pack.systemPrompt;
+  const {
+    applyCorrectionsToStoryDeterministically,
+    ensureStoryPreservesPriorAndCorrections,
+    extractRequiredCorrectionsFromNotes,
+  } = await import('@/lib/storyRegenerateGuard');
+  const corrections = extractRequiredCorrectionsFromNotes(line.technicianNotes || '');
 
-  const story = await grokChat(
-    [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
-    {
-      model: GROK_STORY_MODEL,
-      temperature: isRegen ? WARRANTY_STORY_REGENERATE_TEMPERATURE : WARRANTY_STORY_TEMPERATURE,
-      max_tokens: WARRANTY_STORY_MAX_TOKENS,
-      timeoutMs: STORY_GENERATE_GROK_MS,
-      perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
+  // If this is a revision pass with pending corrections, always have a deterministic baseline
+  // so we never return 500 / empty when the model times out or errors.
+  const deterministicBaseline =
+    isRegen && priorStory
+      ? applyCorrectionsToStoryDeterministically(priorStory, corrections)
+      : null;
+
+  try {
+    const userMessage = buildWarrantyStoryUserMessage(ro, line, {
+      pack,
+      mode: isRegen ? 'regenerate' : 'generate',
+    });
+    const systemPrompt = isRegen
+      ? getStorySystemPrompt(pack.id, { regenerate: true, line })
+      : pack.systemPrompt;
+
+    const story = await grokChat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      {
+        model: GROK_STORY_MODEL,
+        temperature: isRegen ? WARRANTY_STORY_REGENERATE_TEMPERATURE : WARRANTY_STORY_TEMPERATURE,
+        max_tokens: WARRANTY_STORY_MAX_TOKENS,
+        timeoutMs: STORY_GENERATE_GROK_MS,
+        perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
+      }
+    );
+    let trimmed = story?.trim();
+    if (!trimmed) {
+      if (deterministicBaseline) return deterministicBaseline;
+      throw new Error('AI did not return a warranty story. Try again or type the story manually.');
     }
-  );
-  let trimmed = story?.trim();
-  if (!trimmed) {
-    throw new Error('AI did not return a warranty story. Try again or type the story manually.');
-  }
 
-  // Conservative safety net: never drop prior facts or required audit corrections.
-  if (isRegen && priorStory) {
-    const { ensureStoryPreservesPriorAndCorrections, extractRequiredCorrectionsFromNotes } =
-      await import('@/lib/storyRegenerateGuard');
-    const corrections = extractRequiredCorrectionsFromNotes(line.technicianNotes || '');
-    trimmed = ensureStoryPreservesPriorAndCorrections(priorStory, trimmed, corrections);
+    // Never drop prior facts or required audit corrections.
+    if (isRegen && priorStory) {
+      trimmed = ensureStoryPreservesPriorAndCorrections(priorStory, trimmed, corrections);
+    }
+    return trimmed;
+  } catch (error) {
+    // Revision must not brick the tech flow — fall back to prior story + corrections.
+    if (deterministicBaseline) {
+      logger.warn('grok.story.regenerate_fallback_deterministic', {
+        error: error instanceof Error ? error.message : 'unknown',
+        correctionCount: corrections.length,
+        priorChars: priorStory.length,
+      });
+      return deterministicBaseline;
+    }
+    throw error;
   }
-
-  return trimmed;
 }
 
 async function requestStoryQualityScore(

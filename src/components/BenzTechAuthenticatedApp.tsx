@@ -395,10 +395,10 @@ export function BenzTechAuthenticatedApp({
             cdkSanitizedNotice={ro.cdkSanitizedForLine}
             onClearCdkSanitizedNotice={() => ro.clearCdkSanitizedNotice(ro.currentLine!.id)}
             onBack={() => ro.navigateToRO()}
-            onUpdateLine={(updates) => {
+            onUpdateLine={(updates, options) => {
               const lineId = ro.currentLine!.id;
               const roId = ro.currentRO!.id;
-              ro.updateLine(lineId, updates);
+              ro.updateLine(lineId, updates, options);
               if (
                 updates.warrantyStory !== undefined ||
                 updates.technicianNotes !== undefined ||

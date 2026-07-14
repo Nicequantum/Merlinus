@@ -18,12 +18,13 @@ import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
 import { withStoryAiRoute } from '@/lib/storyAiRoute';
+import { logger } from '@/lib/logger';
 
 // M4/M5 — customer-pay guard enforced in withStoryAiRoute (isCustomerPayRepairLine).
 void isCustomerPayRepairLine;
 
 /** Must match STORY_GENERATE_ROUTE_MAX_DURATION_S in @/lib/timeouts */
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 export async function POST(
   request: Request,
@@ -43,23 +44,79 @@ export async function POST(
         'This line uses a Customer Pay template. Clear Customer Pay mode (Switch to warranty AI) to generate with Grok.',
     },
     async ({ request: req, session, repairOrderId: id, lineId, mapped, line, storyBrand, storyPack }) => {
-      const pipelineAudit = auditStoryGenerationPipeline(mapped, line, { brand: storyBrand });
-      logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
+      // Client may send latest notes + story so regenerate never races a lagging PUT.
+      let clientNotes: string | undefined;
+      let clientStory: string | undefined;
+      try {
+        const body = (await req.json().catch(() => null)) as {
+          technicianNotes?: unknown;
+          warrantyStory?: unknown;
+        } | null;
+        if (typeof body?.technicianNotes === 'string' && body.technicianNotes.trim()) {
+          clientNotes = body.technicianNotes;
+        }
+        if (typeof body?.warrantyStory === 'string' && body.warrantyStory.trim()) {
+          clientStory = body.warrantyStory;
+        }
+      } catch {
+        // empty body is fine
+      }
+
+      const lineForGen = {
+        ...line,
+        ...(clientNotes !== undefined ? { technicianNotes: clientNotes } : {}),
+        ...(clientStory !== undefined ? { warrantyStory: clientStory } : {}),
+      };
+      const mappedForGen = {
+        ...mapped,
+        repairLines: mapped.repairLines.map((l) => (l.id === lineId ? lineForGen : l)),
+      };
+
+      // Never let pipeline audit crash the route (was a source of bare "Request failed").
+      let pipelineAudit: ReturnType<typeof auditStoryGenerationPipeline>;
+      try {
+        pipelineAudit = auditStoryGenerationPipeline(mappedForGen, lineForGen, { brand: storyBrand });
+        logPerformance('story.generate.pipeline', 0, { ...pipelineAudit });
+      } catch (pipelineError) {
+        logger.warn('story.generate.pipeline_audit_failed', {
+          error: pipelineError instanceof Error ? pipelineError.message : 'unknown',
+        });
+        pipelineAudit = {
+          model: 'unknown',
+          reasoningEffort: 'n/a',
+          systemPromptChars: 0,
+          userMessageChars: 0,
+          totalPromptChars: 0,
+          maxOutputTokens: 4096,
+          preGrokDbOps: [],
+          excludedFromPrompt: [],
+          timeouts: { grokMs: 0, routeMaxDurationS: 90, clientMs: 0 },
+        };
+      }
 
       let warrantyStory: string;
       let cdkSanitized = false;
       try {
         const grokStartedAt = Date.now();
-        const rawStory = await generateWarrantyStory(mapped, line, { pack: storyPack });
+        const rawStory = await generateWarrantyStory(mappedForGen, lineForGen, { pack: storyPack });
         logPerformance('grok.story.generate.route', Date.now() - grokStartedAt, {
           model: pipelineAudit.model,
           promptChars: pipelineAudit.totalPromptChars,
           storyBrand,
+          isRevision: Boolean(
+            lineForGen.warrantyStory?.trim() && lineForGen.warrantyStory.trim().length >= 40
+          ),
+          clientSnapshot: Boolean(clientNotes || clientStory),
         });
         const cleaned = sanitizeForCDKWithMeta(rawStory);
         warrantyStory = cleaned.text;
         cdkSanitized = cleaned.wasModified;
       } catch (error) {
+        logger.error('story.generate.failed', {
+          error: error instanceof Error ? error.message : 'unknown',
+          repairOrderId: id,
+          lineId,
+        });
         const mappedErr = mapGrokRouteError(error, 'Story generation');
         return reportMappedRouteError(mappedErr, error, 'story.generate');
       }

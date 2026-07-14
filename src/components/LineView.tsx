@@ -77,7 +77,7 @@ interface LineViewProps {
   cdkSanitizedNotice?: boolean;
   onClearCdkSanitizedNotice?: () => void;
   onBack: () => void;
-  onUpdateLine: (updates: Partial<RepairLine>) => void;
+  onUpdateLine: (updates: Partial<RepairLine>, options?: { immediate?: boolean }) => void;
   xentrySavedImages: ImageAttachment[];
   xentryPendingImages: PendingImage[];
   xentryImagesNeedingAnalysisCount: number;
@@ -188,8 +188,8 @@ export function LineView({
       toast.message('Nothing to add for this item.');
       return;
     }
-    // Patches warrantyStory (scored text) + notes so re-audit can credit the change.
-    onUpdateLine(patch);
+    // Immediate persist so regenerate (server) sees notes + story corrections.
+    onUpdateLine(patch, { immediate: true });
     toast.success(
       'Detail added — tap Generate to improve the existing story with this fix, then Audit Story.'
     );
@@ -201,7 +201,7 @@ export function LineView({
       toast.message('Those details are already in the story/notes.');
       return;
     }
-    onUpdateLine(patch);
+    onUpdateLine(patch, { immediate: true });
     toast.success(
       `Added ${details.length} correction${details.length === 1 ? '' : 's'} — tap Generate to improve the existing story (keeps all prior details), then Audit Story.`
     );

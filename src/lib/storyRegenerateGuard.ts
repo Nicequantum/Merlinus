@@ -1,9 +1,12 @@
 /**
  * Safety net after AI revision: never lose prior-story facts or required corrections.
- * Models sometimes "rewrite from scratch" and drop details; we merge them back.
+ * Also used as deterministic fallback when AI regenerate fails.
  */
 
-import { appendUniqueDetailText, formatTechnicianDetailForStory } from '@/lib/applyTechnicianDetails';
+import {
+  appendUniqueDetailText,
+  formatTechnicianDetailForStory,
+} from '@/lib/storyDetailText';
 import type { TechnicianDetailPrompt } from '@/types';
 import {
   AUDIT_ENHANCEMENT_NOTES_MARKER,
@@ -42,7 +45,6 @@ export function storyContainsCorrection(story: string, correction: string): bool
   if (!c || c.length < 4) return true;
   if (s.includes(c)) return true;
 
-  // Token-level: control units, voltages, DTCs from the correction
   const tokens = extractTechnicalTokens(correction);
   if (tokens.length > 0) {
     const hit = tokens.filter((t) => s.includes(t.toLowerCase()));
@@ -51,7 +53,6 @@ export function storyContainsCorrection(story: string, correction: string): bool
     }
   }
 
-  // Significant word overlap (ignore short stopwords)
   const words = c
     .split(/[^a-z0-9./-]+/)
     .filter((w) => w.length >= 5)
@@ -79,7 +80,6 @@ export function extractRequiredCorrectionsFromNotes(notes: string): string[] {
       out.push(t.replace(AUDIT_ENHANCEMENT_NOTES_MARKER, '').trim());
     }
   }
-  // Dedupe
   const seen = new Set<string>();
   return out.filter((c) => {
     const k = normalizeLoose(c);
@@ -101,23 +101,19 @@ export function ensureStoryPreservesPriorAndCorrections(
   const prior = priorStory.trim();
   let result = regenerated.trim();
 
-  if (!result) return prior;
-  if (!prior) {
-    return reapplyMissingCorrections(result, corrections);
-  }
+  if (!result) return reapplyMissingCorrections(prior, corrections);
+  if (!prior) return reapplyMissingCorrections(result, corrections);
 
-  // Catastrophic shrink — treat as failed rewrite; keep prior and apply corrections.
+  // Catastrophic shrink — keep prior and apply corrections.
   if (result.length < prior.length * 0.65) {
     result = prior;
   }
 
-  // Restore any technical tokens that vanished
   const priorTokens = extractTechnicalTokens(prior);
   const missingTokens = priorTokens.filter(
     (t) => !result.toLowerCase().includes(t.toLowerCase())
   );
   if (missingTokens.length > 0 && missingTokens.length >= Math.max(1, Math.ceil(priorTokens.length * 0.25))) {
-    // Too many lost tokens — prefer prior as base
     result = prior;
   } else if (missingTokens.length > 0) {
     const restore = `Documented values retained from prior narrative: ${missingTokens.join(', ')}.`;
@@ -125,6 +121,17 @@ export function ensureStoryPreservesPriorAndCorrections(
   }
 
   return reapplyMissingCorrections(result, corrections);
+}
+
+/**
+ * Deterministic improvement when AI regenerate fails or is skipped:
+ * keep prior story and weave in every pending correction.
+ */
+export function applyCorrectionsToStoryDeterministically(
+  priorStory: string,
+  corrections: string[]
+): string {
+  return ensureStoryPreservesPriorAndCorrections(priorStory, priorStory, corrections);
 }
 
 function reapplyMissingCorrections(story: string, corrections: string[]): string {

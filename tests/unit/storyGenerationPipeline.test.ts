@@ -62,8 +62,8 @@ describe('story generation pipeline audit', () => {
     assert.ok(audit.maxOutputTokens >= 4096);
     assert.ok(audit.excludedFromPrompt.includes('knowledgeBase'));
     assert.ok(audit.excludedFromPrompt.includes('historyContext'));
-    assert.equal(audit.timeouts.grokMs, 25_000);
-    assert.equal(audit.timeouts.routeMaxDurationS, 60);
-    assert.equal(audit.timeouts.clientMs, 70_000);
+    assert.equal(audit.timeouts.grokMs, 45_000);
+    assert.equal(audit.timeouts.routeMaxDurationS, 90);
+    assert.equal(audit.timeouts.clientMs, 100_000);
   });
 });

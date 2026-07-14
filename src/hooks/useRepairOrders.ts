@@ -481,7 +481,7 @@ export function useRepairOrders({
   );
 
   const updateLine = useCallback(
-    (lineId: string, updates: Partial<RepairLine>) => {
+    (lineId: string, updates: Partial<RepairLine>, options?: { immediate?: boolean }) => {
       let nextUpdates = updates;
       if (updates.warrantyStory !== undefined) {
         const { text, wasModified } = sanitizeForCDKWithMeta(updates.warrantyStory);
@@ -491,8 +491,12 @@ export function useRepairOrders({
         }
       }
 
+      // Never skip persist when notes/corrections are included (Add Tech Details must hit DB
+      // before regenerate). Only skip bare story edits during certification pending.
       const skipPersist =
-        updates.warrantyStory !== undefined && isStoryCertificationPending(lineId);
+        updates.warrantyStory !== undefined &&
+        updates.technicianNotes === undefined &&
+        isStoryCertificationPending(lineId);
 
       applyROUpdate(
         (ro) => ({
@@ -501,7 +505,11 @@ export function useRepairOrders({
             line.id === lineId ? { ...line, ...nextUpdates } : line
           ),
         }),
-        skipPersist ? { skipPersist: true } : undefined
+        skipPersist
+          ? { skipPersist: true }
+          : options?.immediate
+            ? { immediate: true }
+            : undefined
       );
     },
     [applyROUpdate, isStoryCertificationPending]
