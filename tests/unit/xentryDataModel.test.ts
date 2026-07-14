@@ -166,8 +166,15 @@ describe('Xentry data model (M1/M3)', () => {
 
   it('deleteROXentryImage updates RO media and line-1 extracted only (M1)', () => {
     const src = readSrc('src/hooks/useRepairOrders.ts');
-    const block = src.slice(src.indexOf('const deleteROXentryImage'));
-    assert.match(block, /extractedData: result\.rebuilt/);
+    const start = src.indexOf('const deleteROXentryImage');
+    assert.ok(start >= 0, 'deleteROXentryImage must exist');
+    // Bound to this callback only — do not scan the rest of the file.
+    const nextConst = src.indexOf('\n  const ', start + 1);
+    const block = src.slice(start, nextConst > start ? nextConst : undefined);
+    assert.match(block, /extractedData:\s*result\.rebuilt/);
+    assert.match(block, /xentryImages:\s*result\.nextImages/);
+    assert.match(block, /xentryOcrTexts:\s*result\.nextOcr/);
+    assert.match(block, /idx\s*===\s*0/);
     assert.equal(block.includes('lineImages.some'), false);
   });
 });

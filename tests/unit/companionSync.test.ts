@@ -148,7 +148,9 @@ describe('desktop companion sync', () => {
     assert.ok(mercedesQuality.includes('strengths: 2-4 specific strengths'));
     assert.ok(mercedesQuality.includes('auditRisks: 1-4 critical MI 2.0 rejection risks'));
     assert.ok(mercedesQuality.includes('Submitted story is authoritative'));
-    assert.ok(prompts.includes('authoritative — score only this text as submitted'));
+    // Score user message credits post-audit / Add Tech Details story text (see buildStoryScoreUserMessage).
+    assert.ok(prompts.includes('authoritative — score THIS text as submitted'));
+    assert.ok(prompts.includes('post-audit') || prompts.includes('Add Tech Details'));
     assert.ok(workflow.includes('scoredAgainstStory: storyText'));
     assert.equal(grok.includes("throw new Error('AI quality score returned unreadable JSON.')"), false);
   });
