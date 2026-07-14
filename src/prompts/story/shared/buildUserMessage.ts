@@ -4,7 +4,11 @@ import { extractRequiredCorrectionsFromNotes } from '@/lib/storyRegenerateGuard'
 import type { StoryBrandPack, VeteranPersona } from './types';
 import { TRUTH_USER_MESSAGE_BANNER } from './truthRules';
 import { PROMPT_FIELD_LIMITS, truncatePromptField } from './fieldLimits';
-import { STORY_REGENERATE_USER_HEADER } from './regenerateRules';
+import {
+  PENDING_CORRECTIONS_END,
+  PENDING_CORRECTIONS_START,
+  STORY_REGENERATE_USER_HEADER,
+} from './regenerateRules';
 
 /** Prior story must be long enough to treat as a real first pass (not a stub). */
 export const REGENERATE_PRIOR_STORY_MIN_CHARS = 40;
@@ -94,8 +98,9 @@ export function buildStoryUserMessage(
     const correctionsBlock =
       corrections.length > 0
         ? corrections.map((c, i) => `${i + 1}. ${c}`).join('\n')
-        : '(No separate correction list — integrate any trailing audit-enhancement sentences already present in the current story into the correct workflow place without removing them.)';
+        : '(No separate correction list — polish CURRENT_STORY only; do not remove technical content.)';
 
+    // Use === fences (not HTML-like <...>) so nothing is mistaken for markup.
     return `Line ${line.lineNumber}: ${line.description}
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
 
@@ -106,27 +111,29 @@ ${STORY_REGENERATE_USER_HEADER}
 Keep the same technician voice (persona ${persona.id}, ~${persona.years} years):
 ${persona.voice}
 
-<<<CURRENT_STORY_TO_EDIT>>>
+===CURRENT_STORY_TO_EDIT===
 ${currentStory}
-<<<END_CURRENT_STORY_TO_EDIT>>>
+===END_CURRENT_STORY_TO_EDIT===
 
-<<<REQUIRED_CORRECTIONS>>>
+===REQUIRED_CORRECTIONS===
 ${truncatePromptField(correctionsBlock, 1_800, { preferEnd: true })}
-<<<END_REQUIRED_CORRECTIONS>>>
+===END_REQUIRED_CORRECTIONS===
 
 Supporting technician notes (context only — do not drop facts already in the current story):
-<<<TECHNICIAN_NOTES>>
+===TECHNICIAN_NOTES===
 ${notes}
-<<<END_TECHNICIAN_NOTES>>
+===END_TECHNICIAN_NOTES===
 ${diagnosticsBlock}
 
 EDITING INSTRUCTIONS (follow exactly):
 1. Treat CURRENT_STORY_TO_EDIT as the base document you are correcting — not a brainstorm seed.
 2. Keep every code, measurement, control-unit number, mileage, test name, and part already in that story (including punctuation like dashes/slashes).
-3. Apply each REQUIRED_CORRECTION by inserting or fixing the relevant sentence in the correct chronological place.
+3. Apply each REQUIRED_CORRECTION by inserting or fixing the relevant sentence in the correct chronological place. If the story has [NOT DOCUMENTED] for that item, replace the placeholder with the real detail.
 4. Do not delete paragraphs or thin the story. Do not invent unsupported facts.
 5. Do not leave corrections as a list at the bottom — weave them in.
-6. Output the FULL improved story only (complete narrative for Line ${line.lineNumber}).`;
+6. Output the FULL improved story only (complete narrative for Line ${line.lineNumber}).
+
+Pending corrections fence marker (for your awareness): ${PENDING_CORRECTIONS_START} ... ${PENDING_CORRECTIONS_END}`;
   }
 
   return `Line ${line.lineNumber}: ${line.description}

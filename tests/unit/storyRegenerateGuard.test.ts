@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  applyCorrectionsToStoryDeterministically,
   ensureStoryPreservesPriorAndCorrections,
   extractRequiredCorrectionsFromNotes,
   extractTechnicalTokens,
@@ -43,10 +44,10 @@ describe('story regenerate guard', () => {
   test('extracts pending corrections fence from notes', () => {
     const notes = `Found P0300.
 
-<<<PENDING_AUDIT_CORRECTIONS>>>
+===PENDING_AUDIT_CORRECTIONS===
 1. Source voltage 12.4V at battery
 2. N73/1 control unit designation
-<<<END_PENDING_AUDIT_CORRECTIONS>>>
+===END_PENDING_AUDIT_CORRECTIONS===
 `;
     const list = extractRequiredCorrectionsFromNotes(notes);
     assert.equal(list.length, 2);
@@ -58,13 +59,27 @@ describe('story regenerate guard', () => {
     const first = mergePendingCorrectionsIntoNotes('Base notes', [
       { missing: 'Voltage', prompt: '12.4V', field: 'technicianNotes' },
     ]);
-    assert.match(first, /PENDING_AUDIT_CORRECTIONS/);
+    assert.match(first, /===PENDING_AUDIT_CORRECTIONS===/);
     const second = mergePendingCorrectionsIntoNotes(first, [
       { missing: 'Voltage', prompt: '12.4V', field: 'technicianNotes' },
       { missing: 'N73', prompt: 'N73/1', field: 'diagnostic' },
     ]);
-    assert.equal(second.split('<<<PENDING_AUDIT_CORRECTIONS>>>').length - 1, 1);
+    assert.equal(second.split('===PENDING_AUDIT_CORRECTIONS===').length - 1, 1);
     assert.match(second, /N73\/1/);
+  });
+
+  test('insertCorrectionIntoStory places content before verification and preserves prior', () => {
+    const prior =
+      'Road tested and confirmed rough idle. Connected scan tool. Found P0300. Completed final verification drive.';
+    const out = applyCorrectionsToStoryDeterministically(prior, [
+      'Source voltage measured 12.4V at the battery.',
+      'Control unit N73/1 designation confirmed.',
+    ]);
+    assert.match(out, /P0300/);
+    assert.match(out, /12\.4\s*V|12\.4V/i);
+    assert.match(out, /N73\/1/);
+    assert.match(out, /final verification/i);
+    assert.ok(out.indexOf('12.4') < out.toLowerCase().indexOf('final verification'));
   });
 
   test('storyContainsCorrection matches distinctive tokens', () => {
@@ -98,9 +113,9 @@ describe('conservative regenerate prompt', () => {
       description: 'Diag',
       customerConcern: '',
       technicianNotes: `Notes here
-<<<PENDING_AUDIT_CORRECTIONS>>>
+===PENDING_AUDIT_CORRECTIONS===
 1. Add dash in N73/1 designation
-<<<END_PENDING_AUDIT_CORRECTIONS>>>`,
+===END_PENDING_AUDIT_CORRECTIONS===`,
       warrantyStory: 'Performed road test and confirmed concern. Found P0300. Completed verification drive.',
       xentryImages: [],
       extractedData: { codes: [], faultCodes: [], guidedTests: [], measurements: [], components: [], circuits: [] },

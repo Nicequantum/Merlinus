@@ -129,7 +129,8 @@ const repairLineSchema = z.object({
   lineNumber: z.number().int().positive().optional(),
   description: safeTextOptional(500),
   customerConcern: safeTextOptional(2000),
-  technicianNotes: safeTextOptional(10000),
+  /** Raised for audit-enhancement fences + multi-detail coaching (was 10k → Invalid request). */
+  technicianNotes: safeTextOptional(50_000),
   xentryImages: z.array(imageAttachmentSchema).max(20).optional(),
   xentryOcrTexts: z.array(safeText(50000)).max(20).optional(),
   extractedData: extractedDataSchema.optional(),

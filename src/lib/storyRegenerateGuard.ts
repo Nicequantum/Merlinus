@@ -1,6 +1,6 @@
 /**
- * Safety net after AI revision: never lose prior-story facts or required corrections.
- * Also used as deterministic fallback when AI regenerate fails.
+ * Safety net + deterministic editor for story revision after Add Tech Details.
+ * Primary path for regenerate reliability: integrate corrections into prior story.
  */
 
 import {
@@ -74,6 +74,16 @@ export function extractRequiredCorrectionsFromNotes(notes: string): string[] {
       if (cleaned) out.push(cleaned);
     }
   }
+  // Legacy angle-bracket fences (pre-sanitize-safe markers)
+  const legacyStart = notes.indexOf('<<<PENDING_AUDIT_CORRECTIONS>>>');
+  const legacyEnd = notes.indexOf('<<<END_PENDING_AUDIT_CORRECTIONS>>>');
+  if (legacyStart >= 0 && legacyEnd > legacyStart) {
+    const body = notes.slice(legacyStart + '<<<PENDING_AUDIT_CORRECTIONS>>>'.length, legacyEnd);
+    for (const line of body.split(/\n/)) {
+      const cleaned = line.replace(/^\d+\.\s*/, '').trim();
+      if (cleaned) out.push(cleaned);
+    }
+  }
   for (const line of notes.split(/\n/)) {
     const t = line.trim();
     if (t.includes(AUDIT_ENHANCEMENT_NOTES_MARKER)) {
@@ -90,8 +100,75 @@ export function extractRequiredCorrectionsFromNotes(notes: string): string[] {
 }
 
 /**
+ * Insert a single correction into the story at a sensible workflow location
+ * (before verification / disconnect / end), not only as a dead appendix.
+ */
+export function insertCorrectionIntoStory(story: string, correction: string): string {
+  const prose = formatTechnicianDetailForStory({
+    missing: '',
+    prompt: correction,
+    field: 'technicianNotes',
+  } as TechnicianDetailPrompt);
+  if (!prose || storyContainsCorrection(story, prose)) return story;
+
+  const insertBefore = [
+    /\bfinal verification\b/i,
+    /\bverification (test )?drive\b/i,
+    /\bfinal road test\b/i,
+    /\bfinal test drive\b/i,
+    /\bdisconnect\b/i,
+    /\bcleared (fault )?codes\b/i,
+  ];
+
+  for (const re of insertBefore) {
+    const idx = story.search(re);
+    if (idx > 20) {
+      const before = story.slice(0, idx).trimEnd();
+      const after = story.slice(idx).trimStart();
+      const joiner = /[.!?]$/.test(before) ? ' ' : '. ';
+      return `${before}${joiner}${prose} ${after}`.replace(/ +/g, ' ').trim();
+    }
+  }
+
+  // If story still has NOT DOCUMENTED, prefer replacing first occurrence with the prose
+  if (/\[NOT DOCUMENTED\]/i.test(story)) {
+    return story.replace(/\[NOT DOCUMENTED\]/i, prose.replace(/\.$/, ''));
+  }
+
+  return appendUniqueDetailText(story, prose);
+}
+
+/**
+ * Deterministic editor: keep prior story, surgically integrate every correction.
+ * This is the reliable path that must raise completeness for re-audit.
+ */
+export function applyCorrectionsToStoryDeterministically(
+  priorStory: string,
+  corrections: string[]
+): string {
+  let result = priorStory.trim();
+  if (!result && corrections.length === 0) return '';
+  if (!result) {
+    return corrections
+      .map((c) =>
+        formatTechnicianDetailForStory({
+          missing: '',
+          prompt: c,
+          field: 'technicianNotes',
+        } as TechnicianDetailPrompt)
+      )
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  for (const c of corrections) {
+    result = insertCorrectionIntoStory(result, c);
+  }
+  return result;
+}
+
+/**
  * Ensure regenerated text keeps prior technical tokens and required corrections.
- * If the model thinned the draft badly, fall back toward the prior story and re-apply corrections.
  */
 export function ensureStoryPreservesPriorAndCorrections(
   priorStory: string,
@@ -101,50 +178,40 @@ export function ensureStoryPreservesPriorAndCorrections(
   const prior = priorStory.trim();
   let result = regenerated.trim();
 
-  if (!result) return reapplyMissingCorrections(prior, corrections);
-  if (!prior) return reapplyMissingCorrections(result, corrections);
+  if (!result) return applyCorrectionsToStoryDeterministically(prior, corrections);
+  if (!prior) return applyCorrectionsToStoryDeterministically(result, corrections);
 
   // Catastrophic shrink — keep prior and apply corrections.
-  if (result.length < prior.length * 0.65) {
-    result = prior;
+  if (result.length < prior.length * 0.7) {
+    return applyCorrectionsToStoryDeterministically(prior, corrections);
   }
 
   const priorTokens = extractTechnicalTokens(prior);
   const missingTokens = priorTokens.filter(
     (t) => !result.toLowerCase().includes(t.toLowerCase())
   );
-  if (missingTokens.length > 0 && missingTokens.length >= Math.max(1, Math.ceil(priorTokens.length * 0.25))) {
-    result = prior;
-  } else if (missingTokens.length > 0) {
-    const restore = `Documented values retained from prior narrative: ${missingTokens.join(', ')}.`;
-    result = appendUniqueDetailText(result, restore);
+  if (
+    missingTokens.length > 0 &&
+    missingTokens.length >= Math.max(1, Math.ceil(priorTokens.length * 0.2))
+  ) {
+    // Too many lost tokens — deterministic base from prior
+    return applyCorrectionsToStoryDeterministically(prior, corrections);
   }
 
-  return reapplyMissingCorrections(result, corrections);
-}
-
-/**
- * Deterministic improvement when AI regenerate fails or is skipped:
- * keep prior story and weave in every pending correction.
- */
-export function applyCorrectionsToStoryDeterministically(
-  priorStory: string,
-  corrections: string[]
-): string {
-  return ensureStoryPreservesPriorAndCorrections(priorStory, priorStory, corrections);
-}
-
-function reapplyMissingCorrections(story: string, corrections: string[]): string {
-  let result = story;
-  for (const raw of corrections) {
-    if (storyContainsCorrection(result, raw)) continue;
-    const prose = formatTechnicianDetailForStory({
-      missing: '',
-      prompt: raw,
-      field: 'technicianNotes',
-    } as TechnicianDetailPrompt);
-    if (prose) result = appendUniqueDetailText(result, prose);
+  // Re-apply any missing corrections into the AI result
+  for (const c of corrections) {
+    result = insertCorrectionIntoStory(result, c);
   }
+
+  // Restore vanished tokens as a last resort
+  const stillMissing = priorTokens.filter((t) => !result.toLowerCase().includes(t.toLowerCase()));
+  if (stillMissing.length > 0) {
+    result = appendUniqueDetailText(
+      result,
+      `Documented values retained from prior narrative: ${stillMissing.join(', ')}.`
+    );
+  }
+
   return result;
 }
 
@@ -168,7 +235,14 @@ export function mergePendingCorrectionsIntoNotes(
 ): string {
   if (!details.length) return existingNotes;
   const block = formatPendingCorrectionsBlock(details);
-  const base = existingNotes.trim();
+  let base = existingNotes.trim();
+  // Remove legacy angle-bracket fences if present
+  base = base
+    .replace(
+      /<<<PENDING_AUDIT_CORRECTIONS>>>[\s\S]*?<<<END_PENDING_AUDIT_CORRECTIONS>>>/g,
+      ''
+    )
+    .trim();
   const start = base.indexOf(PENDING_CORRECTIONS_START);
   const end = base.indexOf(PENDING_CORRECTIONS_END);
   if (start >= 0 && end > start) {

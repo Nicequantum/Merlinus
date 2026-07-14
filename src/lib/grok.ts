@@ -454,58 +454,79 @@ export async function generateWarrantyStory(
   } = await import('@/lib/storyRegenerateGuard');
   const corrections = extractRequiredCorrectionsFromNotes(line.technicianNotes || '');
 
-  // If this is a revision pass with pending corrections, always have a deterministic baseline
-  // so we never return 500 / empty when the model times out or errors.
-  const deterministicBaseline =
-    isRegen && priorStory
-      ? applyCorrectionsToStoryDeterministically(priorStory, corrections)
-      : null;
-
-  try {
-    const userMessage = buildWarrantyStoryUserMessage(ro, line, {
-      pack,
-      mode: isRegen ? 'regenerate' : 'generate',
-    });
-    const systemPrompt = isRegen
-      ? getStorySystemPrompt(pack.id, { regenerate: true, line })
-      : pack.systemPrompt;
-
-    const story = await grokChat(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      {
-        model: GROK_STORY_MODEL,
-        temperature: isRegen ? WARRANTY_STORY_REGENERATE_TEMPERATURE : WARRANTY_STORY_TEMPERATURE,
-        max_tokens: WARRANTY_STORY_MAX_TOKENS,
-        timeoutMs: STORY_GENERATE_GROK_MS,
-        perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
+  // --- REVISION PATH: deterministic editor first (reliable score lifts) ---
+  // When the tech already has a story + pending audit corrections, always produce a
+  // stronger draft by integrating corrections into the existing narrative. Optional AI
+  // polish may improve prose, but must never leave us without a successful revision.
+  if (isRegen && priorStory && corrections.length > 0) {
+    const deterministic = applyCorrectionsToStoryDeterministically(priorStory, corrections);
+    try {
+      const userMessage = buildWarrantyStoryUserMessage(ro, line, {
+        pack,
+        mode: 'regenerate',
+        priorStory: deterministic,
+      });
+      const systemPrompt = getStorySystemPrompt(pack.id, { regenerate: true, line });
+      const polished = await grokChat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        {
+          model: GROK_STORY_MODEL,
+          temperature: WARRANTY_STORY_REGENERATE_TEMPERATURE,
+          max_tokens: WARRANTY_STORY_MAX_TOKENS,
+          timeoutMs: STORY_GENERATE_GROK_MS,
+          perfLabel: 'grok.story.regenerate',
+        }
+      );
+      const trimmed = polished?.trim();
+      if (trimmed) {
+        return ensureStoryPreservesPriorAndCorrections(deterministic, trimmed, corrections);
       }
-    );
-    let trimmed = story?.trim();
-    if (!trimmed) {
-      if (deterministicBaseline) return deterministicBaseline;
-      throw new Error('AI did not return a warranty story. Try again or type the story manually.');
-    }
-
-    // Never drop prior facts or required audit corrections.
-    if (isRegen && priorStory) {
-      trimmed = ensureStoryPreservesPriorAndCorrections(priorStory, trimmed, corrections);
-    }
-    return trimmed;
-  } catch (error) {
-    // Revision must not brick the tech flow — fall back to prior story + corrections.
-    if (deterministicBaseline) {
-      logger.warn('grok.story.regenerate_fallback_deterministic', {
+    } catch (error) {
+      logger.warn('grok.story.regenerate_ai_skipped_using_deterministic', {
         error: error instanceof Error ? error.message : 'unknown',
         correctionCount: corrections.length,
         priorChars: priorStory.length,
       });
-      return deterministicBaseline;
     }
-    throw error;
+    return deterministic;
   }
+
+  // --- FIRST PASS (or regen without structured corrections) ---
+  const userMessage = buildWarrantyStoryUserMessage(ro, line, {
+    pack,
+    mode: isRegen ? 'regenerate' : 'generate',
+  });
+  const systemPrompt = isRegen
+    ? getStorySystemPrompt(pack.id, { regenerate: true, line })
+    : pack.systemPrompt;
+
+  const story = await grokChat(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ],
+    {
+      model: GROK_STORY_MODEL,
+      temperature: isRegen ? WARRANTY_STORY_REGENERATE_TEMPERATURE : WARRANTY_STORY_TEMPERATURE,
+      max_tokens: WARRANTY_STORY_MAX_TOKENS,
+      timeoutMs: STORY_GENERATE_GROK_MS,
+      perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
+    }
+  );
+  let trimmed = story?.trim();
+  if (!trimmed) {
+    if (isRegen && priorStory) {
+      return applyCorrectionsToStoryDeterministically(priorStory, corrections);
+    }
+    throw new Error('AI did not return a warranty story. Try again or type the story manually.');
+  }
+  if (isRegen && priorStory) {
+    trimmed = ensureStoryPreservesPriorAndCorrections(priorStory, trimmed, corrections);
+  }
+  return trimmed;
 }
 
 async function requestStoryQualityScore(
