@@ -445,6 +445,7 @@ export async function generateWarrantyStory(
   options?: StoryAiOptions
 ): Promise<string> {
   const pack = resolveStoryAiPack(options);
+  const priorStory = line.warrantyStory?.trim() ?? '';
   const isRegen = shouldRegenerateStory(line, { mode: 'auto' });
   const userMessage = buildWarrantyStoryUserMessage(ro, line, {
     pack,
@@ -467,10 +468,19 @@ export async function generateWarrantyStory(
       perfLabel: isRegen ? 'grok.story.regenerate' : 'grok.story.generate',
     }
   );
-  const trimmed = story?.trim();
+  let trimmed = story?.trim();
   if (!trimmed) {
     throw new Error('AI did not return a warranty story. Try again or type the story manually.');
   }
+
+  // Conservative safety net: never drop prior facts or required audit corrections.
+  if (isRegen && priorStory) {
+    const { ensureStoryPreservesPriorAndCorrections, extractRequiredCorrectionsFromNotes } =
+      await import('@/lib/storyRegenerateGuard');
+    const corrections = extractRequiredCorrectionsFromNotes(line.technicianNotes || '');
+    trimmed = ensureStoryPreservesPriorAndCorrections(priorStory, trimmed, corrections);
+  }
+
   return trimmed;
 }
 

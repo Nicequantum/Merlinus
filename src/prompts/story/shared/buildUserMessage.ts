@@ -1,12 +1,10 @@
 import type { RepairLine, RepairOrder } from '@/types';
 import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
+import { extractRequiredCorrectionsFromNotes } from '@/lib/storyRegenerateGuard';
 import type { StoryBrandPack, VeteranPersona } from './types';
 import { TRUTH_USER_MESSAGE_BANNER } from './truthRules';
 import { PROMPT_FIELD_LIMITS, truncatePromptField } from './fieldLimits';
-import {
-  AUDIT_ENHANCEMENT_NOTES_MARKER,
-  STORY_REGENERATE_USER_HEADER,
-} from './regenerateRules';
+import { STORY_REGENERATE_USER_HEADER } from './regenerateRules';
 
 /** Prior story must be long enough to treat as a real first pass (not a stub). */
 export const REGENERATE_PRIOR_STORY_MIN_CHARS = 40;
@@ -63,28 +61,10 @@ function formatDiagnosticsBlock(line: RepairLine, pack: StoryBrandPack): string 
   }`;
 }
 
-function extractAuditEnhancementsFromNotes(notes: string): string {
-  const lines = notes.split(/\n/);
-  const chunks: string[] = [];
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (
-      line.includes(AUDIT_ENHANCEMENT_NOTES_MARKER) ||
-      line.startsWith('[Diagnostic]') ||
-      line.startsWith('[Workflow]') ||
-      /^\[Audit/i.test(line)
-    ) {
-      chunks.push(line.replace(AUDIT_ENHANCEMENT_NOTES_MARKER, '').trim());
-    }
-  }
-  return chunks.filter(Boolean).join('\n');
-}
-
 /**
  * Shared truth-filtered user message builder.
- * Omits Customer Complaint and RO advisor complaints entirely.
- * When a prior story exists, builds a stronger REVISION pass prompt.
+ * First pass: notes + diagnostics.
+ * Edit pass: current story as base + required corrections only (conservative).
  */
 export function buildStoryUserMessage(
   ro: RepairOrder,
@@ -106,18 +86,15 @@ export function buildStoryUserMessage(
   const isRegen = shouldRegenerateStory(line, { ...options, priorStory });
 
   if (isRegen && priorStory) {
-    const priorTruncated = truncatePromptField(priorStory, PROMPT_FIELD_LIMITS.priorStory, {
+    // Prefer full current story — do not preferEnd (would drop the opening).
+    const currentStory = truncatePromptField(priorStory, PROMPT_FIELD_LIMITS.priorStory, {
       preferEnd: false,
     });
-    const enhancements = extractAuditEnhancementsFromNotes(notesRaw);
-    const enhancementBlock = enhancements
-      ? `Newly added technician / audit details that MUST be woven into the narrative (do not leave as an appendix):
-<<<AUDIT_ENHANCEMENTS>>
-${truncatePromptField(enhancements, 1_200, { preferEnd: true })}
-<<<END_AUDIT_ENHANCEMENTS>>
-`
-      : `Any technical content that appears only at the end of the prior story (appended audit enhancements) must be integrated into the correct workflow steps — do not keep them as a dump at the end.
-`;
+    const corrections = extractRequiredCorrectionsFromNotes(notesRaw);
+    const correctionsBlock =
+      corrections.length > 0
+        ? corrections.map((c, i) => `${i + 1}. ${c}`).join('\n')
+        : '(No separate correction list — integrate any trailing audit-enhancement sentences already present in the current story into the correct workflow place without removing them.)';
 
     return `Line ${line.lineNumber}: ${line.description}
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
@@ -126,25 +103,30 @@ ${TRUTH_USER_MESSAGE_BANNER}
 
 ${STORY_REGENERATE_USER_HEADER}
 
-STYLE VARIATION — write as this veteran technician (persona ${persona.id}, ~${persona.years} years experience):
+Keep the same technician voice (persona ${persona.id}, ~${persona.years} years):
 ${persona.voice}
 
-<<<PRIOR_WARRANTY_STORY>>>
-${priorTruncated}
-<<<END_PRIOR_WARRANTY_STORY>>>
+<<<CURRENT_STORY_TO_EDIT>>>
+${currentStory}
+<<<END_CURRENT_STORY_TO_EDIT>>>
 
-Technician notes (authoritative facts for this revision — integrate fully; never invent beyond this + diagnostics + prior story):
+<<<REQUIRED_CORRECTIONS>>>
+${truncatePromptField(correctionsBlock, 1_800, { preferEnd: true })}
+<<<END_REQUIRED_CORRECTIONS>>>
+
+Supporting technician notes (context only — do not drop facts already in the current story):
 <<<TECHNICIAN_NOTES>>
 ${notes}
 <<<END_TECHNICIAN_NOTES>>
-${enhancementBlock}${diagnosticsBlock}
+${diagnosticsBlock}
 
-Rewrite a production 3C warranty narrative for Line ${line.lineNumber} only.
-- Cover the full ${pack.workflowSteps.length}-step ${pack.displayLabel} diagnostic workflow in chronological order inside flowing paragraphs.
-- Intelligently merge prior story + notes + audit enhancements into one coherent first-person narrative.
-- Every supported detail must appear in the correct place in the workflow (not appended as a list).
-- Use persona ${persona.id}'s voice — human, distinct, audit-defensible.
-- Output ONLY the final rewritten warranty story.`;
+EDITING INSTRUCTIONS (follow exactly):
+1. Treat CURRENT_STORY_TO_EDIT as the base document you are correcting — not a brainstorm seed.
+2. Keep every code, measurement, control-unit number, mileage, test name, and part already in that story (including punctuation like dashes/slashes).
+3. Apply each REQUIRED_CORRECTION by inserting or fixing the relevant sentence in the correct chronological place.
+4. Do not delete paragraphs or thin the story. Do not invent unsupported facts.
+5. Do not leave corrections as a list at the bottom — weave them in.
+6. Output the FULL improved story only (complete narrative for Line ${line.lineNumber}).`;
   }
 
   return `Line ${line.lineNumber}: ${line.description}

@@ -191,7 +191,7 @@ export function LineView({
     // Patches warrantyStory (scored text) + notes so re-audit can credit the change.
     onUpdateLine(patch);
     toast.success(
-      'Detail added — tap Generate again to rewrite the full story with this detail, then Audit Story.'
+      'Detail added — tap Generate to improve the existing story with this fix, then Audit Story.'
     );
   };
 
@@ -203,7 +203,7 @@ export function LineView({
     }
     onUpdateLine(patch);
     toast.success(
-      `Added ${details.length} tech detail${details.length === 1 ? '' : 's'} — tap Generate to rewrite the full story integrating them, then Audit Story.`
+      `Added ${details.length} correction${details.length === 1 ? '' : 's'} — tap Generate to improve the existing story (keeps all prior details), then Audit Story.`
     );
   };
 

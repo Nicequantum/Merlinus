@@ -171,7 +171,7 @@ export function useROStoryWorkflow(
       const isRevisionPass = Boolean(preLine?.warrantyStory?.trim() && preLine.warrantyStory.trim().length >= 40);
       toast.message(
         isRevisionPass
-          ? 'Rewriting story with your tech details…'
+          ? 'Improving story with your tech details (preserving existing content)…'
           : 'Generating warranty story…'
       );
 
@@ -234,7 +234,7 @@ export function useROStoryWorkflow(
         setters.setGeneratingLineId(null);
         toast.success(
           isRevisionPass
-            ? 'Story rewritten with tech details — tap Audit Story to refresh the score'
+            ? 'Story improved with tech details — tap Audit Story to refresh the score'
             : 'Warranty story generated — tap Audit Story when ready for MI scoring'
         );
       } catch (error: unknown) {

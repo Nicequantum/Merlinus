@@ -30,8 +30,8 @@ import { STORY_REGENERATE_SYSTEM_ADDENDUM } from './story/shared/regenerateRules
 /** Higher temperature for natural voice variation between lines and technicians. */
 export const WARRANTY_STORY_TEMPERATURE = 0.42;
 
-/** Slightly cooler on revision passes — favor fidelity to notes + prior story over freestyle. */
-export const WARRANTY_STORY_REGENERATE_TEMPERATURE = 0.32;
+/** Cool on edit passes — favor fidelity to current story + required corrections only. */
+export const WARRANTY_STORY_REGENERATE_TEMPERATURE = 0.18;
 
 /** Room for long 3C narratives with complete diagnostic workflow and measurements. */
 export const WARRANTY_STORY_MAX_TOKENS = 4096;

@@ -214,9 +214,9 @@ export function StoryQualityPanel({
                 )}
               </div>
               <p className="text-xs text-benz-secondary mb-3 leading-snug">
-                {MI_PRODUCT_LABEL} flagged these gaps. Each Add button saves the detail into notes and the story.
-                For a much higher score, tap <strong>Generate</strong> again — revision mode rewrites the full
-                narrative integrating those details — then <strong>Audit Story</strong>.
+                {MI_PRODUCT_LABEL} flagged these gaps. Each Add button saves the correction into notes and the
+                story. Then tap <strong>Generate</strong> — edit mode strengthens the existing story with those
+                fixes (it does not rewrite from scratch) — then <strong>Audit Story</strong>.
               </p>
               <ul className="space-y-3">
                 {details.map((detail, index) => {

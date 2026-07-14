@@ -115,19 +115,22 @@ describe('warranty story prompts', () => {
     assert.doesNotMatch(message, /PRIOR_WARRANTY_STORY/);
   });
 
-  test('regenerate pass includes prior story and revision instructions', () => {
+  test('regenerate pass is conservative edit of current story with required corrections', () => {
     const lineWithStory = {
       ...baseLine,
       warrantyStory:
         'Road tested the vehicle and confirmed misfire. Connected XENTRY. Found P0300. [NOT DOCUMENTED] for source voltage.',
       technicianNotes:
-        'Found P0300. Source voltage 12.4V.\n[Audit enhancement] [Diagnostic] Guided test result for cylinder 3 elevated.',
+        'Found P0300. Source voltage 12.4V.\n[Audit enhancement] [Diagnostic] Guided test result for cylinder 3 elevated.\n<<<PENDING_AUDIT_CORRECTIONS>>>\n1. Source voltage 12.4V\n<<<END_PENDING_AUDIT_CORRECTIONS>>>',
     };
     const message = buildWarrantyStoryUserMessage(baseRo, lineWithStory, { mode: 'auto' });
-    assert.match(message, /REVISION PASS|PRIOR_WARRANTY_STORY/i);
+    assert.match(message, /EDITING PASS|CURRENT_STORY_TO_EDIT/i);
     assert.match(message, /Road tested the vehicle/);
-    assert.match(message, /AUDIT_ENHANCEMENTS|Guided test result/i);
-    assert.match(message, /integrate|woven|rewrite/i);
+    assert.match(message, /REQUIRED_CORRECTIONS/);
+    assert.match(message, /12\.4V|Guided test/i);
+    assert.match(message, /base document|Keep every|REQUIRED_CORRECTION/i);
+    assert.doesNotMatch(message, /Produce a complete, new 3C narrative from scratch/i);
+    assert.match(message, /Never rewrite from scratch/i);
     assert.match(message, /<<<TECHNICIAN_NOTES>>/);
     assert.doesNotMatch(message, /RO_COMPLAINTS/);
   });

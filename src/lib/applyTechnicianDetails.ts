@@ -1,5 +1,6 @@
 import type { RepairLine, TechnicianDetailPrompt } from '@/types';
 import { AUDIT_ENHANCEMENT_NOTES_MARKER } from '@/prompts/story/shared/regenerateRules';
+import { mergePendingCorrectionsIntoNotes } from '@/lib/storyRegenerateGuard';
 
 export type TechnicianDetailFieldPatch = Partial<
   Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>
@@ -68,7 +69,7 @@ function fieldPrefix(field: TechnicianDetailPrompt['field']): string {
 /**
  * Map AI coaching into editable line fields.
  * Always patches warrantyStory (scored text) so re-audit can credit improvements.
- * Also updates notes / concern for regenerate + future context.
+ * Also updates notes with pending-corrections fence for conservative regenerate.
  */
 export function applyTechnicianDetail(
   line: Pick<RepairLine, 'technicianNotes' | 'customerConcern' | 'warrantyStory'>,
@@ -83,15 +84,18 @@ export function applyTechnicianDetail(
   if (detail.field === 'customerConcern' && notesBody) {
     patch.customerConcern = appendUniqueDetailText(line.customerConcern || '', notesBody);
   } else if (notesBody) {
-    // Tagged for regenerate prompts — must be woven into the rewrite, not left as an appendix.
     const tagged = `${AUDIT_ENHANCEMENT_NOTES_MARKER} ${fieldPrefix(detail.field)}${notesBody}`;
     patch.technicianNotes = appendUniqueDetailText(line.technicianNotes || '', tagged);
   }
 
   if (storyBody) {
-    // Interim append so re-audit can credit content; regenerate rewrites this into prose.
+    // Interim presence so score can credit immediately; edit-pass integrates into flow.
     patch.warrantyStory = appendUniqueDetailText(line.warrantyStory || '', storyBody);
   }
+
+  // Keep a structured pending-corrections fence for regenerate.
+  const notesBase = patch.technicianNotes ?? line.technicianNotes ?? '';
+  patch.technicianNotes = mergePendingCorrectionsIntoNotes(notesBase, [detail]);
 
   return patch;
 }
@@ -106,14 +110,22 @@ export function applyAllTechnicianDetails(
   let story = line.warrantyStory || '';
 
   for (const detail of details) {
-    const patch = applyTechnicianDetail(
-      { technicianNotes: notes, customerConcern: concern, warrantyStory: story },
-      detail
-    );
-    if (patch.technicianNotes !== undefined) notes = patch.technicianNotes;
-    if (patch.customerConcern !== undefined) concern = patch.customerConcern;
-    if (patch.warrantyStory !== undefined) story = patch.warrantyStory;
+    const notesBody = formatTechnicianDetailInsert(detail);
+    const storyBody = formatTechnicianDetailForStory(detail);
+
+    if (detail.field === 'customerConcern' && notesBody) {
+      concern = appendUniqueDetailText(concern, notesBody);
+    } else if (notesBody) {
+      const tagged = `${AUDIT_ENHANCEMENT_NOTES_MARKER} ${fieldPrefix(detail.field)}${notesBody}`;
+      notes = appendUniqueDetailText(notes, tagged);
+    }
+    if (storyBody) {
+      story = appendUniqueDetailText(story, storyBody);
+    }
   }
+
+  // Single pending-corrections block with the full list (regen reads this).
+  notes = mergePendingCorrectionsIntoNotes(notes, details);
 
   const result: TechnicianDetailFieldPatch = {};
   if (notes !== (line.technicianNotes || '')) result.technicianNotes = notes;
@@ -123,7 +135,6 @@ export function applyAllTechnicianDetails(
 }
 
 export function technicianDetailActionLabel(field: TechnicianDetailPrompt['field']): string {
-  // All paths also write into warrantyStory (the scored text); labels describe the gap type.
   switch (field) {
     case 'technicianNotes':
       return 'Add to Story + Notes';
