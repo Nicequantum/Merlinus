@@ -4,7 +4,6 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, KeyRound, ShieldAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { api } from '@/lib/api';
 import { isApexPlatformMode } from '@/lib/platformMode';
 
@@ -323,7 +322,7 @@ export function ForcedPasswordChangeScreen({
       <div className="benz-modal-panel sm:max-w-md w-full max-h-[90dvh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3.5 mb-5">
-            <MerlinLogoMark size="md" />
+            <ApexLogoMark size="md" title="Apex" />
             <div>
               <h2 id="forced-password-title" className="text-lg font-semibold tracking-tight">
                 Password change required

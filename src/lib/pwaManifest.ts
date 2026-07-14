@@ -3,16 +3,16 @@ import { PWA_ICON_ENTRIES } from '@/lib/pwaIcons';
 
 export function getPwaManifest(): MetadataRoute.Manifest {
   return {
-    name: 'Merlinus — Mercedes-Benz Warranty Platform',
-    short_name: 'Merlinus',
+    name: 'Apex — National Warranty Platform',
+    short_name: 'Apex',
     description:
-      'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
+      'Multi-brand dealership warranty story platform with audit-safe AI documentation.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    theme_color: '#000000',
-    background_color: '#000000',
+    theme_color: '#040408',
+    background_color: '#040408',
     lang: 'en',
     icons: PWA_ICON_ENTRIES.map((icon) => ({
       src: icon.src,

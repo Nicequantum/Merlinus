@@ -1,13 +1,13 @@
 {
-  "name": "Merlinus — Mercedes-Benz Warranty Platform",
-  "short_name": "Merlinus",
-  "description": "Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.",
+  "name": "Apex — National Warranty Platform",
+  "short_name": "Apex",
+  "description": "Multi-brand dealership warranty story platform with audit-safe AI documentation.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#000000",
-  "background_color": "#000000",
+  "theme_color": "#040408",
+  "background_color": "#040408",
   "lang": "en",
   "icons": [
     {

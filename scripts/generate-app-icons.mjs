@@ -1,6 +1,6 @@
 /**
- * Rasterize flat Mercedes star into PWA + Apple touch PNGs (reliable iOS fallback).
- * Premium 3D emblem stays in-app via MercedesStarMark; logo.svg syncs premium SVG.
+ * Rasterize flat Apex emblem into PWA + Apple touch PNGs (reliable iOS fallback).
+ * Premium emblem stays in-app via ApexLogoMark; logo.svg syncs premium SVG.
  * Run: npm run generate:icons
  */
 import { execSync } from 'node:child_process';
@@ -13,7 +13,7 @@ import toIco from 'to-ico';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const publicDir = join(root, 'public');
-const plainSvgPath = join(publicDir, 'mercedes-star-plain.svg');
+const plainSvgPath = join(publicDir, 'apex-logo-plain.svg');
 
 function syncSvgs() {
   execSync('npx tsx scripts/sync-plain-icon-svg.ts', { cwd: root, stdio: 'inherit' });
@@ -21,7 +21,7 @@ function syncSvgs() {
 }
 
 const plainSvg = () => readFileSync(plainSvgPath);
-const premiumSvg = () => readFileSync(join(publicDir, 'mercedes-star-icon.svg'));
+const premiumSvg = () => readFileSync(join(publicDir, 'apex-logo-icon.svg'));
 
 function svgDensityForSize(size) {
   if (size <= 180) return Math.min(256, Math.max(144, Math.round(size * 1.4)));
@@ -31,14 +31,15 @@ function svgDensityForSize(size) {
 async function writePng(size, filename) {
   const out = join(publicDir, filename);
   await sharp(plainSvg(), { density: svgDensityForSize(size) })
-    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
+    .resize(size, size, { fit: 'contain', background: { r: 4, g: 4, b: 8, alpha: 1 } })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toFile(out);
   console.log(`  ${filename} (${size}×${size})`);
 }
 
+/** Maskable: logo ~78% of canvas so Android safe zone keeps the A visible when cropped. */
 async function writeMaskablePng(size, filename) {
-  const logoSize = Math.round(size * 0.78);
+  const logoSize = Math.round(size * 0.72);
   const offset = Math.round((size - logoSize) / 2);
   const logo = await sharp(plainSvg(), { density: svgDensityForSize(logoSize) })
     .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -51,7 +52,7 @@ async function writeMaskablePng(size, filename) {
       width: size,
       height: size,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 1 },
+      background: { r: 4, g: 4, b: 8, alpha: 1 },
     },
   })
     .composite([{ input: logo, left: offset, top: offset }])
@@ -65,7 +66,7 @@ async function writeFavicon() {
   const buffers = await Promise.all(
     sizes.map((size) =>
       sharp(plainSvg(), { density: 128 })
-        .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
+        .resize(size, size, { fit: 'contain', background: { r: 4, g: 4, b: 8, alpha: 1 } })
         .png()
         .toBuffer()
     )
@@ -80,9 +81,9 @@ function syncManifestJson() {
 }
 
 async function main() {
-  console.log('Syncing emblem SVGs…');
+  console.log('Syncing Apex emblem SVGs…');
   syncSvgs();
-  console.log('Generating PWA / Apple touch icons from mercedes-star-plain.svg (flat fallback)…');
+  console.log('Generating PWA / Apple touch icons from apex-logo-plain.svg…');
 
   const appleSizes = [
     [180, 'apple-touch-icon.png'],
@@ -106,7 +107,7 @@ async function main() {
   await writeFavicon();
 
   writeFileSync(join(publicDir, 'logo.svg'), premiumSvg());
-  console.log('  logo.svg (premium in-app emblem)');
+  console.log('  logo.svg (premium Apex emblem)');
 
   syncManifestJson();
   console.log('Done.');

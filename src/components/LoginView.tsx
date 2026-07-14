@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
 import { isClerkSignInAvailable } from '@/lib/authModeClient';
 import { toast } from 'sonner';
 
@@ -34,10 +34,10 @@ export function LoginView({ onLogin }: LoginViewProps) {
     <div className="login-shell">
       <div className="login-panel">
         <div className="merlin-brand-hero login-brand">
-          <MerlinLogoMark size="lg" animated />
+          <ApexLogoMark size="lg" animated title="Apex" />
           <p className="merlin-wordmark">
-            Merlinus
-            <span className="merlin-wordmark-accent">Warranty Intelligence</span>
+            Apex
+            <span className="merlin-wordmark-accent">National Platform</span>
           </p>
           <div className="merlin-brand-divider" aria-hidden="true" />
           <DealershipBranding size="lg" />

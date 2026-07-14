@@ -622,7 +622,8 @@
   text-align: center;
 }
 
-[data-platform='apex'] .apex-logo-mark {
+/* Global Apex mark — default platform branding (not only under data-platform=apex). */
+.apex-logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -638,37 +639,43 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-[data-platform='apex'] .apex-logo-mark > svg {
+.apex-logo-mark > svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-[data-platform='apex'] .apex-logo-mark--sm {
+.apex-logo-mark--xs {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0.28rem;
+}
+
+.apex-logo-mark--sm {
   width: 2.25rem;
   height: 2.25rem;
   padding: 0.35rem;
 }
 
-[data-platform='apex'] .apex-logo-mark--md {
+.apex-logo-mark--md {
   width: 3.25rem;
   height: 3.25rem;
   padding: 0.5rem;
 }
 
-[data-platform='apex'] .apex-logo-mark--lg {
+.apex-logo-mark--lg {
   width: 4.5rem;
   height: 4.5rem;
   padding: 0.65rem;
 }
 
-[data-platform='apex'] .apex-logo-mark--xl {
+.apex-logo-mark--xl {
   width: 5.75rem;
   height: 5.75rem;
   padding: 0.8rem;
 }
 
-[data-platform='apex'] .apex-logo-animated {
+.apex-logo-animated {
   animation: apex-logo-pulse 2.8s ease-in-out infinite;
 }
 

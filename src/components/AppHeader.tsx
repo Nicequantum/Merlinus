@@ -3,8 +3,6 @@
 import { Settings } from 'lucide-react';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
-import { isApexPlatformMode } from '@/lib/platformMode';
 
 interface AppHeaderProps {
   technicianName?: string;
@@ -14,11 +12,9 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ technicianName, dealershipName, onOpenSettings }: AppHeaderProps) {
-  const apex = isApexPlatformMode();
-
   return (
     <header className="benz-header px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-      {apex ? <ApexLogoMark size="sm" /> : <MerlinLogoMark size="sm" />}
+      <ApexLogoMark size="sm" title="Apex" />
       <div className="flex-1 min-w-0 px-2">
         <DealershipBranding size="sm" displayName={dealershipName} />
         {technicianName && (

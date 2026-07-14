@@ -1,14 +1,8 @@
-import { MerlinLogo } from '@/components/MerlinLogo';
+'use client';
+
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 
 type MerlinLogoMarkSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-
-const SIZE_CLASS: Record<MerlinLogoMarkSize, string> = {
-  xs: 'merlin-logo-mark--xs',
-  sm: 'merlin-logo-mark--sm',
-  md: 'merlin-logo-mark--md',
-  lg: 'merlin-logo-mark--lg',
-  xl: 'merlin-logo-mark--xl',
-};
 
 interface MerlinLogoMarkProps {
   size?: MerlinLogoMarkSize;
@@ -17,14 +11,10 @@ interface MerlinLogoMarkProps {
   animated?: boolean;
 }
 
-/** Framed premium Mercedes-Benz emblem — 3D metallic star across the app. */
+/** @deprecated Prefer ApexLogoMark — maps to Apex National Platform logo. */
 export function MerlinLogoMark({ size = 'md', className, title, animated }: MerlinLogoMarkProps) {
+  const apexSize = size === 'xs' ? 'sm' : size;
   return (
-    <div
-      className={['merlin-logo-mark', SIZE_CLASS[size], className].filter(Boolean).join(' ')}
-      aria-hidden={title ? undefined : true}
-    >
-      <MerlinLogo title={title} animated={animated} />
-    </div>
+    <ApexLogoMark size={apexSize} className={className} title={title ?? 'Apex'} animated={animated} />
   );
 }

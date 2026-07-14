@@ -1,6 +1,6 @@
 'use client';
 
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { CONSENT_VERSION } from '@/types';
 
 interface ConsentModalProps {
@@ -14,7 +14,7 @@ export function ConsentModal({ onAccept, loading }: ConsentModalProps) {
       <div className="benz-modal-panel sm:max-w-md w-full max-h-[90dvh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3.5 mb-5">
-            <MerlinLogoMark size="md" />
+            <ApexLogoMark size="md" title="Apex" />
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Data & Privacy Consent</h2>
               <p className="text-xs text-benz-secondary mt-0.5">Required for dealership use • v{CONSENT_VERSION}</p>

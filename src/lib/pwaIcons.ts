@@ -1,4 +1,4 @@
-/** PWA + Apple touch icons — flat official Mercedes star (see mercedes-star-plain.svg). */
+/** PWA + Apple touch icons — Apex National Platform emblem (see apex-logo-plain.svg). */
 export const PWA_ICON_ENTRIES = [
   { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' as const },
   { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' as const },

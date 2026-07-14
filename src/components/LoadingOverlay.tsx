@@ -1,6 +1,6 @@
 'use client';
 
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 
 interface LoadingOverlayProps {
   visible: boolean;
@@ -18,7 +18,7 @@ export function LoadingOverlay({ visible, message }: LoadingOverlayProps) {
       aria-label={message}
     >
       <div className="benz-card-elevated benz-card-elevated-accent p-7 w-full max-w-sm text-center">
-        <MerlinLogoMark size="md" animated className="mx-auto mb-4" />
+        <ApexLogoMark size="md" animated className="mx-auto mb-4" title="Apex" />
         <div className="text-sm font-medium text-benz-primary">{message}</div>
         <span className="sr-only">{message}</span>
       </div>

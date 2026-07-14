@@ -13,8 +13,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Merlinus',
-  description: 'Mercedes-Benz dealership warranty story platform with audit-safe AI documentation.',
+  title: 'Apex',
+  description: 'Multi-brand dealership warranty story platform with audit-safe AI documentation.',
   manifest: getInlineManifestDataUri(),
   icons: {
     icon: [
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Merlinus',
+    title: 'Apex',
   },
   other: {
     'apple-mobile-web-app-capable': 'yes',
@@ -42,7 +42,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#08080a',
+  themeColor: '#040408',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

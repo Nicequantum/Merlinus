@@ -2,9 +2,10 @@
 
 import { useId } from 'react';
 
-type ApexLogoMarkSize = 'sm' | 'md' | 'lg' | 'xl';
+type ApexLogoMarkSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 const SIZE_CLASS: Record<ApexLogoMarkSize, string> = {
+  xs: 'apex-logo-mark--xs',
   sm: 'apex-logo-mark--sm',
   md: 'apex-logo-mark--md',
   lg: 'apex-logo-mark--lg',

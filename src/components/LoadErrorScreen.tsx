@@ -1,6 +1,6 @@
 'use client';
 
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface LoadErrorScreenProps {
@@ -14,7 +14,7 @@ interface LoadErrorScreenProps {
 export function LoadErrorScreen({ title, message, onRetry, retrying = false }: LoadErrorScreenProps) {
   return (
     <div className="app-container flex flex-col items-center justify-center min-h-[70vh] px-6 text-center">
-      <MerlinLogoMark size="md" className="mb-4" />
+      <ApexLogoMark size="md" className="mb-4" title="Apex" />
       <div className="benz-empty-state-icon mb-3 text-benz-amber" aria-hidden>
         <AlertTriangle size={28} strokeWidth={1.5} />
       </div>

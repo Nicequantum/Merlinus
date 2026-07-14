@@ -4,7 +4,7 @@ import { SignIn } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { DealershipBranding } from '@/components/DealershipBranding';
-import { MerlinLogoMark } from '@/components/MerlinLogoMark';
+import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 
 interface ClerkSignInViewProps {
   showLegacyLink?: boolean;
@@ -18,7 +18,7 @@ export function ClerkSignInView({ showLegacyLink = false }: ClerkSignInViewProps
     <div className="login-shell">
       <div className="login-panel">
         <div className="merlin-brand-hero login-brand">
-          <MerlinLogoMark size="lg" animated />
+          <ApexLogoMark size="lg" animated title="Apex" />
           <p className="merlin-wordmark">
             Merlinus
             <span className="merlin-wordmark-accent">Warranty Intelligence</span>
