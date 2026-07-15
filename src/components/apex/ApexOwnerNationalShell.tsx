@@ -544,6 +544,10 @@ export function ApexOwnerNationalShell({
                 >
                   View as / enter rooftop
                 </button>
+                <p className="apex-hint" style={{ marginTop: '0.5rem', maxWidth: '16rem' }}>
+                  Video Inspection: enter a rooftop to record bay videos and send customer
+                  reports.
+                </p>
                 <button
                   type="button"
                   className="apex-btn-secondary touch-target"

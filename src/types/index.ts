@@ -144,7 +144,44 @@ export interface RepairOrderSummary {
   technicianName?: string;
 }
 
-export type AppView = 'home' | 'ro' | 'line' | 'settings' | 'audit' | 'advisors' | 'technicians';
+export type AppView =
+  | 'home'
+  | 'ro'
+  | 'line'
+  | 'settings'
+  | 'audit'
+  | 'advisors'
+  | 'technicians'
+  | 'videoInspection';
+
+export interface VideoInspectionSummary {
+  id: string;
+  status: string;
+  title: string;
+  vehicleLabel: string | null;
+  transcriptLanguage: string;
+  hasVideo: boolean;
+  hasReport: boolean;
+  durationSec: number | null;
+  sizeBytes: number;
+  technicianName: string | null;
+  dealershipName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  errorMessage: string | null;
+}
+
+export interface VideoInspectionDetail extends VideoInspectionSummary {
+  contentType: string;
+  videoPathname: string | null;
+  mediaUrl: string | null;
+  frameCount: number;
+  transcript: string;
+  report: string;
+  reportPromptVersion: string | null;
+  repairOrderId: string | null;
+  repairLineId: string | null;
+}
 
 export type TemplateCategory = 'customer' | 'warranty';
 

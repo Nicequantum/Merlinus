@@ -3,6 +3,7 @@
 export const MERLIN_PUBLIC_ROUTE_PATTERNS = [
   '/',
   '/sign-in(.*)',
+  '/v(.*)',
   '/manifest.json',
   '/manifest.webmanifest',
   '/api/auth/login',
@@ -10,6 +11,7 @@ export const MERLIN_PUBLIC_ROUTE_PATTERNS = [
   '/api/auth/logout',
   '/api/auth/clerk/link',
   '/api/webhooks/clerk',
+  '/api/public/video(.*)',
 ] as const;
 
 const PUBLIC_PATHS = new Set([
@@ -26,5 +28,8 @@ const PUBLIC_PATHS = new Set([
 
 export function isMerlinPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
-  return pathname.startsWith('/sign-in/');
+  if (pathname.startsWith('/sign-in/')) return true;
+  if (pathname.startsWith('/v/') || pathname === '/v') return true;
+  if (pathname.startsWith('/api/public/video/')) return true;
+  return false;
 }

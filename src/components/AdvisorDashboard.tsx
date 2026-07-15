@@ -8,6 +8,7 @@ import {
   ClipboardList,
   LogOut,
   Settings,
+  Video,
 } from 'lucide-react';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { toast } from 'sonner';
@@ -18,6 +19,7 @@ import type { RepairLineSoldMetrics, RepairOrder, RepairOrderSummary, Technician
 interface AdvisorDashboardProps {
   session: TechnicianSession;
   onOpenSettings: () => void;
+  onOpenVideoInspection?: () => void;
   onLogout: () => Promise<void>;
 }
 
@@ -194,7 +196,12 @@ function SoldMetricsForm({
   );
 }
 
-export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorDashboardProps) {
+export function AdvisorDashboard({
+  session,
+  onOpenSettings,
+  onOpenVideoInspection,
+  onLogout,
+}: AdvisorDashboardProps) {
   const [repairOrders, setRepairOrders] = useState<RepairOrderSummary[]>([]);
   const [selectedRoId, setSelectedRoId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RepairOrder | null>(null);
@@ -277,6 +284,17 @@ export function AdvisorDashboard({ session, onOpenSettings, onLogout }: AdvisorD
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {onOpenVideoInspection ? (
+            <button
+              type="button"
+              onClick={onOpenVideoInspection}
+              className="benz-icon-btn touch-target text-benz-blue"
+              aria-label="Video Inspection"
+              title="Video Inspection"
+            >
+              <Video size={20} />
+            </button>
+          ) : null}
           <button
             onClick={onOpenSettings}
             className="benz-icon-btn touch-target text-benz-blue"

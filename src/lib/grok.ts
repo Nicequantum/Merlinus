@@ -651,6 +651,67 @@ export async function reviewWarrantyStory(
   return parsed;
 }
 
+/**
+ * Customer video inspection report — separate from warranty story generation.
+ * Multimodal: system + user text + optional still-frame image_url parts.
+ */
+export async function generateCustomerVideoReport(input: {
+  transcript: string;
+  transcriptLanguage?: string | null;
+  vehicleLabel?: string | null;
+  dealershipName?: string | null;
+  title?: string | null;
+  /** Vision data URLs (JPEG/PNG) — client keyframes. Max ~8 used. */
+  frameDataUrls?: string[];
+}): Promise<string> {
+  assertGrokServerRuntime('generateCustomerVideoReport');
+  const { CUSTOMER_VIDEO_REPORT_SYSTEM_PROMPT } = await import(
+    '@/prompts/customerVideoReport/systemPrompt'
+  );
+  const { buildCustomerVideoReportUserMessage } = await import(
+    '@/prompts/customerVideoReport/buildUserMessage'
+  );
+  const { CUSTOMER_VIDEO_REPORT_GROK_MS } = await import('@/lib/timeouts');
+
+  const frames = (input.frameDataUrls ?? []).filter(Boolean).slice(0, 8);
+  const userText = buildCustomerVideoReportUserMessage({
+    transcript: input.transcript,
+    transcriptLanguage: input.transcriptLanguage,
+    vehicleLabel: input.vehicleLabel,
+    dealershipName: input.dealershipName,
+    title: input.title,
+    frameCount: frames.length,
+  });
+
+  const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+    { type: 'text', text: userText },
+    ...frames.map((url) => ({ type: 'image_url', image_url: { url } })),
+  ];
+
+  const model =
+    process.env.GROK_CUSTOMER_REPORT_MODEL?.trim() || GROK_CHAT_MODEL;
+
+  const report = await grokChat(
+    [
+      { role: 'system', content: CUSTOMER_VIDEO_REPORT_SYSTEM_PROMPT },
+      { role: 'user', content },
+    ],
+    {
+      model,
+      temperature: 0.35,
+      max_tokens: 2048,
+      timeoutMs: CUSTOMER_VIDEO_REPORT_GROK_MS,
+      perfLabel: 'grok.customer_video_report',
+    }
+  );
+
+  const trimmed = report?.trim();
+  if (!trimmed) {
+    throw new Error('AI did not return a customer inspection report. Try again.');
+  }
+  return trimmed;
+}
+
 export async function extractDiagnosticsFromImage(imageDataUrl: string): Promise<ExtractedData> {
   const raw = await grokChat(
     [

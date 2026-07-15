@@ -11,6 +11,7 @@ import {
   Sparkles,
   Users,
   UserRound,
+  Video,
 } from 'lucide-react';
 import Link from 'next/link';
 import { DealershipBranding } from '@/components/DealershipBranding';
@@ -30,6 +31,7 @@ interface ManagerDashboardProps {
   onOpenAuditLogs: () => void;
   onOpenServiceAdvisors: () => void;
   onOpenTechnicians: () => void;
+  onOpenVideoInspection?: () => void;
   pendingROImages: PendingImage[];
   onScanRO: () => void;
   onAddFromGallery: () => void;
@@ -76,6 +78,7 @@ export function ManagerDashboard({
   onOpenAuditLogs,
   onOpenServiceAdvisors,
   onOpenTechnicians,
+  onOpenVideoInspection,
   pendingROImages,
   onScanRO,
   onAddFromGallery,
@@ -178,6 +181,15 @@ export function ManagerDashboard({
                     <BarChart3 size={14} /> Usage
                   </Link>
                 )}
+                {onOpenVideoInspection ? (
+                  <button
+                    type="button"
+                    onClick={onOpenVideoInspection}
+                    className="secondary-btn w-full h-11 text-xs font-semibold flex items-center justify-center gap-2"
+                  >
+                    <Video size={14} /> Video Inspection
+                  </button>
+                ) : null}
                 <button
                   onClick={onOpenServiceAdvisors}
                   className="secondary-btn w-full h-11 text-xs font-semibold flex items-center justify-center gap-2"

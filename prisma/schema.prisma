@@ -143,6 +143,7 @@ model Dealership {
   serviceAdvisors ServiceAdvisor[]
   advisorObservations AdvisorComplaintObservation[]
   technicianMemberships TechnicianDealership[]
+  videoInspections      VideoInspection[]
 
   @@index([dealerId])
 }
@@ -200,6 +201,9 @@ model Technician {
   sessionRefreshTokens SessionRefreshToken[]
   dealershipMemberships TechnicianDealership[]
   dealerGroupMemberships DealerGroupMembership[]
+  videoInspections       VideoInspection[]
+  videoInspectionShares  VideoInspectionShare[]
+  videoInspectionSmsLogs VideoInspectionSmsLog[]
 
   @@index([dealerId])
   @@index([dealershipId])
@@ -209,6 +213,80 @@ model Technician {
   @@index([apexUsername])
   /** Phase 7.3 — active staff lists / owner summary staff depth */
   @@index([dealershipId, isActive, deletedAt])
+}
+
+/**
+ * Video Inspection — customer-facing multi-media inspections (separate from warranty AI).
+ * Private Blob video + encrypted transcript/report + shareable customer viewer.
+ */
+model VideoInspection {
+  id                    String   @id @default(cuid())
+  dealerId              String?  @map("dealer_id")
+  dealershipId          String
+  dealership            Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  technicianId          String
+  technician            Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  repairOrderId         String?
+  repairLineId          String?
+  /** draft | processing | ready | failed | sent */
+  status                String   @default("draft")
+  videoPathname         String   @default("")
+  contentType           String   @default("video/webm")
+  sizeBytes             Int      @default(0)
+  durationSec           Float?
+  thumbnailPathname     String?
+  /** JSON array of private Blob pathnames for AI keyframes */
+  framePathnames        String   @default("[]")
+  transcriptEncrypted   String   @default("")
+  transcriptLanguage    String   @default("en")
+  reportEncrypted       String   @default("")
+  reportPromptVersion   String   @default("")
+  vehicleLabel          String?
+  title                 String   @default("Video inspection")
+  errorMessage          String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  shares                VideoInspectionShare[]
+  smsLogs               VideoInspectionSmsLog[]
+
+  @@index([dealershipId, createdAt(sort: Desc)])
+  @@index([technicianId, createdAt(sort: Desc)])
+  @@index([dealershipId, status])
+  @@index([dealerId])
+}
+
+model VideoInspectionShare {
+  id                     String   @id @default(cuid())
+  videoInspectionId      String
+  videoInspection        VideoInspection @relation(fields: [videoInspectionId], references: [id], onDelete: Cascade)
+  tokenHash              String   @unique
+  passcodeHash           String?
+  expiresAt              DateTime?
+  revokedAt              DateTime?
+  viewCount              Int      @default(0)
+  createdByTechnicianId  String
+  createdBy              Technician @relation(fields: [createdByTechnicianId], references: [id], onDelete: Cascade)
+  createdAt              DateTime @default(now())
+
+  @@index([videoInspectionId])
+  @@index([createdByTechnicianId])
+}
+
+model VideoInspectionSmsLog {
+  id                String   @id @default(cuid())
+  videoInspectionId String
+  videoInspection   VideoInspection @relation(fields: [videoInspectionId], references: [id], onDelete: Cascade)
+  shareId           String?
+  phoneEncrypted    String   @default("")
+  phoneLast4        String   @default("")
+  providerMessageId String?
+  status            String   @default("queued")
+  sentByTechnicianId String
+  sentBy            Technician @relation(fields: [sentByTechnicianId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+
+  @@index([videoInspectionId, createdAt])
+  @@index([sentByTechnicianId])
 }
 
 /** APEX Phase 5.2 — multi-rooftop membership; source of truth for dealership access scoping. */

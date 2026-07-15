@@ -48,6 +48,16 @@ export const STORY_REVIEW_CLIENT_MS = STORY_REVIEW_ROUTE_MAX_DURATION_S * 1000 +
 /** Image upload during RO/diagnostic scans — allow slow dealership uplinks. */
 export const UPLOAD_CLIENT_MS = 60_000;
 
+/** Video inspection upload — large files on shop Wi‑Fi. */
+export const VIDEO_UPLOAD_CLIENT_MS = 180_000;
+
+/** Customer video report (frames + transcript) — multimodal Grok. */
+export const CUSTOMER_VIDEO_REPORT_GROK_MS = 120_000;
+/** Sync with `maxDuration` in generate-report route */
+export const CUSTOMER_VIDEO_REPORT_ROUTE_MAX_DURATION_S = 130;
+export const CUSTOMER_VIDEO_REPORT_CLIENT_MS =
+  CUSTOMER_VIDEO_REPORT_ROUTE_MAX_DURATION_S * 1000 + CLIENT_BUFFER_MS;
+
 /** Day-to-day RO CRUD — cold serverless + shop Wi‑Fi; never hang forever. */
 export const RO_CRUD_CLIENT_MS = 45_000;
 

@@ -225,6 +225,52 @@ export const api = {
       body: JSON.stringify({ preferredLanguage }),
     }),
 
+  listVideoInspections: () =>
+    apiFetch<{ inspections: import('@/types').VideoInspectionSummary[] }>(
+      '/api/video-inspections',
+      { cache: 'no-store' }
+    ),
+
+  getVideoInspection: (id: string) =>
+    apiFetch<{ inspection: import('@/types').VideoInspectionDetail }>(
+      `/api/video-inspections/${id}`,
+      { cache: 'no-store' }
+    ),
+
+  uploadVideoInspection: (form: FormData) =>
+    apiUpload<{ inspection: import('@/types').VideoInspectionDetail }>(
+      '/api/video-inspections/upload',
+      form,
+      180_000
+    ),
+
+  generateVideoInspectionReport: (id: string) =>
+    apiFetch<{ inspection: import('@/types').VideoInspectionDetail }>(
+      `/api/video-inspections/${id}/generate-report`,
+      { method: 'POST', timeoutMs: 140_000, maxRetries: 0 }
+    ),
+
+  patchVideoInspection: (
+    id: string,
+    body: { title?: string; vehicleLabel?: string | null; report?: string; transcript?: string }
+  ) =>
+    apiFetch<{ inspection: import('@/types').VideoInspectionDetail }>(
+      `/api/video-inspections/${id}`,
+      { method: 'PATCH', body: JSON.stringify(body) }
+    ),
+
+  shareVideoInspection: (id: string, body?: { passcode?: string; expiresInHours?: number }) =>
+    apiFetch<{ shareId: string; url: string; token: string; expiresAt: string }>(
+      `/api/video-inspections/${id}/share`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) }
+    ),
+
+  sendVideoInspectionSms: (id: string, phone: string, shareUrl?: string) =>
+    apiFetch<{ ok: boolean; shareUrl: string; phoneLast4: string }>(
+      `/api/video-inspections/${id}/send-sms`,
+      { method: 'POST', body: JSON.stringify({ phone, shareUrl }) }
+    ),
+
   listRepairOrders: (
     params?: {
       limit?: number;

@@ -9,6 +9,7 @@ import enLine from './locales/en/line.json';
 import enStory from './locales/en/story.json';
 import enVoice from './locales/en/voice.json';
 import enSettings from './locales/en/settings.json';
+import enVideo from './locales/en/video.json';
 
 import esCommon from './locales/es/common.json';
 import esAuth from './locales/es/auth.json';
@@ -17,6 +18,7 @@ import esLine from './locales/es/line.json';
 import esStory from './locales/es/story.json';
 import esVoice from './locales/es/voice.json';
 import esSettings from './locales/es/settings.json';
+import esVideo from './locales/es/video.json';
 
 export const I18N_NAMESPACES = [
   'common',
@@ -26,6 +28,7 @@ export const I18N_NAMESPACES = [
   'story',
   'voice',
   'settings',
+  'video',
 ] as const;
 
 const resources = {
@@ -37,6 +40,7 @@ const resources = {
     story: enStory,
     voice: enVoice,
     settings: enSettings,
+    video: enVideo,
   },
   es: {
     common: esCommon,
@@ -46,6 +50,7 @@ const resources = {
     story: esStory,
     voice: esVoice,
     settings: esSettings,
+    video: esVideo,
   },
 };
 

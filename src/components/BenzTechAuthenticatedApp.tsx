@@ -72,6 +72,12 @@ const DesktopCompanionLayout = dynamic(
   { loading: () => <LoadingScreen label="Loading desktop companion" /> }
 );
 
+const VideoInspectionView = dynamic(
+  () =>
+    import('@/components/videoInspection/VideoInspectionView').then((m) => m.VideoInspectionView),
+  { loading: () => <LoadingScreen label="Loading video inspection" /> }
+);
+
 function runAction(label: string, action: () => void | Promise<void>): void {
   void Promise.resolve(action()).catch((error: unknown) => {
     clientLog.error('ui.action_failed', { label, error });
@@ -171,11 +177,16 @@ export function BenzTechAuthenticatedApp({
             onLogout={onLogout}
             onSessionRefresh={onSessionRefresh}
           />
+        ) : ro.view === 'videoInspection' ? (
+          <ViewErrorBoundary viewName="video inspection">
+            <VideoInspectionView session={uiSession} onBack={() => ro.setView('home')} />
+          </ViewErrorBoundary>
         ) : (
           <ViewErrorBoundary viewName="the service advisor dashboard">
             <AdvisorDashboard
               session={uiSession}
               onOpenSettings={goToSettings}
+              onOpenVideoInspection={() => ro.setView('videoInspection')}
               onLogout={onLogout}
             />
           </ViewErrorBoundary>
@@ -251,7 +262,8 @@ export function BenzTechAuthenticatedApp({
         ro.view !== 'settings' &&
         ro.view !== 'audit' &&
         ro.view !== 'advisors' &&
-        ro.view !== 'technicians' && (
+        ro.view !== 'technicians' &&
+        ro.view !== 'videoInspection' && (
           <AppHeader
             technicianName={session.name}
             dealershipName={session.dealershipName}
@@ -267,6 +279,7 @@ export function BenzTechAuthenticatedApp({
             onSearchChange={ro.setSearchTerm}
             openingROId={ro.openingROId}
             onOpenRO={ro.openRO}
+            onOpenVideoInspection={() => ro.setView('videoInspection')}
             onOpenSettings={goToSettings}
             onOpenAuditLogs={() => ro.setView('audit')}
             onOpenServiceAdvisors={() => ro.setView('advisors')}
@@ -299,6 +312,7 @@ export function BenzTechAuthenticatedApp({
           todayROs={ro.todayROs}
           previousROs={ro.previousROs}
           previousExpanded={ro.previousExpanded}
+          onOpenVideoInspection={() => ro.setView('videoInspection')}
           onTogglePrevious={ro.togglePreviousExpanded}
           previousLoading={ro.previousLoading}
           previousLoadingMore={ro.previousLoadingMore}
@@ -540,6 +554,12 @@ export function BenzTechAuthenticatedApp({
       {ro.view === 'technicians' && isManager && (
         <ViewErrorBoundary viewName="technicians">
           <TechniciansView onBack={() => ro.setView('home')} />
+        </ViewErrorBoundary>
+      )}
+
+      {ro.view === 'videoInspection' && (
+        <ViewErrorBoundary viewName="video inspection">
+          <VideoInspectionView session={uiSession} onBack={() => ro.setView('home')} />
         </ViewErrorBoundary>
       )}
 

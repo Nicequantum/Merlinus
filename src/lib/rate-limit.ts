@@ -30,6 +30,10 @@ export const RATE_LIMITS = {
   auth: { limit: 10, windowMs: 60_000 },
   /** Image blob uploads. */
   upload: { limit: 30, windowMs: 60_000 },
+  /** Video inspection uploads (larger payloads). */
+  videoUpload: { limit: 10, windowMs: 60_000 },
+  /** Customer SMS sends. */
+  sms: { limit: 10, windowMs: 60_000 },
   /** Grok-backed routes: story generate/review/score, RO + diagnostic vision extract. */
   generate: { limit: 20, windowMs: 60_000 },
   grok: { limit: 20, windowMs: 60_000 },
