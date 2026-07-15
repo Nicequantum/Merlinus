@@ -1164,34 +1164,87 @@ async function checkCoreFeatures(): Promise<void> {
     const baseUrl = process.env.MERLIN_BASE_URL?.replace(/\/$/, '');
     if (baseUrl) {
       const started = Date.now();
-      const res = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(20_000) });
-      const body = (await res.json()) as {
-        status?: string;
-        services?: Record<string, string>;
-      };
-      if (!res.ok || body.status === 'error') {
-        record(
-          'Core Features',
-          'Live /api/health endpoint',
-          'fail',
-          `HTTP ${res.status} status=${body.status ?? 'unknown'}`
-        );
-      } else if (body.status === 'degraded') {
+      const res = await fetch(`${baseUrl}/api/health`, {
+        signal: AbortSignal.timeout(20_000),
+        headers: { Accept: 'application/json' },
+        // Avoid following Vercel SSO HTML redirects; prefer the 401 JSON body.
+        redirect: 'manual',
+      });
+      const raw = await res.text();
+      const contentType = res.headers.get('content-type') || '';
+      const isHtml = contentType.includes('text/html') || /^\s*<!DOCTYPE/i.test(raw) || /^\s*<html/i.test(raw);
+
+      // Vercel Deployment Protection (team SSO) — not an app code defect.
+      if (
+        res.status === 401 ||
+        res.status === 403 ||
+        (res.type === 'opaqueredirect' && res.status >= 300 && res.status < 400) ||
+        (isHtml && res.status >= 300)
+      ) {
+        let protectionNote = `HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(raw) as {
+            error?: { message?: string } | string;
+            protection?: { vercel_auth_enabled?: boolean };
+          };
+          const msg =
+            typeof parsed.error === 'string'
+              ? parsed.error
+              : parsed.error?.message || '';
+          if (msg || parsed.protection?.vercel_auth_enabled) {
+            protectionNote = msg || 'Protected deployment (Vercel SSO)';
+          }
+        } catch {
+          if (isHtml) protectionNote = 'Vercel auth HTML (deployment protection)';
+        }
         record(
           'Core Features',
           'Live /api/health endpoint',
           'warn',
-          `HTTP ${res.status} degraded in ${Date.now() - started}ms`,
+          `${baseUrl}/api/health blocked by deployment protection: ${protectionNote}. Open URL in a Vercel-team browser session, or set MERLIN_HEALTH_COOKIE / protection bypass for CLI probes.`,
           false
         );
       } else {
-        const svc = body.services ? Object.entries(body.services).map(([k, v]) => `${k}=${v}`).join(', ') : 'n/a';
-        record(
-          'Core Features',
-          'Live /api/health endpoint',
-          'pass',
-          `${baseUrl}/api/health → ${body.status} (${Date.now() - started}ms) [${svc}]`
-        );
+        let body: { status?: string; services?: Record<string, string>; checks?: unknown } = {};
+        try {
+          body = JSON.parse(raw) as typeof body;
+        } catch {
+          record(
+            'Core Features',
+            'Live /api/health endpoint',
+            'fail',
+            `HTTP ${res.status} non-JSON body (${contentType || 'unknown type'})`
+          );
+          return;
+        }
+        if (!res.ok || body.status === 'error') {
+          record(
+            'Core Features',
+            'Live /api/health endpoint',
+            'fail',
+            `HTTP ${res.status} status=${body.status ?? 'unknown'}`
+          );
+        } else if (body.status === 'degraded') {
+          record(
+            'Core Features',
+            'Live /api/health endpoint',
+            'warn',
+            `HTTP ${res.status} degraded in ${Date.now() - started}ms`,
+            false
+          );
+        } else {
+          const svc = body.services
+            ? Object.entries(body.services)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(', ')
+            : 'n/a';
+          record(
+            'Core Features',
+            'Live /api/health endpoint',
+            'pass',
+            `${baseUrl}/api/health → ${body.status} (${Date.now() - started}ms) [${svc}]`
+          );
+        }
       }
     } else {
       record(
@@ -1203,12 +1256,20 @@ async function checkCoreFeatures(): Promise<void> {
       );
     }
   } catch (error) {
-    record(
-      'Core Features',
-      'Health endpoint check',
-      'fail',
-      error instanceof Error ? error.message : 'Health check failed'
-    );
+    const message = error instanceof Error ? error.message : 'Health check failed';
+    // Network / DNS / JSON parse from protected HTML should not always be "code" hard-fails
+    // when MERLIN_BASE_URL points at a Vercel-protected staging host.
+    if (/Unexpected token|is not valid JSON|Protected deployment/i.test(message)) {
+      record(
+        'Core Features',
+        'Live /api/health endpoint',
+        'warn',
+        `${message} — likely Vercel Deployment Protection; use team SSO browser or bypass secret`,
+        false
+      );
+    } else {
+      record('Core Features', 'Health endpoint check', 'fail', message);
+    }
   }
 }
 

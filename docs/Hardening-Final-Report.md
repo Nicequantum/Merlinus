@@ -3,7 +3,22 @@
 **Release commit:** `dc8f62e`  
 **Date:** 2026-07-15  
 **Audience:** Engineering, dealership IT, service managers, bay pilot techs  
-**Status:** Code complete on `main`. Automated soak suite green. Live staging deploy + physical bay soak require ops credentials / shop tablets (see handoff).
+**Status:** Code complete on `main` (`dc8f62e` / docs `e217ff4`). Correct Vercel host identified (below). Deployment Protection blocks unauthenticated health probes; physical bay soak requires Vercel team SSO + shop tablets.
+
+### Canonical staging / production host (Vercel)
+
+| Role | URL | Notes |
+|------|-----|--------|
+| **Primary project host** | https://merlinus-hombre-harris-s-projects.vercel.app | Vercel project `merlinus` under `hombre-harris-s-projects` |
+| **Git `main` alias** | https://merlinus-git-main-hombre-harris-s-projects.vercel.app | Tracks latest successful `main` deploy |
+| **Deploy `e217ff4` (docs)** | https://merlinus-jo9zedosw-hombre-harris-s-projects.vercel.app | GitHub deployment status for latest main |
+| **Deploy `dc8f62e` (code)** | https://merlinus-5vdskm11g-hombre-harris-s-projects.vercel.app | Hardening code commit |
+| ~~staging.merlinus.app~~ | — | **Invalid** — DNS NXDOMAIN (do not use) |
+| ~~viti-ai.vercel.app~~ | — | Separate project / older build (not this release) |
+
+**Vercel dashboard:** https://vercel.com/hombre-harris-s-projects/merlinus  
+
+**Protection:** Hosts return `401 Protected deployment` (Vercel SSO) for unauthenticated `/api/health`. Use team login in browser, or set `VERCEL_AUTOMATION_BYPASS_SECRET` / `MERLIN_HEALTH_COOKIE` for CLI probes.
 
 ---
 
@@ -86,16 +101,18 @@ npx tsx --test \
 | Search abort / sequence | Unit tests | Fast-type on staging |
 | Companion dirty pause | Unit tests | Tablet + desktop |
 
-### Staging deploy status (this environment)
+### Staging deploy status (updated 2026-07-15)
 
 | Step | Status |
 |------|--------|
-| Code on `main` at `dc8f62e` | Done |
-| Vercel CLI deploy from this machine | **Blocked** — no `VERCEL_TOKEN` / `vercel login` |
-| Local `npm run validate:pre-deploy` | Partial — Sentry DSN warn; DB host unreachable from this agent |
-| Production auto-deploy from GitHub → Vercel | Assumed if project is linked to `main` — **ops must confirm** |
+| Code on `main` (`dc8f62e` + `e217ff4`) | Done — GitHub `main` |
+| Vercel auto-deploy from GitHub | **Confirmed** — GitHub Deployments API lists Production success for `dc8f62e` and `e217ff4` |
+| Correct host | `https://merlinus-hombre-harris-s-projects.vercel.app` |
+| Unauthenticated `/api/health` | **401 Protected deployment** (Vercel SSO) |
+| Live pre-rollout with `MERLIN_BASE_URL` | Re-run against correct host; see latest results in commit notes / agent log |
+| Physical bay soak | Pending — team SSO + tablets |
 
-**Ops action:** Confirm Vercel staging (or Preview) deployment for commit `dc8f62e`, then complete the human checklist in §6.
+**Ops action:** Sign in via Vercel SSO on the primary host, complete §5 bay checklist, then promote after sign-off.
 
 ---
 
@@ -155,22 +172,22 @@ Copy this for pilot sign-off. Mark each item after testing on **staging** with r
 
 ### Deploy staging (required human step)
 
-```bash
-# If Vercel project is linked and token available:
-vercel login
-# or: $env:VERCEL_TOKEN = "..."
-npx vercel --target=preview   # staging/preview
-# production only after soak sign-off:
-# npx vercel --prod
+Canonical host (already auto-deployed from `main`):
+
+```text
+https://merlinus-hombre-harris-s-projects.vercel.app
 ```
 
-Or: open Vercel dashboard → Project → Deployments → confirm `dc8f62e` / latest `main` is **Ready** on the staging alias.
-
-Then:
-
 ```bash
-MERLIN_BASE_URL=https://<staging-host> npm run validate:pre-rollout
+# Live probe (use correct host — NOT staging.merlinus.app)
+$env:MERLIN_BASE_URL="https://merlinus-hombre-harris-s-projects.vercel.app"
+npm run validate:pre-rollout
 ```
+
+Open the host in a **Vercel team-authenticated** browser (Deployment Protection SSO).  
+For unauthenticated CLI health: configure Vercel protection bypass secret and pass cookie/header as documented by Vercel.
+
+Dashboard: https://vercel.com/hombre-harris-s-projects/merlinus
 
 ### Notify team (template)
 
