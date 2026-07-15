@@ -2,6 +2,22 @@
 
 All notable changes to Merlinus are documented here.
 
+## [3.0.2] — 2026-07-15
+
+### Production reliability hardening series — **complete on `main` (`dc8f62e`)**
+
+Full report: [docs/Hardening-Final-Report.md](docs/Hardening-Final-Report.md).
+
+| Wave | Commit | Summary |
+|------|--------|---------|
+| Scan pipeline | `f5dc5b7` | OCR hard-reset, empty MIME upload, vision-downscaled diagnostics, image populate |
+| P0 + P1 | `cbfe4e6` | Save merge, companion dirty pause, no POST retries, session≠timeout, slim list, xentry concurrency 2, poll backoff |
+| P2 | `6c5143c` | Search abort, voice listener cleanup, cheap clone, 409 Keep mine/Use server, create Idempotency-Key |
+| Final | `dc8f62e` | Line notes/story PATCH, per-RO save queues, batched PUT line writes, dead `useSession` removed, `authClient` |
+
+**Engineering gate:** 70 automated soak tests green (2026-07-15).  
+**Ops next:** Confirm Vercel staging deploy of `dc8f62e`, run bay checklist in the hardening report, then promote to production.
+
 ## [3.0.1] — 2026-07-11
 
 ### Enterprise Readiness Cleanup (Phase 7.1–7.3) — **complete**
