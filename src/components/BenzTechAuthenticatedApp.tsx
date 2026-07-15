@@ -28,6 +28,9 @@ import {
   effectiveServiceAdvisorId,
   isOwnerDealershipView,
 } from '@/lib/apex/viewAs';
+import { useTranslation } from 'react-i18next';
+import { localeToSpeechLang } from '@/lib/i18n/locales';
+import { setAppLanguage } from '@/i18n/config';
 import type { TechnicianSession } from '@/types';
 
 const ManagerDashboard = dynamic(
@@ -88,6 +91,7 @@ export function BenzTechAuthenticatedApp({
   onLogout,
   onSessionRefresh,
 }: BenzTechAuthenticatedAppProps) {
+  const { t: tHome } = useTranslation('home');
   const ocr = useOcrProgress();
   const handleComplianceRequired = useCallback(() => {
     void onSessionRefresh();
@@ -117,6 +121,12 @@ export function BenzTechAuthenticatedApp({
       }
     : session;
 
+  const speechLanguage = localeToSpeechLang(session.preferredLanguage);
+
+  useEffect(() => {
+    setAppLanguage(session.preferredLanguage);
+  }, [session.preferredLanguage]);
+
   useEffect(() => {
     if (isServiceAdvisor || ro.loading || ro.listError) return;
     void recordTechnicianAppStart({
@@ -134,13 +144,13 @@ export function BenzTechAuthenticatedApp({
   ]);
 
   if (!isServiceAdvisor && !isManager && ro.loading && !ro.listError) {
-    return <LoadingScreen label="Loading today's repair orders" sublabel="Getting your active work ready..." />;
+    return <LoadingScreen label={tHome('loadingRos')} sublabel={tHome('loadingSublabel')} />;
   }
 
   if (!isServiceAdvisor && ro.listError && !isManager) {
     return (
       <LoadErrorScreen
-        title="Could not load repair orders"
+        title={tHome('loadErrorTitle')}
         message={ro.listError}
         onRetry={() => runAction('Retry loading repair orders', () => ro.retryListLoad())}
         retrying={ro.listRetrying}
@@ -159,6 +169,7 @@ export function BenzTechAuthenticatedApp({
             session={uiSession}
             onBack={() => ro.setView('home')}
             onLogout={onLogout}
+            onSessionRefresh={onSessionRefresh}
           />
         ) : (
           <ViewErrorBoundary viewName="the service advisor dashboard">
@@ -224,7 +235,7 @@ export function BenzTechAuthenticatedApp({
   const companionMode = showDesktopCompanion;
 
   return (
-    <VoiceInputProvider>
+    <VoiceInputProvider speechLanguage={speechLanguage}>
     <CompanionSyncBridge session={session} enabled role={companionSyncRole} ro={ro} ocr={ocr}>
       {(companion) => (
     <div
@@ -507,6 +518,7 @@ export function BenzTechAuthenticatedApp({
           session={uiSession}
           onBack={() => ro.setView(ro.currentRO ? 'ro' : 'home')}
           onLogout={onLogout}
+          onSessionRefresh={onSessionRefresh}
           onOpenAuditLogs={isManager ? () => ro.setView('audit') : undefined}
           onOpenServiceAdvisors={isManager ? () => ro.setView('advisors') : undefined}
           onOpenTechnicians={isManager ? () => ro.setView('technicians') : undefined}

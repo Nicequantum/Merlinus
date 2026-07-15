@@ -3,6 +3,7 @@
 // Voice dictation uses the browser Web Speech API; audio is sent to Google's speech service.
 import { Mic, MicOff } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useSharedVoiceInput } from '@/components/VoiceInputProvider';
 import { setCompanionVoiceListening } from '@/lib/companionVoiceBridge';
@@ -17,6 +18,27 @@ interface VoiceInputButtonProps {
   className?: string;
 }
 
+function voiceErrorKey(code: string | null | undefined): string {
+  switch (code) {
+    case 'no-speech':
+      return 'noSpeech';
+    case 'aborted':
+      return 'aborted';
+    case 'audio-capture':
+      return 'audioCapture';
+    case 'network':
+      return 'network';
+    case 'not-allowed':
+      return 'notAllowed';
+    case 'service-not-allowed':
+      return 'serviceNotAllowed';
+    case 'language-not-supported':
+      return 'languageNotSupported';
+    default:
+      return 'genericError';
+  }
+}
+
 export function VoiceInputButton({
   targetRef,
   onTranscript,
@@ -24,6 +46,7 @@ export function VoiceInputButton({
   dictationMode = 'default',
   className = '',
 }: VoiceInputButtonProps) {
+  const { t } = useTranslation('voice');
   const lastErrorRef = useRef<string | null>(null);
   const {
     isListening,
@@ -33,6 +56,7 @@ export function VoiceInputButton({
     permission,
     listeningState,
     errorMessage,
+    errorCode,
     toggleListening,
     refreshPermission,
   } = useSharedVoiceInput();
@@ -50,11 +74,13 @@ export function VoiceInputButton({
   }, [isActiveField, onListeningChange]);
 
   useEffect(() => {
-    if (listeningState !== 'error' || !errorMessage) return;
-    if (lastErrorRef.current === errorMessage) return;
-    lastErrorRef.current = errorMessage;
-    toast.error(errorMessage);
-  }, [listeningState, errorMessage]);
+    if (listeningState !== 'error') return;
+    const key = voiceErrorKey(errorCode);
+    const msg = t(key);
+    if (lastErrorRef.current === msg) return;
+    lastErrorRef.current = msg;
+    toast.error(msg || errorMessage || t('genericError'));
+  }, [listeningState, errorCode, errorMessage, t]);
 
   const handleTranscript = useCallback(
     (value: string, meta?: TranscriptMeta) => {
@@ -68,15 +94,15 @@ export function VoiceInputButton({
     if (!el) return;
 
     if (!isEnabled) {
-      toast.message('Voice input is disabled for this dealership. Type your notes below.');
+      toast.message(t('disabled'));
       return;
     }
     if (!isSupported) {
-      toast.error('Voice input is not supported in this browser. Use Chrome or Edge on your tablet.');
+      toast.error(t('notSupported'));
       return;
     }
     if (permission === 'denied') {
-      toast.error('Microphone blocked. Open site settings and allow mic access, then reload.');
+      toast.error(t('permissionDenied'));
       return;
     }
 
@@ -86,7 +112,7 @@ export function VoiceInputButton({
 
   if (!isEnabled) return null;
 
-  const micTitle = isActiveField ? 'Stop voice input' : 'Start voice input';
+  const micTitle = isActiveField ? t('stopMic') : t('startMic');
   const isActive = isActiveField;
 
   return (

@@ -2,7 +2,7 @@ import type { RepairLine, RepairOrder } from '@/types';
 import { formatExtractedDataForPrompt } from '@/utils/diagnosticParser';
 import { extractRequiredCorrectionsFromNotes } from '@/lib/storyRegenerateGuard';
 import type { StoryBrandPack, VeteranPersona } from './types';
-import { TRUTH_USER_MESSAGE_BANNER } from './truthRules';
+import { buildInputLanguageInstruction, TRUTH_USER_MESSAGE_BANNER } from './truthRules';
 import { PROMPT_FIELD_LIMITS, truncatePromptField } from './fieldLimits';
 import {
   PENDING_CORRECTIONS_END,
@@ -21,6 +21,11 @@ export type BuildStoryUserMessageOptions = {
   mode?: 'generate' | 'regenerate' | 'auto';
   /** Override prior story text (defaults to line.warrantyStory). */
   priorStory?: string | null;
+  /**
+   * Technician preferred language for notes input (`en` | `es` | …).
+   * Story output is always professional English.
+   */
+  preferredLanguage?: string | null;
 };
 
 export function selectPersonaFromPack(
@@ -88,6 +93,8 @@ export function buildStoryUserMessage(
 
   const priorStory = (options?.priorStory ?? line.warrantyStory ?? '').trim();
   const isRegen = shouldRegenerateStory(line, { ...options, priorStory });
+  const languageBlock = buildInputLanguageInstruction(options?.preferredLanguage);
+  const languageSection = languageBlock ? `\n\n${languageBlock}\n` : '\n';
 
   if (isRegen && priorStory) {
     // Prefer full current story — do not preferEnd (would drop the opening).
@@ -105,7 +112,7 @@ export function buildStoryUserMessage(
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
 
 ${TRUTH_USER_MESSAGE_BANNER}
-
+${languageSection}
 ${STORY_REGENERATE_USER_HEADER}
 
 Keep the same technician voice (persona ${persona.id}, ~${persona.years} years):
@@ -140,11 +147,11 @@ Pending corrections fence marker (for your awareness): ${PENDING_CORRECTIONS_STA
 RO ${ro.roNumber} | ${vehicle} | ${miles} mi
 
 ${TRUTH_USER_MESSAGE_BANNER}
-
+${languageSection}
 STYLE VARIATION — write as this veteran technician (persona ${persona.id}, ~${persona.years} years experience):
 ${persona.voice}
 
-Technician notes (expand into professional prose; never copy verbatim; never invent facts not supported here):
+Technician notes (expand into professional English prose; never copy verbatim; never invent facts not supported here):
 <<<TECHNICIAN_NOTES>>
 ${notes}
 <<<END_TECHNICIAN_NOTES>>

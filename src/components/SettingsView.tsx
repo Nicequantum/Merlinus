@@ -15,8 +15,17 @@ import {
 } from 'lucide-react';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { api, type TechnicianUser } from '@/lib/api';
+import {
+  LOCALE_LABELS,
+  SUPPORTED_LOCALES,
+  localeToSpeechLang,
+  normalizePreferredLanguage,
+  type PreferredLanguage,
+} from '@/lib/i18n/locales';
+import { setAppLanguage } from '@/i18n/config';
 import type { AdvisorListItem, TechnicianSession } from '@/types';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { ClerkLinkAccountSection } from '@/components/ClerkLinkAccountSection';
@@ -26,6 +35,7 @@ interface SettingsViewProps {
   session: TechnicianSession;
   onBack: () => void;
   onLogout: () => Promise<void>;
+  onSessionRefresh?: () => Promise<TechnicianSession | null>;
   onOpenAuditLogs?: () => void;
   onOpenServiceAdvisors?: () => void;
   onOpenTechnicians?: () => void;
@@ -35,10 +45,12 @@ export function SettingsView({
   session,
   onBack,
   onLogout,
+  onSessionRefresh,
   onOpenAuditLogs,
   onOpenServiceAdvisors,
   onOpenTechnicians,
 }: SettingsViewProps) {
+  const { t } = useTranslation('settings');
   const [users, setUsers] = useState<TechnicianUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -61,6 +73,10 @@ export function SettingsView({
   const [resetTargetId, setResetTargetId] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [preferredLanguage, setPreferredLanguage] = useState<PreferredLanguage>(() =>
+    normalizePreferredLanguage(session.preferredLanguage)
+  );
+  const [savingLanguage, setSavingLanguage] = useState(false);
 
   const isManager = session.role === 'manager';
   const isAdmin = session.isAdmin === true;
@@ -97,12 +113,43 @@ export function SettingsView({
     loadAdvisorProfiles();
   }, [loadUsers, loadAdvisorProfiles]);
 
+  useEffect(() => {
+    setPreferredLanguage(normalizePreferredLanguage(session.preferredLanguage));
+  }, [session.preferredLanguage]);
+
+  const handleLanguageChange = async (next: PreferredLanguage) => {
+    if (next === preferredLanguage || savingLanguage) return;
+    setSavingLanguage(true);
+    const previous = preferredLanguage;
+    setPreferredLanguage(next);
+    try {
+      const result = await api.updatePreferences(next);
+      setAppLanguage(result.preferredLanguage);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('merlin:speech-language', {
+            detail: { lang: localeToSpeechLang(result.preferredLanguage) },
+          })
+        );
+      }
+      if (onSessionRefresh) {
+        await onSessionRefresh();
+      }
+      toast.success(t('languageSaved'));
+    } catch (error: unknown) {
+      setPreferredLanguage(previous);
+      toast.error(error instanceof Error ? error.message : t('languageSaveFailed'));
+    } finally {
+      setSavingLanguage(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await onLogout();
-      toast.success('Signed out');
+      toast.success(t('signedOut'));
     } catch {
-      toast.error('Logout failed');
+      toast.error(t('logoutFailed'));
     }
   };
 
@@ -112,11 +159,11 @@ export function SettingsView({
     try {
       const result = await api.changePassword(currentPassword, newPassword);
       if (result.requiresReauth) {
-        toast.success('Password updated — please sign in again');
+        toast.success(t('passwordUpdatedReauth'));
         await onLogout();
         return;
       }
-      toast.success('Password updated');
+      toast.success(t('passwordUpdated'));
       setCurrentPassword('');
       setNewPassword('');
     } catch (err) {
@@ -233,10 +280,10 @@ export function SettingsView({
   return (
     <div className="benz-page">
       <button onClick={onBack} className="benz-nav-back">
-        <ArrowLeft size={18} /> Back
+        <ArrowLeft size={18} /> {t('back')}
       </button>
 
-      <h2 className="benz-page-title">Settings</h2>
+      <h2 className="benz-page-title">{t('title')}</h2>
 
       <div className="benz-card p-5 mb-5">
         <div className="flex items-center gap-4 mb-5">
@@ -255,17 +302,40 @@ export function SettingsView({
         </div>
       </div>
 
+      <div className="benz-card p-5 mb-5">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="font-semibold text-sm tracking-tight">{t('language')}</div>
+        </div>
+        <p className="benz-hint mb-3">{t('languageHint')}</p>
+        <label className="block">
+          <span className="sr-only">{t('language')}</span>
+          <select
+            className="benz-input"
+            value={preferredLanguage}
+            disabled={savingLanguage}
+            aria-label={t('language')}
+            onChange={(e) => void handleLanguageChange(e.target.value as PreferredLanguage)}
+          >
+            {SUPPORTED_LOCALES.map((code) => (
+              <option key={code} value={code}>
+                {LOCALE_LABELS[code]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <ClerkLinkAccountSection />
 
       <div className="benz-card p-5 mb-5">
         <div className="flex items-center gap-2.5 mb-4">
           <KeyRound size={18} className="text-benz-blue" />
-          <div className="font-semibold text-sm tracking-tight">Change Password</div>
+          <div className="font-semibold text-sm tracking-tight">{t('changePassword')}</div>
         </div>
         <form onSubmit={handleChangePassword} className="space-y-3">
           <input
             type="password"
-            placeholder="Current password"
+            placeholder={t('currentPassword')}
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             className="benz-input"
@@ -273,7 +343,7 @@ export function SettingsView({
           />
           <input
             type="password"
-            placeholder="New password (min 8 characters)"
+            placeholder={t('newPassword')}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             className="benz-input"
@@ -281,7 +351,7 @@ export function SettingsView({
             required
           />
           <button type="submit" disabled={changingPassword} className="primary-btn w-full h-12 text-sm disabled:opacity-50">
-            {changingPassword ? 'Updating…' : 'Update Password'}
+            {changingPassword ? t('updating') : t('updatePassword')}
           </button>
         </form>
       </div>

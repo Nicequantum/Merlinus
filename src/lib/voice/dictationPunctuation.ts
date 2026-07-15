@@ -38,9 +38,21 @@ export function normalizeDictationSpacing(text: string): string {
   return result;
 }
 
-/** Convert spoken punctuation commands in a recognition chunk (story/narrative fields). */
-export function applySpokenPunctuation(text: string, mode: VoiceDictationMode): string {
+/**
+ * Convert spoken punctuation commands in a recognition chunk (story/narrative fields).
+ * Phase 1: English command phrases only — skip when STT language is not English
+ * so Spanish speech is not corrupted by accidental EN command matches.
+ */
+export function applySpokenPunctuation(
+  text: string,
+  mode: VoiceDictationMode,
+  speechLang?: string | null
+): string {
   if (mode !== 'story' || !text) return text;
+  const lang = (speechLang || 'en').toLowerCase();
+  if (!lang.startsWith('en')) {
+    return normalizeDictationSpacing(text);
+  }
   let result = text;
   for (const { pattern, replace } of SPOKEN_PUNCTUATION) {
     result = result.replace(pattern, replace);

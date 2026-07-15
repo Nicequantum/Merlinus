@@ -1,4 +1,7 @@
+'use client';
+
 import { Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { RepairOrderHomeLists } from '@/components/RepairOrderHomeLists';
@@ -69,12 +72,14 @@ export function HomeView({
   onDeleteRO,
   onOpenSettings,
 }: HomeViewProps) {
+  const { t } = useTranslation('home');
+
   return (
     <div className="relative min-h-dvh benz-page-compact">
       <button
         onClick={onOpenSettings}
         className="absolute top-4 right-4 benz-icon-btn z-10 touch-target"
-        aria-label="Settings"
+        aria-label={t('settingsAria')}
       >
         <Settings size={22} />
       </button>
@@ -84,7 +89,9 @@ export function HomeView({
           <ApexLogoMark size="lg" className="mb-1" title="Apex" />
           <div className="merlin-brand-divider" aria-hidden="true" />
           <DealershipBranding size="lg" className="mb-2" displayName={dealershipName} />
-          <p className="text-benz-secondary text-sm font-medium">{technicianName || 'Technician'}</p>
+          <p className="text-benz-secondary text-sm font-medium">
+            {technicianName || t('technicianFallback')}
+          </p>
         </div>
 
         <ScanROSection
@@ -99,13 +106,13 @@ export function HomeView({
           onCancelScan={onCancelScan}
           onDeletePendingPage={onDeletePendingPage}
           onCreateManualRO={onCreateManualRO}
-          scanButtonLabel="Scan RO"
+          scanButtonLabel={t('scanRo')}
         />
 
         <div className="mb-4">
           <input
             type="text"
-            placeholder="Search past ROs (number, model, VIN)…"
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="benz-search"

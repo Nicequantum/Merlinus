@@ -59,7 +59,7 @@ export function useVoiceInput() {
   }));
 
   useEffect(() => {
-    const service = new VoiceInputService(VOICE_INPUT_SETTINGS);
+    const service = new VoiceInputService({ ...VOICE_INPUT_SETTINGS });
     service.setMode(readStoredMode());
     serviceRef.current = service;
     void service.refreshPermission();
@@ -78,6 +78,10 @@ export function useVoiceInput() {
       service.destroy();
       serviceRef.current = null;
     };
+  }, []);
+
+  const setSpeechLanguage = useCallback((language: string) => {
+    serviceRef.current?.setLanguage(language);
   }, []);
 
   const startListening = useCallback(
@@ -188,6 +192,7 @@ export function useVoiceInput() {
     beginPushToTalk,
     endPushToTalk,
     setMode,
+    setSpeechLanguage,
     retry,
     refreshPermission,
   };

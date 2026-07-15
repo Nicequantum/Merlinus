@@ -129,6 +129,7 @@ type OwnerTechRow = {
   mustChangePassword: boolean;
   d7Number: string | null;
   apexUsername: string | null;
+  preferredLanguage: string;
 };
 
 async function loadOwnerTech(technicianId: string): Promise<OwnerTechRow | null> {
@@ -152,6 +153,7 @@ async function loadOwnerTech(technicianId: string): Promise<OwnerTechRow | null>
         mustChangePassword: true,
         d7Number: true,
         apexUsername: true,
+        preferredLanguage: true,
       },
     });
 
@@ -192,6 +194,7 @@ function nationalPayload(tech: OwnerTechRow, scopeMode: 'national' | 'group', gr
       legalDisclaimerAt: tech.legalDisclaimerAt,
       legalDisclaimerVersion: tech.legalDisclaimerVersion,
       mustChangePassword: tech.mustChangePassword,
+      preferredLanguage: tech.preferredLanguage,
       dealership: {
         name: scopeMode === 'group' && group ? group.name : APEX_NATIONAL_DEALERSHIP_NAME,
         dealerId: null,
@@ -328,6 +331,7 @@ export async function buildOwnerDealershipSession(
         legalDisclaimerAt: tech.legalDisclaimerAt,
         legalDisclaimerVersion: tech.legalDisclaimerVersion,
         mustChangePassword: tech.mustChangePassword,
+        preferredLanguage: tech.preferredLanguage,
         dealership: {
           name: dealership.name,
           dealerId: dealership.dealerId,

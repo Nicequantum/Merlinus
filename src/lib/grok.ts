@@ -431,6 +431,8 @@ export async function generateDynamicCustomerPayNarrative(
 export type StoryAiOptions = {
   brand?: StoryBrandId | string | null;
   pack?: StoryBrandPack;
+  /** Technician preferred language for notes; story output is always English. */
+  preferredLanguage?: string | null;
 };
 
 function resolveStoryAiPack(options?: StoryAiOptions): StoryBrandPack {
@@ -466,6 +468,7 @@ export async function generateWarrantyStory(
         pack,
         mode: 'regenerate',
         priorStory: deterministic,
+        preferredLanguage: options?.preferredLanguage,
       });
       const systemPrompt = getStorySystemPrompt(pack.id, { regenerate: true, line });
       const polished = await grokChat(
@@ -499,6 +502,7 @@ export async function generateWarrantyStory(
   const userMessage = buildWarrantyStoryUserMessage(ro, line, {
     pack,
     mode: isRegen ? 'regenerate' : 'generate',
+    preferredLanguage: options?.preferredLanguage,
   });
   const systemPrompt = isRegen
     ? getStorySystemPrompt(pack.id, { regenerate: true, line })

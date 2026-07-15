@@ -15,6 +15,7 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { StableInput } from '@/components/StableInput';
 import { StableTextarea } from '@/components/StableTextarea';
@@ -136,6 +137,7 @@ export function LineView({
   onAcknowledgeStoryBaseline,
   onCertifyAndSaveStory,
 }: LineViewProps) {
+  const { t } = useTranslation('line');
   const isCustomerPayLine = isCustomerPayRepairLine(line);
   const vehicleSummary = [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
   const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
@@ -299,8 +301,8 @@ export function LineView({
 
       <div className="benz-line-flow">
         <div className="benz-card benz-line-doc-card min-w-0 w-full">
-          <label className="benz-label">Customer concern</label>
-          <p className="benz-hint mb-3">Prefilled from scan — edit to match advisor wording</p>
+          <label className="benz-label">{t('concernLabel')}</label>
+          <p className="benz-hint mb-3">{t('concernHint')}</p>
           <div className="benz-complaint-field">
             <StableTextarea
               fieldKey={`${line.id}-concern`}
@@ -308,13 +310,14 @@ export function LineView({
               onChange={(v) => onUpdateLine({ customerConcern: v })}
               voiceDictationMode="story"
               className="benz-textarea min-h-[80px]"
-              placeholder="Customer stated..."
+              placeholder={t('concernPlaceholder')}
             />
           </div>
 
           <div className="benz-line-doc-divider" />
 
-          <label className="benz-label">Technician notes & findings</label>
+          <label className="benz-label">{t('notesLabel')}</label>
+          <p className="benz-hint mb-2 text-xs opacity-90">{t('storyEnglishOnly')}</p>
           <div className="benz-complaint-field">
             <StableTextarea
               fieldKey={`${line.id}-notes`}
@@ -322,7 +325,7 @@ export function LineView({
               onChange={(v) => onUpdateLine({ technicianNotes: v })}
               voiceDictationMode="story"
               className="benz-textarea min-h-[100px]"
-              placeholder="Document actual test results, findings, and repair steps performed..."
+              placeholder={t('notesPlaceholder')}
             />
           </div>
         </div>

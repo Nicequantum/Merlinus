@@ -18,9 +18,10 @@ export function appendDictationChunk(base: string, chunk: string): string {
 export function processDictationChunk(
   base: string,
   chunk: string,
-  mode: VoiceDictationMode = 'default'
+  mode: VoiceDictationMode = 'default',
+  speechLang?: string | null
 ): string {
-  const normalized = applySpokenPunctuation(chunk, mode);
+  const normalized = applySpokenPunctuation(chunk, mode, speechLang);
   const merged = appendDictationChunk(base, normalized);
   return mode === 'story' ? normalizeDictationSpacing(merged) : merged;
 }

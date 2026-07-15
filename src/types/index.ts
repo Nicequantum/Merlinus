@@ -394,6 +394,8 @@ export interface TechnicianSession {
   viewAsAdmin?: boolean;
   /** Bound service advisor when viewAsRole is service_advisor. */
   viewAsServiceAdvisorId?: string | null;
+  /** Technician preferred UI/voice language (`en` | `es`). Story output remains English. */
+  preferredLanguage?: string;
 }
 
 export interface TechnicianUsageSummary {

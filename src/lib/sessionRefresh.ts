@@ -56,6 +56,7 @@ export function toTechnicianSession(payload: SessionPayload): TechnicianSession 
     viewAsRole: payload.viewAsRole,
     viewAsAdmin: payload.viewAsAdmin,
     viewAsServiceAdvisorId: payload.viewAsServiceAdvisorId,
+    preferredLanguage: payload.preferredLanguage ?? 'en',
   };
 }
 

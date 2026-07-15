@@ -88,6 +88,14 @@ export const viewAsRoleSchema = z.object({
   viewAsServiceAdvisorId: safeIdOptional(64),
 });
 
+export type UpdatePreferencesBody = {
+  preferredLanguage: 'en' | 'es';
+};
+
+export const updatePreferencesSchema = z.object({
+  preferredLanguage: z.enum(['en', 'es']),
+}) as z.ZodSchema<UpdatePreferencesBody>;
+
 export const vinSchema = z.object({
   vin: z.string().trim().min(11).max(17).transform(sanitizeVin),
 });

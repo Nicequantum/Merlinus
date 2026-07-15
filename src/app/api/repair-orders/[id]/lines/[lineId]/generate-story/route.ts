@@ -99,7 +99,11 @@ export async function POST(
       let cdkSanitized = false;
       try {
         const grokStartedAt = Date.now();
-        const rawStory = await generateWarrantyStory(mappedForGen, lineForGen, { pack: storyPack });
+        const rawStory = await generateWarrantyStory(mappedForGen, lineForGen, {
+          pack: storyPack,
+          // Server session is source of truth (UI language preference).
+          preferredLanguage: session.preferredLanguage ?? 'en',
+        });
         logPerformance('grok.story.generate.route', Date.now() - grokStartedAt, {
           model: pipelineAudit.model,
           promptChars: pipelineAudit.totalPromptChars,

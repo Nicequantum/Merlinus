@@ -71,6 +71,11 @@ export interface SessionPayload {
   viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
   viewAsAdmin?: boolean;
   viewAsServiceAdvisorId?: string | null;
+  /**
+   * Technician preferred UI/voice language (`en` | `es`, extensible).
+   * Story generation always outputs English; this describes input/UI language.
+   */
+  preferredLanguage?: string;
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */
@@ -96,12 +101,17 @@ export type TechnicianForSession = {
   legalDisclaimerAt: Date | null;
   legalDisclaimerVersion: string | null;
   mustChangePassword?: boolean;
+  preferredLanguage?: string | null;
   dealership: { name: string; dealerId?: string | null; timezone?: string | null };
 };
 
 /** Build API session payload from an active technician row (legacy JWT or Clerk bridge). */
 export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): SessionPayload {
   const timezone = tech.dealership.timezone?.trim() || undefined;
+  const preferredLanguage =
+    typeof tech.preferredLanguage === 'string' && tech.preferredLanguage.trim()
+      ? tech.preferredLanguage.trim()
+      : 'en';
   return {
     technicianId: tech.id,
     d7Number: tech.d7Number,
@@ -119,6 +129,7 @@ export function buildSessionPayloadFromTechnician(tech: TechnicianForSession): S
     sessionVersion: tech.sessionVersion,
     mustChangePassword: Boolean(tech.mustChangePassword),
     dealershipTimezone: timezone,
+    preferredLanguage,
   };
 }
 

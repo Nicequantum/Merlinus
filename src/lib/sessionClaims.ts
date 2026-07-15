@@ -35,6 +35,7 @@ const sessionPayloadObjectSchema = z.object({
   viewAsRole: z.enum(['technician', 'manager', 'service_advisor']).nullable().optional(),
   viewAsAdmin: z.boolean().optional(),
   viewAsServiceAdvisorId: z.string().nullable().optional(),
+  preferredLanguage: z.string().min(1).max(16).optional(),
 });
 
 export type ParsedSessionPayload = {
@@ -62,6 +63,7 @@ export type ParsedSessionPayload = {
   viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
   viewAsAdmin?: boolean;
   viewAsServiceAdvisorId?: string | null;
+  preferredLanguage?: string;
 };
 
 export type ParsedApexAccessClaims = ParsedSessionPayload & {
@@ -109,6 +111,7 @@ function normalizeSessionPayload(
       raw.viewAsServiceAdvisorId === undefined
         ? undefined
         : raw.viewAsServiceAdvisorId?.trim() || null,
+    preferredLanguage: raw.preferredLanguage?.trim() || undefined,
   };
 }
 

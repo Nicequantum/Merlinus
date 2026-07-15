@@ -219,6 +219,12 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
+  updatePreferences: (preferredLanguage: string) =>
+    apiFetch<{ preferredLanguage: string; session: TechnicianSession }>('/api/auth/preferences', {
+      method: 'POST',
+      body: JSON.stringify({ preferredLanguage }),
+    }),
+
   listRepairOrders: (
     params?: {
       limit?: number;

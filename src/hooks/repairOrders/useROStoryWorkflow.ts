@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
@@ -9,6 +10,10 @@ import { OFFLINE_ERROR } from '@/lib/errors';
 import { MI_PRODUCT_LABEL } from '@/lib/grokModels';
 import { isStoryQualityCurrent } from '@/lib/storyQualityState';
 import type { RepairLine, RepairOrder, StoryQualityResult, StoryReviewResult } from '@/types';
+
+function storyT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'story', ...options });
+}
 
 function getLatestRoAndLine(
   roRef: React.MutableRefObject<RepairOrder | null>,
@@ -159,7 +164,7 @@ export function useROStoryWorkflow(
   const generateStory = useCallback(
     async (lineId: string) => {
       if (refs.storyGenerationInFlightRef.current) {
-        toast.message('Story generation already in progress…');
+        toast.message(storyT('generateInProgress'));
         return;
       }
 
@@ -169,11 +174,7 @@ export function useROStoryWorkflow(
       setters.setIsGenerating(true);
       const preLine = refs.roRef.current?.repairLines.find((l) => l.id === lineId);
       const isRevisionPass = Boolean(preLine?.warrantyStory?.trim() && preLine.warrantyStory.trim().length >= 40);
-      toast.message(
-        isRevisionPass
-          ? 'Improving story with your tech details (preserving existing content)…'
-          : 'Generating warranty story…'
-      );
+      toast.message(storyT('generateStarting'));
 
       try {
         if (refs.storyReviewInFlightRef.current) deps.invalidateReviewRequests();
@@ -184,16 +185,16 @@ export function useROStoryWorkflow(
 
         const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (!latestRO) {
-          toast.error('Repair order not loaded — go back and reopen the line');
+          toast.error(storyT('roNotLoaded'));
           return;
         }
 
         if (!targetLine) {
-          toast.error('Repair line not found — refresh the RO and try again');
+          toast.error(storyT('lineNotFound'));
           return;
         }
         if (isCustomerPayRepairLine(targetLine)) {
-          toast.error('Clear Customer Pay mode first to generate a warranty story with AI.');
+          toast.error(storyT('clearCustomerPayFirst'));
           return;
         }
 
@@ -229,22 +230,18 @@ export function useROStoryWorkflow(
           { skipPersist: true }
         );
         if (cdkSanitized) {
-          toast.message('Story cleaned for CDK compatibility');
+          toast.message(storyT('cdkCleaned'));
         }
 
         // Story is saved — release the UI immediately; score asynchronously.
         refs.storyGenerationInFlightRef.current = false;
         setters.setIsGenerating(false);
         setters.setGeneratingLineId(null);
-        toast.success(
-          isRevisionPass
-            ? 'Story improved with tech details — tap Audit Story to refresh the score'
-            : 'Warranty story generated — tap Audit Story when ready for MI scoring'
-        );
+        toast.success(isRevisionPass ? storyT('generatedRevision') : storyT('generated'));
       } catch (error: unknown) {
         if (seq === refs.generateStorySeqRef.current) {
           clientLog.error('story.generate_failed', error);
-          toast.error(getStoryWorkflowErrorMessage(error, 'Story generation failed'));
+          toast.error(getStoryWorkflowErrorMessage(error, storyT('generateFailed')));
         }
       } finally {
         if (seq === refs.generateStorySeqRef.current && refs.storyGenerationInFlightRef.current) {

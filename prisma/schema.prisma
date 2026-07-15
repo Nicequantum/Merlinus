@@ -184,6 +184,11 @@ model Technician {
   legalDisclaimerVersion String?
   firstAppLaunchAt       DateTime?
   firstAppLaunchSessionId String?
+  /**
+   * Technician UI + voice locale (Phase 1 multilingual).
+   * App allowlist: en | es (TEXT for future codes). Default English.
+   */
+  preferredLanguage String @default("en") @map("preferred_language")
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

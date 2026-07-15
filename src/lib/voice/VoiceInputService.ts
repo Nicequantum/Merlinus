@@ -56,11 +56,15 @@ export class VoiceInputService {
     stop: () => this.stop(),
   };
   private dictationMode: VoiceDictationMode = 'default';
+  /** Mutable per-instance settings (never mutate shared module defaults). */
+  private readonly settings: VoiceInputSettings;
 
-  constructor(private readonly settings: VoiceInputSettings) {
+  constructor(settings: VoiceInputSettings) {
+    // Clone so setLanguage / mode never mutates VOICE_INPUT_SETTINGS singleton.
+    this.settings = { ...settings };
     this.state.isSupported = getSpeechRecognitionCtor() != null;
-    this.state.mode = settings.pushToTalkDefault ? 'push-to-talk' : 'toggle';
-    this.state.confidenceThreshold = settings.baseConfidenceThreshold;
+    this.state.mode = this.settings.pushToTalkDefault ? 'push-to-talk' : 'toggle';
+    this.state.confidenceThreshold = this.settings.baseConfidenceThreshold;
   }
 
   getState(): VoiceInputState {
@@ -69,6 +73,18 @@ export class VoiceInputService {
 
   setMode(mode: VoiceInputMode): void {
     this.patchState({ mode });
+  }
+
+  /** Runtime STT language (BCP-47). Preference overrides deploy default. */
+  setLanguage(language: string): void {
+    const next = language.trim() || this.settings.language;
+    if (next === this.settings.language) return;
+    this.settings.language = next;
+    // Active recognition picks up language on next startRecognition.
+  }
+
+  getLanguage(): string {
+    return this.settings.language;
   }
 
   async refreshPermission(): Promise<VoicePermissionState> {
@@ -286,7 +302,12 @@ export class VoiceInputService {
       const text =
         this.dictationMode === 'story' ? applySpokenPunctuation(rawText, 'story') : rawText;
       if (result.isFinal) {
-        this.target.committed = processDictationChunk(this.target.committed, text, this.dictationMode);
+        this.target.committed = processDictationChunk(
+          this.target.committed,
+          text,
+          this.dictationMode,
+          this.settings.language
+        );
         hasFinal = true;
       } else {
         interim += text;

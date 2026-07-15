@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import { DealershipBranding } from '@/components/DealershipBranding';
 import { isClerkSignInAvailable } from '@/lib/authModeClient';
@@ -12,6 +13,7 @@ interface LoginViewProps {
 }
 
 export function LoginView({ onLogin }: LoginViewProps) {
+  const { t } = useTranslation('auth');
   const [d7Number, setD7Number] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,9 +24,9 @@ export function LoginView({ onLogin }: LoginViewProps) {
     setLoading(true);
     try {
       await onLogin(d7Number.trim().toUpperCase(), password);
-      toast.success('Signed in');
+      toast.success(t('signedIn'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Login failed');
+      toast.error(err instanceof Error ? err.message : t('loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -45,7 +47,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
         <form onSubmit={handleSubmit} className="login-form benz-card-elevated benz-card-elevated-accent">
           <div className="login-field">
-            <label className="benz-label">Mercedes-Benz D7 Number</label>
+            <label className="benz-label">{t('d7Label')}</label>
             <input
               type="text"
               value={d7Number}
@@ -59,7 +61,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
             />
           </div>
           <div className="login-field">
-            <label className="benz-label">Password</label>
+            <label className="benz-label">{t('password')}</label>
             <input
               type="password"
               value={password}
@@ -70,13 +72,13 @@ export function LoginView({ onLogin }: LoginViewProps) {
             />
           </div>
           <button type="submit" disabled={loading} className="primary-btn login-submit-btn w-full touch-target">
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('signingIn') : t('signIn')}
           </button>
 
           {showClerkOption ? (
             <div className="login-alt-auth">
               <div className="login-alt-divider" aria-hidden="true">
-                <span>or</span>
+                <span>{t('or')}</span>
               </div>
               <Link href="/sign-in" className="secondary-btn login-clerk-btn w-full touch-target">
                 Sign in with Clerk

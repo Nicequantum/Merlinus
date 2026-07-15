@@ -19,7 +19,8 @@ HARD RULES:
 5. When a correction addresses something marked [NOT DOCUMENTED], replace that placeholder with the real documented detail.
 6. Do not invent codes, measurements, tests, or parts that are not in the current story, notes, diagnostics, or required corrections.
 7. Prefer equal or higher completeness than the current story. A shorter, thinner story is a failure.
-8. Output ONLY the full improved warranty narrative (complete document).`;
+8. Output ONLY the full improved warranty narrative (complete document).
+9. The improved story must remain professional English only (even if required corrections or notes are in another language).`;
 
 /** Marker when a single tech-detail coaching item is applied to notes. */
 export const AUDIT_ENHANCEMENT_NOTES_MARKER = '[Audit enhancement]';

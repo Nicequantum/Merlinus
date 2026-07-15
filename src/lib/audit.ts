@@ -26,6 +26,7 @@ export type AuditAction =
   | 'auth.clerk_link'
   | 'consent.accept'
   | 'legalDisclaimer.accept'
+  | 'preferences.update'
   | 'ro.create'
   | 'ro.read'
   | 'ro.list'

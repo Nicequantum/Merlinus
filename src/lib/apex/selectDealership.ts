@@ -32,6 +32,7 @@ function toTechnicianForSession(
     consentVersion: tech.consentVersion,
     legalDisclaimerAt: tech.legalDisclaimerAt,
     legalDisclaimerVersion: tech.legalDisclaimerVersion,
+    preferredLanguage: tech.preferredLanguage,
     dealership: { name: dealership.name, dealerId: dealership.dealerId },
   };
 }

@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 import { ClerkAppProvider } from '@/components/ClerkAppProvider';
 import { GlobalErrorBoundary } from '@/components/GlobalErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { clientLog } from '@/lib/clientLog';
 
 function useUnhandledRejectionLogging(): void {
@@ -33,10 +34,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <ClerkAppProvider>
-      <GlobalErrorBoundary>
-        <OfflineBanner />
-        {children}
-      </GlobalErrorBoundary>
+      <I18nProvider>
+        <GlobalErrorBoundary>
+          <OfflineBanner />
+          {children}
+        </GlobalErrorBoundary>
+      </I18nProvider>
     </ClerkAppProvider>
   );
 }
