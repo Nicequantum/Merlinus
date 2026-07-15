@@ -14,8 +14,18 @@ export interface RepairOrderAccessSession extends TenantScopedSession {
   serviceAdvisorId?: string | null;
 }
 
-export function isServiceAdvisorUser(session: { role: string }): boolean {
-  return session.role === 'service_advisor';
+export function isServiceAdvisorUser(session: {
+  role: string;
+  isOwner?: boolean;
+  scopeMode?: string;
+  viewAsRole?: string | null;
+}): boolean {
+  // Avoid circular import cost on hot path when already a real advisor
+  if (session.role === 'service_advisor') return true;
+  if (session.role === 'owner' && session.scopeMode === 'dealership' && session.viewAsRole === 'service_advisor') {
+    return true;
+  }
+  return false;
 }
 
 /** Shared RO access for technicians, managers, and linked service advisor accounts. */
@@ -26,8 +36,11 @@ export async function canAccessRepairOrder(
 ) {
   const db = getRlsDb();
   const piiScope = scopedPiiWhere(session);
+  const { effectiveRole, effectiveServiceAdvisorId } = await import('@/lib/apex/viewAs');
+  const role = effectiveRole(session);
+  const advisorId = effectiveServiceAdvisorId(session);
 
-  if (session.role === 'manager' || session.role === 'owner') {
+  if (role === 'manager' || role === 'owner') {
     return db.repairOrder.findFirst({
       where: withOptionalDealerId(
         { id: roId, dealershipId: piiScope.dealershipId },
@@ -37,11 +50,11 @@ export async function canAccessRepairOrder(
     });
   }
 
-  if (session.role === 'service_advisor' && session.serviceAdvisorId) {
+  if (role === 'service_advisor' && advisorId) {
     const advisor = await db.serviceAdvisor.findFirst({
       where: withOptionalDealerId(
         {
-          id: session.serviceAdvisorId,
+          id: advisorId,
           dealershipId: piiScope.dealershipId,
           deletedAt: null,
         },
@@ -55,7 +68,7 @@ export async function canAccessRepairOrder(
         {
           id: roId,
           dealershipId: piiScope.dealershipId,
-          serviceAdvisorId: session.serviceAdvisorId,
+          serviceAdvisorId: advisorId,
         },
         piiScope.dealerId
       ),

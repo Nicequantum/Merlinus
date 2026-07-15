@@ -7,6 +7,10 @@ export type ImageAccessSession = {
   role: string;
   dealershipId: string;
   serviceAdvisorId?: string | null;
+  isOwner?: boolean;
+  scopeMode?: string;
+  viewAsRole?: string | null;
+  viewAsServiceAdvisorId?: string | null;
 };
 
 /** How long a freshly uploaded blob stays accessible before RO attachment. */
@@ -52,12 +56,21 @@ export function auditMetadataHasPathname(metadataRaw: string, pathname: string):
 }
 
 function roleScopedRoWhere(session: ImageAccessSession) {
+  const role =
+    session.role === 'owner' && session.scopeMode === 'dealership' && session.viewAsRole
+      ? session.viewAsRole
+      : session.role;
+  const advisorId =
+    role === 'service_advisor'
+      ? session.viewAsServiceAdvisorId?.trim() || session.serviceAdvisorId
+      : session.serviceAdvisorId;
+
   return {
     dealershipId: session.dealershipId,
-    ...(session.role === 'manager'
+    ...(role === 'manager' || role === 'owner'
       ? {}
-      : session.role === 'service_advisor' && session.serviceAdvisorId
-        ? { serviceAdvisorId: session.serviceAdvisorId }
+      : role === 'service_advisor' && advisorId
+        ? { serviceAdvisorId: advisorId }
         : { technicianId: session.technicianId }),
   };
 }

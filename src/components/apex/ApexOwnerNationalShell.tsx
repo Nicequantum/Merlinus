@@ -10,10 +10,14 @@ import {
 import {
   enterOwnerDealership,
   fetchOwnerDealerGroups,
+  fetchOwnerDealershipAdvisors,
   fetchOwnerDealerships,
   selectOwnerDealerGroup,
   type OwnerDealerGroupOption,
+  type OwnerDealershipAdvisorOption,
+  type OwnerViewAsUiRole,
 } from '@/lib/apexLoginSession';
+import { VIEW_AS_ROLE_OPTIONS } from '@/lib/apex/viewAs';
 import type { ApexDealershipOption } from '@/lib/apexDealershipOptions';
 import type {
   OwnerNationalSummary,
@@ -229,6 +233,11 @@ export function ApexOwnerNationalShell({
   const [loadingDealerships, setLoadingDealerships] = useState(false);
   const [dealerGroups, setDealerGroups] = useState<OwnerDealerGroupOption[]>([]);
   const [switchingGroup, setSwitchingGroup] = useState(false);
+  const [viewAsRole, setViewAsRole] = useState<OwnerViewAsUiRole>('manager');
+  const [selectedAdvisorId, setSelectedAdvisorId] = useState<string>('');
+  const [advisors, setAdvisors] = useState<OwnerDealershipAdvisorOption[]>([]);
+  const [loadingAdvisors, setLoadingAdvisors] = useState(false);
+  const [advisorRooftopId, setAdvisorRooftopId] = useState<string | null>(null);
 
   const isGroupHome = session.scopeMode === 'group';
   const homeTitle = isGroupHome
@@ -236,6 +245,7 @@ export function ApexOwnerNationalShell({
     : 'National Operations';
   const scopeBadge = isGroupHome ? 'Group' : 'National';
   const showGroupSwitcher = dealerGroups.length > 1;
+  const needsAdvisorPick = viewAsRole === 'service_advisor';
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
@@ -294,6 +304,9 @@ export function ApexOwnerNationalShell({
   const openEnterDealership = useCallback(async () => {
     setView('enter-dealership');
     setLoadingDealerships(true);
+    setAdvisors([]);
+    setSelectedAdvisorId('');
+    setAdvisorRooftopId(null);
     try {
       const list = await fetchOwnerDealerships();
       setDealerships(list);
@@ -309,12 +322,45 @@ export function ApexOwnerNationalShell({
   const handleEnterDealership = async (dealershipId: string) => {
     setActionLoading(true);
     try {
-      await enterOwnerDealership(dealershipId);
+      let advisorId: string | null = null;
+      if (viewAsRole === 'service_advisor') {
+        let list = advisors;
+        if (advisorRooftopId !== dealershipId || list.length === 0) {
+          setLoadingAdvisors(true);
+          setAdvisorRooftopId(dealershipId);
+          try {
+            list = await fetchOwnerDealershipAdvisors(dealershipId);
+            setAdvisors(list);
+            const pick =
+              selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
+                ? selectedAdvisorId
+                : list[0]?.id ?? '';
+            setSelectedAdvisorId(pick);
+            advisorId = pick || null;
+          } finally {
+            setLoadingAdvisors(false);
+          }
+        } else {
+          advisorId =
+            (selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
+              ? selectedAdvisorId
+              : list[0]?.id) || null;
+        }
+        // Server auto-binds first advisor when id omitted; prefer explicit when available.
+      }
+
+      const roleLabel =
+        VIEW_AS_ROLE_OPTIONS.find((o) => o.value === viewAsRole)?.label ?? viewAsRole;
+
+      await enterOwnerDealership(dealershipId, {
+        viewAsRole,
+        viewAsServiceAdvisorId: viewAsRole === 'service_advisor' ? advisorId : null,
+      });
       const latest = await onSessionRefresh();
       if (!latest || latest.scopeMode !== 'dealership') {
         throw new Error('Dealership entered but session did not update');
       }
-      toast.success(`Entered ${latest.dealershipName}`);
+      toast.success(`Viewing ${latest.dealershipName} as ${roleLabel}`);
     } catch (error: unknown) {
       clientLog.error('owner.dealership_enter_failed', error);
       toast.error(error instanceof Error ? error.message : 'Could not enter dealership');
@@ -322,6 +368,58 @@ export function ApexOwnerNationalShell({
       setActionLoading(false);
     }
   };
+
+  const viewAsControls = (
+    <div className="apex-view-as-controls">
+      <label className="apex-view-as-field">
+        <span className="apex-hint">View as</span>
+        <select
+          className="apex-view-as-select touch-target"
+          value={viewAsRole}
+          disabled={actionLoading}
+          aria-label="View as staff role"
+          onChange={(e) => {
+            const next = e.target.value as OwnerViewAsUiRole;
+            setViewAsRole(next);
+            if (next !== 'service_advisor') {
+              setSelectedAdvisorId('');
+            }
+          }}
+        >
+          {VIEW_AS_ROLE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {needsAdvisorPick && advisorRooftopId ? (
+        <label className="apex-view-as-field">
+          <span className="apex-hint">Advisor</span>
+          <select
+            className="apex-view-as-select touch-target"
+            value={selectedAdvisorId}
+            disabled={actionLoading || loadingAdvisors || advisors.length === 0}
+            aria-label="Service advisor to view as"
+            onChange={(e) => setSelectedAdvisorId(e.target.value)}
+          >
+            {advisors.length === 0 ? (
+              <option value="">
+                {loadingAdvisors ? 'Loading…' : 'No active advisors'}
+              </option>
+            ) : (
+              advisors.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.displayName}
+                  {a.advisorCode ? ` (${a.advisorCode})` : ''}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="apex-app-root apex-national-dashboard" data-platform="apex">
@@ -360,6 +458,7 @@ export function ApexOwnerNationalShell({
                 </select>
               </label>
             ) : null}
+            {view === 'dashboard' ? viewAsControls : null}
             <div className="apex-scope-badge" aria-label="Current scope">
               <span aria-hidden="true">◆</span>
               {scopeBadge}
@@ -380,11 +479,11 @@ export function ApexOwnerNationalShell({
           <section className="apex-national-panel apex-card apex-card-accent apex-national-panel--wide">
             <div className="apex-national-panel-head">
               <div>
-                <h2 className="apex-national-panel-title">Enter dealership</h2>
+                <h2 className="apex-national-panel-title">View as · enter rooftop</h2>
                 <p className="apex-hint">
                   {isGroupHome
-                    ? 'Select a rooftop in your group to access dealership PII and repair orders. This action is audited.'
-                    : 'Select a rooftop to access dealership PII and repair orders. This action is audited.'}
+                    ? 'Pick a staff lens and a rooftop in your group. Identity stays National Owner; this is audited.'
+                    : 'Pick a staff lens and a rooftop. Identity stays National Owner; this is audited.'}
                 </p>
               </div>
               <button
@@ -395,6 +494,12 @@ export function ApexOwnerNationalShell({
               >
                 Back
               </button>
+            </div>
+            <div className="apex-view-as-enter-panel">
+              {viewAsControls}
+              <p className="apex-hint apex-view-as-role-desc">
+                {VIEW_AS_ROLE_OPTIONS.find((o) => o.value === viewAsRole)?.description}
+              </p>
             </div>
             {loadingDealerships ? (
               <p className="apex-hint apex-enter-loading">Loading rooftops…</p>
@@ -409,7 +514,7 @@ export function ApexOwnerNationalShell({
                     ? 'Group scope has no PII until you enter a dealership in your portfolio.'
                     : 'National scope has no PII access until you enter a dealership.'
                 }
-                onSelect={(dealershipId) => handleEnterDealership(dealershipId)}
+                onSelect={(dealershipId) => void handleEnterDealership(dealershipId)}
               />
             )}
           </section>
@@ -437,7 +542,7 @@ export function ApexOwnerNationalShell({
                   className="apex-btn-primary apex-national-enter-btn touch-target"
                   onClick={() => void openEnterDealership()}
                 >
-                  Enter dealership
+                  View as / enter rooftop
                 </button>
                 <button
                   type="button"

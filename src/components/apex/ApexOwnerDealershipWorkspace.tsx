@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ComponentType } from 'react';
 import { ApexOwnerDealershipBar } from '@/components/apex/ApexOwnerDealershipBar';
+import { viewAsRoleLabel } from '@/lib/apex/viewAs';
 import { exitOwnerDealership } from '@/lib/apexLoginSession';
 import { clientLog } from '@/lib/clientLog';
 import type { TechnicianSession } from '@/types';
@@ -21,6 +22,11 @@ interface ApexOwnerDealershipWorkspaceProps {
   AuthenticatedApp: ComponentType<AuthenticatedAppProps>;
 }
 
+function isOwnerHomeAfterExit(session: TechnicianSession): boolean {
+  const scope = session.scopeMode ?? 'national';
+  return session.role === 'owner' && (scope === 'national' || scope === 'group');
+}
+
 export function ApexOwnerDealershipWorkspace({
   session,
   onLogout,
@@ -29,16 +35,24 @@ export function ApexOwnerDealershipWorkspace({
 }: ApexOwnerDealershipWorkspaceProps) {
   const [exiting, setExiting] = useState(false);
   const rooftopName = session.dealershipName;
+  const lensLabel = viewAsRoleLabel(session);
+  const exitLabel = session.activeDealerGroupId
+    ? 'Return to Group Owner'
+    : 'Return to National Owner';
 
   const handleExit = async () => {
     setExiting(true);
     try {
       await exitOwnerDealership();
       const latest = await onSessionRefresh();
-      if (!latest || (latest.scopeMode ?? 'national') !== 'national') {
-        throw new Error('Exit completed but session did not return to national scope');
+      if (!latest || !isOwnerHomeAfterExit(latest)) {
+        throw new Error('Exit completed but session did not return to owner home scope');
       }
-      toast.success('Returned to national scope');
+      const home =
+        latest.scopeMode === 'group'
+          ? latest.dealerGroupName || 'group operations'
+          : 'national operations';
+      toast.success(`Returned to ${home}`);
     } catch (error: unknown) {
       clientLog.error('owner.dealership_exit_failed', error);
       toast.error(error instanceof Error ? error.message : 'Could not exit dealership');
@@ -51,6 +65,8 @@ export function ApexOwnerDealershipWorkspace({
     <div data-platform="apex" className="apex-app-root min-h-dvh flex flex-col">
       <ApexOwnerDealershipBar
         dealershipName={rooftopName}
+        viewAsLabel={lensLabel || undefined}
+        exitLabel={exitLabel}
         loading={exiting}
         onExit={() => void handleExit()}
       />

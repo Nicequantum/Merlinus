@@ -64,11 +64,29 @@ export const selectDealershipSchema = z.object({
 
 export type EnterDealershipBody = {
   dealershipId: string;
+  /** National Owner View As — optional staff lens for the entered rooftop. */
+  viewAsRole?: 'technician' | 'manager' | 'service_advisor' | 'dealership_owner' | 'general_manager';
+  viewAsServiceAdvisorId?: string;
 };
 
 export const enterDealershipSchema = z.object({
   dealershipId: safeId(64),
+  viewAsRole: z
+    .enum(['technician', 'manager', 'service_advisor', 'dealership_owner', 'general_manager'])
+    .optional(),
+  viewAsServiceAdvisorId: safeIdOptional(64),
 }) as z.ZodSchema<EnterDealershipBody>;
+
+export const viewAsRoleSchema = z.object({
+  viewAsRole: z.enum([
+    'technician',
+    'manager',
+    'service_advisor',
+    'dealership_owner',
+    'general_manager',
+  ]),
+  viewAsServiceAdvisorId: safeIdOptional(64),
+});
 
 export const vinSchema = z.object({
   vin: z.string().trim().min(11).max(17).transform(sanitizeVin),

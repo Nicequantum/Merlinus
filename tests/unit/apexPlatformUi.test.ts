@@ -66,4 +66,11 @@ describe('Apex platform UI foundation (Phase 5.6)', () => {
     assert.match(src, /select-dealership/);
     assert.match(src, /requiresDealershipSelection/);
   });
+
+  it('apex login session supports View As enter options', () => {
+    const src = readSrc('src/lib/apexLoginSession.ts');
+    assert.match(src, /viewAsRole/);
+    assert.match(src, /viewAsServiceAdvisorId/);
+    assert.match(src, /fetchOwnerDealershipAdvisors/);
+  });
 });

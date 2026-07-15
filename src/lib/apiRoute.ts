@@ -182,7 +182,9 @@ async function withAuthInner<T>(
       !options.trackUsage &&
       !options.blockInMaintenance);
   if (options.requireManager) {
-    if (session.role !== 'manager') {
+    // National Owner View As: owner + viewAsRole manager is allowed in dealership only.
+    const { effectiveRole } = await import('@/lib/apex/viewAs');
+    if (effectiveRole(session) !== 'manager') {
       return apiError(FORBIDDEN_ERROR, 403);
     }
     // Owners are never managers; belt-and-suspenders for mis-issued sessions.
@@ -198,7 +200,8 @@ async function withAuthInner<T>(
   }
 
   if (options.requireAdmin) {
-    if (!session.isAdmin) {
+    const { effectiveIsAdmin } = await import('@/lib/apex/viewAs');
+    if (!effectiveIsAdmin(session)) {
       return apiError(FORBIDDEN_ERROR, 403);
     }
     // Phase 6.1: national-scope owners cannot use dealership admin APIs via isAdmin seed flag.

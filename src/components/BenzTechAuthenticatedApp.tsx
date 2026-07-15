@@ -22,6 +22,12 @@ import { useOcrProgress } from '@/hooks/useOcrProgress';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { clientLog } from '@/lib/clientLog';
 import { recordTechnicianAppStart } from '@/lib/recordTechnicianAppStart';
+import {
+  effectiveIsAdmin,
+  effectiveRole,
+  effectiveServiceAdvisorId,
+  isOwnerDealershipView,
+} from '@/lib/apex/viewAs';
 import type { TechnicianSession } from '@/types';
 
 const ManagerDashboard = dynamic(
@@ -94,15 +100,27 @@ export function BenzTechAuthenticatedApp({
     onComplianceRequired: handleComplianceRequired,
   });
 
-  const isServiceAdvisor = session.role === 'service_advisor';
+  // National Owner View As: branch UI on lens; identity stays role=owner.
+  const roleForUi = effectiveRole(session);
+  const isServiceAdvisor = roleForUi === 'service_advisor';
+  const isManager = roleForUi === 'manager';
   const isDesktop = useDesktopCompanion();
   const companionSyncRole = deriveCompanionSyncRole(isDesktop);
-  const isManager = session.role === 'manager';
+  // Child UI that branches on role/isAdmin should see the View As lens.
+  // Keep the real `session` for identity, companion sync, and API cookies.
+  const uiSession: TechnicianSession = isOwnerDealershipView(session)
+    ? {
+        ...session,
+        role: roleForUi,
+        isAdmin: effectiveIsAdmin(session),
+        serviceAdvisorId: effectiveServiceAdvisorId(session),
+      }
+    : session;
 
   useEffect(() => {
     if (isServiceAdvisor || ro.loading || ro.listError) return;
     void recordTechnicianAppStart({
-      role: session.role,
+      role: roleForUi,
       todayRoCount: ro.todayROs.length,
       previousRoCount: ro.previousROs.length,
     });
@@ -112,7 +130,7 @@ export function BenzTechAuthenticatedApp({
     ro.listError,
     ro.todayROs.length,
     ro.previousROs.length,
-    session.role,
+    roleForUi,
   ]);
 
   if (!isServiceAdvisor && !isManager && ro.loading && !ro.listError) {
@@ -138,14 +156,14 @@ export function BenzTechAuthenticatedApp({
         <MaintenanceBanner />
         {ro.view === 'settings' ? (
           <SettingsView
-            session={session}
+            session={uiSession}
             onBack={() => ro.setView('home')}
             onLogout={onLogout}
           />
         ) : (
           <ViewErrorBoundary viewName="the service advisor dashboard">
             <AdvisorDashboard
-              session={session}
+              session={uiSession}
               onOpenSettings={goToSettings}
               onLogout={onLogout}
             />
@@ -233,7 +251,7 @@ export function BenzTechAuthenticatedApp({
       {ro.view === 'home' && isManager && (
         <ViewErrorBoundary viewName="the manager dashboard">
           <ManagerDashboard
-            session={session}
+            session={uiSession}
             searchTerm={ro.searchTerm}
             onSearchChange={ro.setSearchTerm}
             openingROId={ro.openingROId}
@@ -486,7 +504,7 @@ export function BenzTechAuthenticatedApp({
 
       {ro.view === 'settings' && (
         <SettingsView
-          session={session}
+          session={uiSession}
           onBack={() => ro.setView(ro.currentRO ? 'ro' : 'home')}
           onLogout={onLogout}
           onOpenAuditLogs={isManager ? () => ro.setView('audit') : undefined}
@@ -497,7 +515,7 @@ export function BenzTechAuthenticatedApp({
 
       {ro.view === 'audit' && (
         <ViewErrorBoundary viewName="audit logs">
-          <AuditLogView session={session} onBack={() => ro.setView(isManager ? 'home' : 'settings')} />
+          <AuditLogView session={uiSession} onBack={() => ro.setView(isManager ? 'home' : 'settings')} />
         </ViewErrorBoundary>
       )}
 

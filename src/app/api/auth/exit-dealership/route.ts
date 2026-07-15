@@ -53,12 +53,14 @@ export async function POST(request: Request) {
             entityId: previousDealershipId,
             ipAddress: getRequestIp(request),
             authSource: 'legacy',
-            scopeMode: homeScope === 'group' ? 'national' : 'national',
+            scopeMode: homeScope,
             metadata: {
               previousDealershipId,
               previousDealershipName: session.dealershipName,
               homeScopeMode: homeScope,
               dealerGroupId: ownerSession.activeDealerGroupId ?? null,
+              previousViewAsRole: session.viewAsRole ?? 'dealership_owner',
+              previousViewAsAdmin: Boolean(session.viewAsAdmin),
             },
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }

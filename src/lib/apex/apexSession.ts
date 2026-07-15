@@ -402,7 +402,12 @@ async function resolveTechnicianSessionFromClaims(
 
     if (tech.role === 'owner') {
       if (claims.scopeMode === 'dealership' && claims.activeDealershipId) {
-        return buildOwnerDealershipSession(tech.id, claims.activeDealershipId);
+        // Preserve View As lens across access-token refresh (identity stays owner).
+        return buildOwnerDealershipSession(tech.id, claims.activeDealershipId, {
+          viewAsRole: claims.viewAsRole,
+          viewAsAdmin: claims.viewAsAdmin,
+          viewAsServiceAdvisorId: claims.viewAsServiceAdvisorId,
+        });
       }
       if (claims.scopeMode === 'group' && claims.activeDealerGroupId) {
         return buildOwnerGroupSession(tech.id, claims.activeDealerGroupId);

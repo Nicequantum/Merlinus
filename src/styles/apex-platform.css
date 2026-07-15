@@ -1356,3 +1356,54 @@
   font-size: 0.8125rem;
   flex-shrink: 0;
 }
+
+[data-platform='apex'] .apex-owner-scope-hint {
+  font-size: 0.6875rem;
+  color: var(--apex-text-muted);
+  margin-top: 0.1rem;
+}
+
+/* National Owner dual selector — View As lens */
+[data-platform='apex'] .apex-view-as-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+[data-platform='apex'] .apex-view-as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+[data-platform='apex'] .apex-view-as-select {
+  height: 2.25rem;
+  min-width: 9.5rem;
+  max-width: 14rem;
+  padding: 0 0.625rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  background: rgba(6, 14, 20, 0.9);
+  color: var(--apex-silver-bright);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+[data-platform='apex'] .apex-view-as-select:disabled {
+  opacity: 0.55;
+}
+
+[data-platform='apex'] .apex-view-as-enter-panel {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+[data-platform='apex'] .apex-view-as-role-desc {
+  margin: 0;
+}

@@ -385,6 +385,15 @@ export interface TechnicianSession {
   mustChangePassword?: boolean;
   /** Phase 7.3 — IANA timezone for active rooftop day boundaries / usage. */
   dealershipTimezone?: string;
+  /**
+   * National Owner View As — effective staff role lens while scopeMode is dealership.
+   * Identity stays role=owner; regenerations/other users are unaffected.
+   */
+  viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
+  /** GM lens: admin privileges in rooftop only (session flag, not DB). */
+  viewAsAdmin?: boolean;
+  /** Bound service advisor when viewAsRole is service_advisor. */
+  viewAsServiceAdvisorId?: string | null;
 }
 
 export interface TechnicianUsageSummary {

@@ -3,6 +3,7 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
+import { effectiveRole, effectiveServiceAdvisorId } from '@/lib/apex/viewAs';
 import {
   getStartOfDealershipDay,
   resolveDealershipTimezone,
@@ -34,15 +35,20 @@ export function buildRepairOrderListWhere(
   params: RepairOrderListParams
 ): Prisma.RepairOrderWhereInput {
   const piiScope = scopedPiiWhere(session);
+  const role = effectiveRole(session);
+  const advisorId = effectiveServiceAdvisorId(session);
   const roleWhere: Prisma.RepairOrderWhereInput = withOptionalDealerId(
-    session.role === 'manager'
+    role === 'manager'
       ? { dealershipId: piiScope.dealershipId }
-      : session.role === 'service_advisor' && session.serviceAdvisorId
+      : role === 'service_advisor' && advisorId
         ? {
             dealershipId: piiScope.dealershipId,
-            serviceAdvisorId: session.serviceAdvisorId,
+            serviceAdvisorId: advisorId,
           }
-        : { dealershipId: piiScope.dealershipId, technicianId: session.technicianId },
+        : role === 'owner'
+          ? // Native dealership-owner lens: rooftop-wide visibility (same as manager list)
+            { dealershipId: piiScope.dealershipId }
+          : { dealershipId: piiScope.dealershipId, technicianId: session.technicianId },
     piiScope.dealerId
   );
 

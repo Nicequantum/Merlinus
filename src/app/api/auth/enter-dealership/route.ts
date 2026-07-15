@@ -4,6 +4,7 @@ import { ownerMayEnterDealership } from '@/lib/apex/dealerGroupAccess';
 import { APEX_NATIONAL_DEALERSHIP_ID } from '@/lib/apex/platformConstants';
 import { buildOwnerDealershipSession } from '@/lib/apex/ownerDealershipContext';
 import { getRlsDb, rlsContextFromSession, withRlsBypass } from '@/lib/apex/rlsContext';
+import { resolveViewAsClaims } from '@/lib/apex/viewAs';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { writeAuditedAccess } from '@/lib/auditedAccess';
 import { withAuth } from '@/lib/apiRoute';
@@ -63,8 +64,24 @@ export async function POST(request: Request) {
           return apiError('You do not have access to this dealership.', 403);
         }
 
-        const ownerSession = await buildOwnerDealershipSession(session.technicianId, dealership.id);
+        const uiRole = parsed.data.viewAsRole ?? 'dealership_owner';
+        const lens = resolveViewAsClaims({
+          role: uiRole,
+          serviceAdvisorId: parsed.data.viewAsServiceAdvisorId,
+        });
+
+        const ownerSession = await buildOwnerDealershipSession(session.technicianId, dealership.id, {
+          viewAsRole: lens.viewAsRole,
+          viewAsAdmin: lens.viewAsAdmin,
+          viewAsServiceAdvisorId: lens.viewAsServiceAdvisorId,
+        });
         if (!ownerSession) {
+          if (uiRole === 'service_advisor') {
+            return apiError(
+              'No active service advisor found for this rooftop (or invalid advisor id).',
+              400
+            );
+          }
           return apiError('Unable to enter dealership context.', 403);
         }
 
@@ -83,6 +100,8 @@ export async function POST(request: Request) {
               previousScopeMode: session.scopeMode ?? 'national',
               dealershipName: dealership.name,
               dealerGroupId: ownerSession.activeDealerGroupId ?? null,
+              viewAsRole: ownerSession.viewAsRole ?? 'dealership_owner',
+              viewAsAdmin: Boolean(ownerSession.viewAsAdmin),
             },
           },
           { rls: { ...rlsContextFromSession(ownerSession), enforced: true } }

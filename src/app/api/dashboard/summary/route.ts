@@ -1,6 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import { withOptionalDealerId } from '@/lib/apex/dealerScope';
 import { scopedPiiWhere, type TenantScopedSession } from '@/lib/apex/tenantScope';
+import {
+  effectiveRole,
+  effectiveServiceAdvisorId,
+  type ViewAsSessionFields,
+} from '@/lib/apex/viewAs';
 import { getRlsDb } from '@/lib/apex/rlsContext';
 import { withAuth } from '@/lib/apiRoute';
 import { getAuditDashboardSummary } from '@/lib/auditSummary';
@@ -10,17 +15,19 @@ function buildRoleScopedRoWhere(
   session: TenantScopedSession & {
     technicianId: string;
     serviceAdvisorId: string | null;
-  }
+  } & ViewAsSessionFields
 ): Prisma.RepairOrderWhereInput {
   const piiScope = scopedPiiWhere(session);
-  if (session.role === 'manager') {
+  const role = effectiveRole(session);
+  const advisorId = effectiveServiceAdvisorId(session);
+  if (role === 'manager' || role === 'owner') {
     return withOptionalDealerId({ dealershipId: piiScope.dealershipId }, piiScope.dealerId);
   }
-  if (session.role === 'service_advisor' && session.serviceAdvisorId) {
+  if (role === 'service_advisor' && advisorId) {
     return withOptionalDealerId(
       {
         dealershipId: piiScope.dealershipId,
-        serviceAdvisorId: session.serviceAdvisorId,
+        serviceAdvisorId: advisorId,
       },
       piiScope.dealerId
     );
@@ -37,7 +44,8 @@ export async function GET(request: Request) {
     async (session) => {
       const { dealershipId } = scopedPiiWhere(session);
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const isManager = session.role === 'manager';
+      const role = effectiveRole(session);
+      const isManager = role === 'manager' || role === 'owner';
       const roWhere = buildRoleScopedRoWhere(session);
 
       const db = getRlsDb();
@@ -75,7 +83,7 @@ export async function GET(request: Request) {
       });
 
       return {
-        role: session.role,
+        role,
         stats: {
           totalRepairOrders: totalRos,
           warrantyStories: storiesGenerated,

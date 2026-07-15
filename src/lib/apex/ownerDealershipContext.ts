@@ -55,7 +55,61 @@ function ownerTechnicianForSession(
     dealerGroupName: scopeMode === 'group' ? group?.name : undefined,
     dealershipTimezone:
       scopeMode === 'dealership' ? dealership.timezone?.trim() || base.dealershipTimezone : undefined,
+    // National/group home never carries a staff View As lens
+    viewAsRole: undefined,
+    viewAsAdmin: undefined,
+    viewAsServiceAdvisorId: undefined,
   };
+}
+
+export type OwnerViewAsOptions = {
+  viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
+  viewAsAdmin?: boolean;
+  viewAsServiceAdvisorId?: string | null;
+};
+
+async function resolveViewAsForRooftop(
+  dealershipId: string,
+  options?: OwnerViewAsOptions
+): Promise<{
+  viewAsRole: 'technician' | 'manager' | 'service_advisor' | null;
+  viewAsAdmin: boolean;
+  viewAsServiceAdvisorId: string | null;
+}> {
+  const viewAsRole = options?.viewAsRole ?? null;
+  const viewAsAdmin = Boolean(options?.viewAsAdmin) && viewAsRole === 'manager';
+  let viewAsServiceAdvisorId: string | null = null;
+
+  if (viewAsRole === 'service_advisor') {
+    const requested = options?.viewAsServiceAdvisorId?.trim() || null;
+    if (requested) {
+      const advisor = await getRlsDb().serviceAdvisor.findFirst({
+        where: {
+          id: requested,
+          dealershipId,
+          deletedAt: null,
+          status: 'active',
+        },
+        select: { id: true },
+      });
+      if (!advisor) {
+        throw new Error('VIEW_AS_ADVISOR_NOT_FOUND');
+      }
+      viewAsServiceAdvisorId = advisor.id;
+    } else {
+      const first = await getRlsDb().serviceAdvisor.findFirst({
+        where: { dealershipId, deletedAt: null, status: 'active' },
+        orderBy: { displayNameEncrypted: 'asc' },
+        select: { id: true },
+      });
+      if (!first) {
+        throw new Error('VIEW_AS_NO_ADVISORS');
+      }
+      viewAsServiceAdvisorId = first.id;
+    }
+  }
+
+  return { viewAsRole, viewAsAdmin, viewAsServiceAdvisorId };
 }
 
 type OwnerTechRow = {
@@ -215,7 +269,8 @@ export async function buildOwnerHomeSession(technicianId: string): Promise<Sessi
 
 export async function buildOwnerDealershipSession(
   technicianId: string,
-  dealershipId: string
+  dealershipId: string,
+  viewAs?: OwnerViewAsOptions
 ): Promise<SessionPayload | null> {
   return withRlsBypass(async () => {
     const tech = await getRlsDb().technician.findUnique({
@@ -246,6 +301,13 @@ export async function buildOwnerDealershipSession(
 
     if (!dealership || dealership.id === APEX_NATIONAL_DEALERSHIP_ID) return null;
 
+    let lens: Awaited<ReturnType<typeof resolveViewAsForRooftop>>;
+    try {
+      lens = await resolveViewAsForRooftop(dealership.id, viewAs);
+    } catch {
+      return null;
+    }
+
     const payload = ownerTechnicianForSession(
       {
         id: tech.id,
@@ -255,7 +317,11 @@ export async function buildOwnerDealershipSession(
         isAdmin: tech.isAdmin,
         dealershipId: tech.dealershipId,
         dealerId: tech.dealerId,
-        serviceAdvisorId: tech.serviceAdvisorId,
+        // For advisor lens, expose bound advisor as serviceAdvisorId so existing UI/APIs work
+        serviceAdvisorId:
+          lens.viewAsRole === 'service_advisor'
+            ? lens.viewAsServiceAdvisorId
+            : tech.serviceAdvisorId,
         sessionVersion: tech.sessionVersion,
         consentAt: tech.consentAt,
         consentVersion: tech.consentVersion,
@@ -277,17 +343,26 @@ export async function buildOwnerDealershipSession(
       'dealership'
     );
 
+    const withLens: SessionPayload = {
+      ...payload,
+      dealershipTimezone: dealership.timezone || payload.dealershipTimezone,
+      viewAsRole: lens.viewAsRole,
+      viewAsAdmin: lens.viewAsAdmin,
+      viewAsServiceAdvisorId: lens.viewAsServiceAdvisorId,
+      serviceAdvisorId:
+        lens.viewAsRole === 'service_advisor' ? lens.viewAsServiceAdvisorId : payload.serviceAdvisorId,
+    };
+
     // Preserve group context while inside a rooftop for exit routing / UI
     const group = dealership.dealer?.dealerGroup;
     if (group) {
       return {
-        ...payload,
-        dealershipTimezone: dealership.timezone || payload.dealershipTimezone,
+        ...withLens,
         activeDealerGroupId: group.id,
         dealerGroupName: group.name,
       };
     }
 
-    return payload;
+    return withLens;
   });
 }

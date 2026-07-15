@@ -80,8 +80,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   return withAuth(
     request,
     async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
+      {
+        const { effectiveRole } = await import('@/lib/apex/viewAs');
+        if (effectiveRole(session) === 'service_advisor') {
+          return apiError(FORBIDDEN_ERROR, 403);
+        }
       }
 
       const existing = await canAccessRepairOrder(session, id);
@@ -395,8 +398,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   return withAuth(
     request,
     async (session) => {
-      if (session.role === 'service_advisor') {
-        return apiError(FORBIDDEN_ERROR, 403);
+      {
+        const { effectiveRole } = await import('@/lib/apex/viewAs');
+        if (effectiveRole(session) === 'service_advisor') {
+          return apiError(FORBIDDEN_ERROR, 403);
+        }
       }
 
       const existing = await canAccessRepairOrder(session, id);

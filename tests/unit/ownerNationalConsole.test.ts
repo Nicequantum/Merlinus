@@ -40,15 +40,35 @@ describe('Owner national console (Phase 5.9)', () => {
     assert.match(shell, /apex-stat-grid/);
     assert.match(shell, /apex-activity-feed/);
     assert.match(shell, /ApexDealershipSelector/);
-    assert.match(shell, /Enter dealership/);
+    assert.match(shell, /View as|Enter dealership|enter rooftop/i);
+    assert.match(shell, /VIEW_AS_ROLE_OPTIONS|viewAsRole/);
+    assert.match(shell, /enterOwnerDealership/);
   });
 
-  it('owner dealership workspace exposes exit to national', () => {
+  it('owner dealership workspace exposes return home and accepts group exit', () => {
     const workspace = readSrc('src/components/apex/ApexOwnerDealershipWorkspace.tsx');
     assert.match(workspace, /exitOwnerDealership/);
     assert.match(workspace, /ApexOwnerDealershipBar/);
+    assert.match(workspace, /isOwnerHomeAfterExit|scopeMode === 'group'/);
+    assert.match(workspace, /viewAsRoleLabel/);
     const bar = readSrc('src/components/apex/ApexOwnerDealershipBar.tsx');
-    assert.match(bar, /Exit to national/);
+    assert.match(bar, /Return to National Owner|Viewing as/);
+  });
+
+  it('enter-dealership accepts View As role body and exit clears lens via home session', () => {
+    const enter = readSrc('src/app/api/auth/enter-dealership/route.ts');
+    assert.match(enter, /resolveViewAsClaims/);
+    assert.match(enter, /viewAsRole/);
+    assert.match(enter, /buildOwnerDealershipSession/);
+    const exit = readSrc('src/app/api/auth/exit-dealership/route.ts');
+    assert.match(exit, /buildOwnerHomeSession/);
+    assert.match(exit, /previousViewAsRole|homeScope/);
+  });
+
+  it('BenzTechAuthenticatedApp branches on effectiveRole for View As', () => {
+    const app = readSrc('src/components/BenzTechAuthenticatedApp.tsx');
+    assert.match(app, /effectiveRole/);
+    assert.match(app, /effectiveIsAdmin/);
   });
 
   it('ApexPlatformApp routes owner dealership scope through workspace', () => {

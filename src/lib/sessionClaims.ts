@@ -32,6 +32,9 @@ const sessionPayloadObjectSchema = z.object({
   dealerGroupName: z.string().optional(),
   mustChangePassword: z.boolean().optional(),
   dealershipTimezone: z.string().optional(),
+  viewAsRole: z.enum(['technician', 'manager', 'service_advisor']).nullable().optional(),
+  viewAsAdmin: z.boolean().optional(),
+  viewAsServiceAdvisorId: z.string().nullable().optional(),
 });
 
 export type ParsedSessionPayload = {
@@ -56,6 +59,9 @@ export type ParsedSessionPayload = {
   dealerGroupName?: string;
   mustChangePassword?: boolean;
   dealershipTimezone?: string;
+  viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
+  viewAsAdmin?: boolean;
+  viewAsServiceAdvisorId?: string | null;
 };
 
 export type ParsedApexAccessClaims = ParsedSessionPayload & {
@@ -97,6 +103,12 @@ function normalizeSessionPayload(
     dealerGroupName: raw.dealerGroupName,
     mustChangePassword: raw.mustChangePassword,
     dealershipTimezone: raw.dealershipTimezone?.trim() || undefined,
+    viewAsRole: raw.viewAsRole === undefined ? undefined : raw.viewAsRole,
+    viewAsAdmin: raw.viewAsAdmin,
+    viewAsServiceAdvisorId:
+      raw.viewAsServiceAdvisorId === undefined
+        ? undefined
+        : raw.viewAsServiceAdvisorId?.trim() || null,
   };
 }
 

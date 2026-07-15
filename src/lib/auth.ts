@@ -64,6 +64,13 @@ export interface SessionPayload {
    * Absent on national/group owner home; set in dealership scope.
    */
   dealershipTimezone?: string;
+  /**
+   * National Owner "View As" lens (dealership scope only).
+   * Real identity remains role=owner; these never rewrite Technician.role in DB.
+   */
+  viewAsRole?: 'technician' | 'manager' | 'service_advisor' | null;
+  viewAsAdmin?: boolean;
+  viewAsServiceAdvisorId?: string | null;
 }
 
 /** APEX NATIONAL PLATFORM — resolve dealer from technician or parent dealership. */

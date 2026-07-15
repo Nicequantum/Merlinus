@@ -81,8 +81,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   return withAuth(
     request,
     async (session) => {
-      if (session.role !== 'manager' && !session.isAdmin) {
-        return apiError(FORBIDDEN_ERROR, 403);
+      {
+        const { effectiveRole, effectiveIsAdmin } = await import('@/lib/apex/viewAs');
+        if (effectiveRole(session) !== 'manager' && !effectiveIsAdmin(session)) {
+          return apiError(FORBIDDEN_ERROR, 403);
+        }
       }
 
       if (id === session.technicianId) {

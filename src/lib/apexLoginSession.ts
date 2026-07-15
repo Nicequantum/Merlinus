@@ -166,12 +166,40 @@ export async function selectOwnerDealerGroup(
   return data.session;
 }
 
-export async function enterOwnerDealership(dealershipId: string): Promise<TechnicianSession> {
+export type OwnerViewAsUiRole =
+  | 'technician'
+  | 'manager'
+  | 'service_advisor'
+  | 'dealership_owner'
+  | 'general_manager';
+
+export type EnterOwnerDealershipOptions = {
+  viewAsRole?: OwnerViewAsUiRole;
+  viewAsServiceAdvisorId?: string | null;
+};
+
+export async function enterOwnerDealership(
+  dealershipId: string,
+  options?: EnterOwnerDealershipOptions
+): Promise<TechnicianSession> {
+  const body: {
+    dealershipId: string;
+    viewAsRole?: OwnerViewAsUiRole;
+    viewAsServiceAdvisorId?: string;
+  } = { dealershipId };
+
+  if (options?.viewAsRole) {
+    body.viewAsRole = options.viewAsRole;
+  }
+  if (options?.viewAsServiceAdvisorId?.trim()) {
+    body.viewAsServiceAdvisorId = options.viewAsServiceAdvisorId.trim();
+  }
+
   const res = await fetch('/api/auth/enter-dealership', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ dealershipId }),
+    body: JSON.stringify(body),
   });
 
   const data = (await res.json().catch(() => ({}))) as {
@@ -189,6 +217,32 @@ export async function enterOwnerDealership(dealershipId: string): Promise<Techni
   }
 
   return data.session;
+}
+
+export type OwnerDealershipAdvisorOption = {
+  id: string;
+  displayName: string;
+  advisorCode: string | null;
+};
+
+/** National/group home — list advisors for View As service-advisor lens. */
+export async function fetchOwnerDealershipAdvisors(
+  dealershipId: string
+): Promise<OwnerDealershipAdvisorOption[]> {
+  const params = new URLSearchParams({ dealershipId });
+  const res = await fetch(`/api/owner/dealership-advisors?${params.toString()}`, {
+    credentials: 'include',
+    cache: 'no-store',
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    advisors?: OwnerDealershipAdvisorOption[];
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Could not load service advisors');
+  }
+  return data.advisors ?? [];
 }
 
 export async function exitOwnerDealership(): Promise<TechnicianSession> {

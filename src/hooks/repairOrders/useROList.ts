@@ -57,15 +57,22 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
       return;
     }
 
-    if (session.role === 'service_advisor') {
-      setAllROs([]);
-      setPreviousROs([]);
-      setListError(null);
-      setLoading(false);
-      setListRetrying(false);
-      previousLoadedRef.current = false;
-      setPreviousExpanded(false);
-      return;
+    {
+      const isAdvisor =
+        session.role === 'service_advisor' ||
+        (session.role === 'owner' &&
+          session.scopeMode === 'dealership' &&
+          session.viewAsRole === 'service_advisor');
+      if (isAdvisor) {
+        setAllROs([]);
+        setPreviousROs([]);
+        setListError(null);
+        setLoading(false);
+        setListRetrying(false);
+        previousLoadedRef.current = false;
+        setPreviousExpanded(false);
+        return;
+      }
     }
 
     setListError(null);
