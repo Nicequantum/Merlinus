@@ -105,6 +105,7 @@ model Dealer {
   repairLines               RepairLine[]
   auditLogs                 AuditLog[]
   usageLogs                 UsageLog[]
+  usageEvents               UsageEvent[]
   serviceAdvisors           ServiceAdvisor[]
   advisorObservations       AdvisorComplaintObservation[]
   certifiedStories          TechnicianCertifiedStory[]
@@ -138,6 +139,7 @@ model Dealership {
   repairOrders    RepairOrder[]
   auditLogs       AuditLog[]
   usageLogs       UsageLog[]
+  usageEvents     UsageEvent[]
   serviceAdvisors ServiceAdvisor[]
   advisorObservations AdvisorComplaintObservation[]
   technicianMemberships TechnicianDealership[]
@@ -254,6 +256,7 @@ model RepairOrder {
   updatedAt                  DateTime     @updatedAt
   repairLines                RepairLine[]
   advisorObservations        AdvisorComplaintObservation[]
+  usageEvents                UsageEvent[]
 
   @@index([technicianId])
   @@index([dealerId])
@@ -388,12 +391,44 @@ model RepairLine {
   storyCertifiedByTechnicianId  String?
   storyCertifiedByNameEncrypted String      @default("")
   storyCertifiedHash            String      @default("")
+  /**
+   * Billing: true after the first AI warranty story is successfully generated and saved.
+   * Regenerations must not flip this back or emit additional usage_events.
+   */
+  storyGenerated                Boolean     @default(false) @map("story_generated")
   createdAt                 DateTime    @default(now())
   updatedAt                 DateTime    @updatedAt
+  usageEvents                   UsageEvent[]
 
   @@index([repairOrderId])
   @@index([dealerId])
   @@index([storyCertifiedAt])
+  @@index([storyGenerated])
+}
+
+/**
+ * Lightweight billing / metering events (not the daily UsageLog AI-cap table).
+ * Exactly one story_generated row per repair line (unique on line_id + event_type).
+ */
+model UsageEvent {
+  id             String      @id @default(cuid())
+  dealershipId   String      @map("dealership_id")
+  dealership     Dealership  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  dealerId       String?     @map("dealer_id")
+  dealer         Dealer?     @relation(fields: [dealerId], references: [id], onDelete: SetNull)
+  repairOrderId  String      @map("ro_id")
+  repairOrder    RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  repairLineId   String      @map("line_id")
+  repairLine     RepairLine  @relation(fields: [repairLineId], references: [id], onDelete: Cascade)
+  eventType      String      @map("event_type")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  @@unique([repairLineId, eventType])
+  @@index([dealershipId, createdAt])
+  @@index([dealershipId, eventType, createdAt])
+  @@index([repairOrderId])
+  @@index([repairLineId])
+  @@map("usage_events")
 }
 
 model Template {

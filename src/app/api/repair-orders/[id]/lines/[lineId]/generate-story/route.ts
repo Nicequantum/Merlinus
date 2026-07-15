@@ -17,6 +17,7 @@ import { logStoryTechnicianActivity } from '@/lib/storyTechnicianLog';
 import { CLEAR_STORY_CERTIFICATION_DB } from '@/lib/storyCertification';
 import { auditDealerIdFromSession } from '@/lib/audit';
 import { persistRepairLineStoryInTransaction } from '@/lib/storyAiPersist';
+import { recordFirstStoryGeneratedUsage } from '@/lib/storyUsageBilling';
 import { withStoryAiRoute } from '@/lib/storyAiRoute';
 import { logger } from '@/lib/logger';
 
@@ -122,8 +123,11 @@ export async function POST(
       }
 
       try {
+        const lineWhere = scopedRepairLineWhereForSession(lineId, id, session);
+        const dealerId = resolveDealerIdForWrite({ session });
         await rlsTransaction(
           async (tx) => {
+            // 1) Persist generated story (audit + line update) — existing path.
             await persistRepairLineStoryInTransaction(
               tx,
               {
@@ -149,15 +153,27 @@ export async function POST(
                 ipAddress: getRequestIp(req),
               },
               {
-                where: scopedRepairLineWhereForSession(lineId, id, session),
+                where: lineWhere,
                 data: {
                   warrantyStoryEncrypted: encryptOptionalSensitiveText(warrantyStory),
                   storyQualityAuditEncrypted: '',
                   ...CLEAR_STORY_CERTIFICATION_DB,
-                  ...dealerIdWriteFields(resolveDealerIdForWrite({ session })),
+                  ...dealerIdWriteFields(dealerId),
                 },
               }
             );
+
+            // 2) Billing meter: first successful AI story only (same transaction).
+            // Regenerations no-op when story_generated is already true.
+            if (warrantyStory.trim().length > 0) {
+              await recordFirstStoryGeneratedUsage(tx, {
+                dealershipId: session.dealershipId,
+                dealerId,
+                repairOrderId: id,
+                repairLineId: lineId,
+                lineWhere,
+              });
+            }
           },
           { ...rlsContextFromSession(session), enforced: true }
         );
