@@ -91,7 +91,8 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
         return;
       }
       setListError('Could not load repair orders. Check your connection and try again.');
-      throw error;
+      // Do not rethrow — effect-driven loads must not produce unhandled rejections.
+      // retryListLoad can call refreshList and still see listError.
     } finally {
       setLoading(false);
       setListRetrying(false);

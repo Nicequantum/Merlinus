@@ -144,14 +144,17 @@ export function useROScan({
   );
 
   const createROFromExtracted = useCallback(
-    async (extracted: {
-      vehicle: RepairOrder['vehicle'];
-      complaints: string[];
-      complaintLabels?: string[];
-      customerName: string;
-      roNumber?: string;
-      serviceAdvisorName?: string;
-    }): Promise<boolean> => {
+    async (
+      extracted: {
+        vehicle: RepairOrder['vehicle'];
+        complaints: string[];
+        complaintLabels?: string[];
+        customerName: string;
+        roNumber?: string;
+        serviceAdvisorName?: string;
+      },
+      options?: { idempotencyKey?: string; extractionSource?: 'grok' | 'ocr_fallback' }
+    ): Promise<boolean> => {
       try {
         const finalized = finalizeLabeledComplaints(
           extracted.complaints || [],
@@ -159,16 +162,24 @@ export function useROScan({
         );
         const complaints = finalized.complaints;
         const complaintLabels = finalized.labels;
-        const { repairOrder } = await api.createRepairOrder({
-          fromExtraction: true,
-          roNumber: extracted.roNumber || `R-${Date.now().toString().slice(-6)}`,
-          vehicle: sanitizeVehicle(extracted.vehicle),
-          customerName: extracted.customerName,
-          serviceAdvisorName: extracted.serviceAdvisorName,
-          advisorExtractionSource: 'grok',
-          complaints,
-          complaintLabels,
-        } as never);
+        const source = options?.extractionSource ?? 'grok';
+        const { repairOrder } = await api.createRepairOrder(
+          {
+            fromExtraction: true,
+            roNumber: extracted.roNumber || `R-${Date.now().toString().slice(-6)}`,
+            vehicle: sanitizeVehicle(extracted.vehicle),
+            customerName: extracted.customerName,
+            serviceAdvisorName: extracted.serviceAdvisorName,
+            advisorExtractionSource: source,
+            complaints,
+            complaintLabels,
+          } as never,
+          {
+            idempotencyKey: (
+              options?.idempotencyKey || `scan-${source}-${Date.now()}`
+            ).slice(0, 128),
+          }
+        );
         const normalized = ensureComplaintIds(repairOrder);
         openScanResultView(normalized);
         scanInFlightRef.current = false;
@@ -183,23 +194,31 @@ export function useROScan({
   );
 
   const createROFromText = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { idempotencyKey?: string }) => {
       const parsed = parseStructuredROText(text);
       const roNumber = parsed.roNumber || extractRoNumberFromText(text);
       const vehicle = sanitizeVehicle(parsed.vehicle);
       const complaints = sanitizeComplaints(parsed.complaints);
       const custName = parsed.customerName || extractCustomerName(text);
       try {
-        const { repairOrder } = await api.createRepairOrder({
-          fromExtraction: true,
-          roNumber,
-          vehicle,
-          customerName: custName,
-          serviceAdvisorName: parsed.serviceAdvisorName,
-          advisorExtractionSource: 'ocr_fallback',
-          complaints,
-          complaintLabels: parsed.complaintLabels,
-        } as never);
+        const { repairOrder } = await api.createRepairOrder(
+          {
+            fromExtraction: true,
+            roNumber,
+            vehicle,
+            customerName: custName,
+            serviceAdvisorName: parsed.serviceAdvisorName,
+            advisorExtractionSource: 'ocr_fallback',
+            complaints,
+            complaintLabels: parsed.complaintLabels,
+          } as never,
+          {
+            idempotencyKey: (options?.idempotencyKey || `scan-ocr-${roNumber || 'x'}`).slice(
+              0,
+              128
+            ),
+          }
+        );
         const normalized = ensureComplaintIds(repairOrder);
         openScanResultView(normalized);
         scanInFlightRef.current = false;
@@ -290,6 +309,10 @@ export function useROScan({
         if (!isActiveSession()) return;
 
         const imagePathnames = attachments.map((a) => a.pathname);
+        // Stable for this batch — double-tap / network replay will not create a second RO.
+        const scanIdempotencyKey = `scan-${imagePathnames
+          .map((p) => p.split('/').pop() || p)
+          .join('_')}`.slice(0, 128);
 
         type ClientOcrResult = {
           combinedText: string;
@@ -420,7 +443,10 @@ export function useROScan({
         if (!isActiveSession()) return;
         roScanPipeline.setProgress(88);
         roScanPipeline.setStatusMessage('Creating repair order…');
-        createdSuccessfully = await createROFromExtracted(extracted);
+        createdSuccessfully = await createROFromExtracted(extracted, {
+          idempotencyKey: scanIdempotencyKey,
+          extractionSource: grokExtracted ? 'grok' : 'ocr_fallback',
+        });
         if (!createdSuccessfully) {
           throw new Error('Failed to create repair order from scan.');
         }

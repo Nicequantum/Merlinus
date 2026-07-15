@@ -11,6 +11,8 @@ import {
   enqueueRepairOrderSave,
   isRepairOrderSaveQueueBusy,
 } from '@/lib/repairOrderSaveQueue';
+import { promptSaveConflictChoice } from '@/lib/saveConflictUx';
+import { cloneRepairOrderForUpdate } from '@/utils/cloneRepairOrder';
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import type { RepairOrder, RepairOrderSummary } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
@@ -79,7 +81,10 @@ export function useROPersistence(
         const list = allROsRef.current;
         const isNew = !list.some((r) => r.id === payload.id) || payload.id.startsWith('ro-');
         if (isNew && payload.id.startsWith('ro-')) {
-          const { repairOrder } = await api.createRepairOrder(payload);
+          const { repairOrder } = await api.createRepairOrder(payload, {
+            // Stable per client draft id — retries never create a second RO.
+            idempotencyKey: `create-${payload.id}`.slice(0, 128),
+          });
           setAllROs((prev) => [
             repairOrderToSummary(repairOrder),
             ...prev.filter((r) => r.id !== payload.id),
@@ -97,18 +102,31 @@ export function useROPersistence(
   );
 
   const resolveConflictAndRetry = useCallback(
-    async (local: RepairOrder): Promise<RepairOrder> => {
+    async (
+      local: RepairOrder
+    ): Promise<{ repairOrder: RepairOrder; fullyApplied: boolean }> => {
       const { repairOrder: remote } = await api.getRepairOrder(local.id);
+      const choice = await promptSaveConflictChoice();
+
+      if (choice === 'use-server') {
+        const serverCopy = ensureComplaintIds(remote);
+        applySavedRo(serverCopy);
+        dirtyRef.current = false;
+        lastSavedRevisionRef.current = clientRevisionRef.current;
+        toast.message('Loaded server version — your device edits were replaced');
+        return { repairOrder: serverCopy, fullyApplied: true };
+      }
+
+      // keep-local: local content wins, server updatedAt is the concurrency token
       const merged = mergePersistedWithClient(remote, roRef.current ?? local);
-      // Server updatedAt is the concurrency token for the next PUT
       const withToken = { ...merged, updatedAt: remote.updatedAt };
       roRef.current = withToken;
       setCurrentRO(withToken);
       const { repairOrder } = await api.updateRepairOrder(withToken.id, withToken);
-      toast.message('Merged remote changes and saved');
-      return repairOrder;
+      toast.success('Kept your edits and saved');
+      return { repairOrder, fullyApplied: false };
     },
-    [roRef, setCurrentRO]
+    [applySavedRo, roRef, setCurrentRO]
   );
 
   const saveROImmediate = useCallback(
@@ -122,7 +140,14 @@ export function useROPersistence(
           } catch (e) {
             if (e instanceof ApiError && e.status === 409) {
               try {
-                persisted = await resolveConflictAndRetry(roRef.current?.id === ro.id ? roRef.current! : ro);
+                const resolved = await resolveConflictAndRetry(
+                  roRef.current?.id === ro.id ? roRef.current! : ro
+                );
+                if (resolved.fullyApplied) {
+                  // User chose server — already applied; do not re-merge local over it.
+                  return;
+                }
+                persisted = resolved.repairOrder;
               } catch (retryError) {
                 toast.error(
                   retryError instanceof Error
@@ -209,7 +234,8 @@ export function useROPersistence(
     ) => {
       const base = roRef.current;
       if (!base) return null;
-      const updated = ensureComplaintIds(structuredClone(updater(base)));
+      // Shallow structural clone — structuredClone was janking low-end tablets on every keystroke
+      const updated = ensureComplaintIds(updater(cloneRepairOrderForUpdate(base)));
       clientRevisionRef.current += 1;
       if (!options?.skipPersist) {
         dirtyRef.current = true;

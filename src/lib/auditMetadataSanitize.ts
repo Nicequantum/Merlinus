@@ -58,6 +58,8 @@ const ALLOWED_STRING_KEYS = new Set([
   'actorType',
   'ifExistsMode',
   'templateId',
+  /** Client Idempotency-Key for create RO replay (no PII). */
+  'idempotencyKey',
 ]);
 
 const ALLOWED_BOOL_KEYS = new Set([

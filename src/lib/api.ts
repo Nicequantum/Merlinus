@@ -218,12 +218,15 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
-  listRepairOrders: (params?: {
-    limit?: number;
-    cursor?: string;
-    scope?: 'today' | 'previous';
-    q?: string;
-  }) => {
+  listRepairOrders: (
+    params?: {
+      limit?: number;
+      cursor?: string;
+      scope?: 'today' | 'previous';
+      q?: string;
+    },
+    options?: { signal?: AbortSignal }
+  ) => {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.cursor) query.set('cursor', params.cursor);
@@ -236,7 +239,10 @@ export const api = {
       hasMore?: boolean;
       scope?: 'today' | 'previous' | 'search';
       todayStart?: string;
-    }>(`/api/repair-orders${suffix}`, { timeoutMs: API_DEFAULT_CLIENT_MS });
+    }>(`/api/repair-orders${suffix}`, {
+      timeoutMs: API_DEFAULT_CLIENT_MS,
+      signal: options?.signal,
+    });
   },
 
   getRepairOrder: (id: string) =>
@@ -249,13 +255,17 @@ export const api = {
       fromExtraction?: boolean;
       customerName?: string;
       advisorExtractionSource?: 'grok' | 'ocr_fallback' | 'manual';
-    }
+    },
+    options?: { idempotencyKey?: string }
   ) =>
-    apiFetch<{ repairOrder: RepairOrder }>('/api/repair-orders', {
+    apiFetch<{ repairOrder: RepairOrder; idempotent?: boolean }>('/api/repair-orders', {
       method: 'POST',
       body: JSON.stringify(data),
       timeoutMs: RO_CRUD_CLIENT_MS,
       maxRetries: 0,
+      headers: options?.idempotencyKey
+        ? { 'Idempotency-Key': options.idempotencyKey }
+        : undefined,
     }),
 
   updateRepairOrder: (id: string, data: Partial<RepairOrder>) =>

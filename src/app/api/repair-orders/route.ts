@@ -26,6 +26,11 @@ import { emptyExtractedData } from '@/utils/diagnosticParser';
 import { buildRepairOrderListWhere, getTodayStartIso } from '@/lib/roListQuery';
 import { parseQueryParams, repairOrderListQuerySchema } from '@/lib/validation';
 import { createRepairOrderFromScan } from '@/utils/repairOrderFactory';
+import {
+  findIdempotentRepairOrderCreate,
+  idempotencyMetadata,
+  readIdempotencyKeyFromRequest,
+} from '@/lib/roCreateIdempotency';
 
 export async function GET(request: Request) {
   const query = parseQueryParams(request, repairOrderListQuerySchema);
@@ -132,6 +137,8 @@ export async function POST(request: Request) {
       const parsed = await parseRequestBody(request, createRepairOrderSchema, LARGE_JSON_BODY_LIMIT_BYTES);
       if ('error' in parsed) return parsed.error;
 
+      const idempotencyKey = readIdempotencyKeyFromRequest(request);
+
       const data = parsed.data;
       let input: RepairOrderInput;
 
@@ -231,10 +238,20 @@ export async function POST(request: Request) {
       const dealerId = resolveDealerIdForWrite({ session });
 
       let created;
-      let advisorCapture;
       try {
         // Phase 6.2 — join ambient withSessionRls transaction (no nested non-RLS connection)
         const result = await rlsTransaction(async (tx) => {
+          if (idempotencyKey) {
+            const prior = await findIdempotentRepairOrderCreate(tx, {
+              dealershipId: session.dealershipId,
+              technicianId: session.technicianId,
+              idempotencyKey,
+            });
+            if (prior) {
+              return { created: null as null, advisorCapture: null, replay: prior };
+            }
+          }
+
           const ro = await tx.repairOrder.create({
             data: {
               ...repairOrderToDbFields(input),
@@ -299,7 +316,10 @@ export async function POST(request: Request) {
               technicianId: session.technicianId,
               entityType: 'repairOrder',
               entityId: ro.id,
-              metadata: { roNumber: readRoNumberFromDb(ro) },
+              metadata: {
+                roNumber: readRoNumberFromDb(ro),
+                ...(idempotencyKey ? idempotencyMetadata(idempotencyKey) : {}),
+              },
               ipAddress: getRequestIp(request),
             },
             { tx }
@@ -310,10 +330,13 @@ export async function POST(request: Request) {
             include: { repairLines: true, serviceAdvisor: { select: { id: true, displayNameEncrypted: true } } },
           });
 
-          return { created: createdRo, advisorCapture: capture };
+          return { created: createdRo, advisorCapture: capture, replay: null as null };
         });
-        created = result.created;
-        advisorCapture = result.advisorCapture;
+
+        if (result.replay) {
+          return { repairOrder: result.replay, idempotent: true };
+        }
+        created = result.created!;
       } catch (error) {
         logger.error('ros.create.transaction_failed', {
           technicianId: session.technicianId,

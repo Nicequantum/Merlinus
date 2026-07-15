@@ -466,7 +466,9 @@ export function useRepairOrders({
   const createManualRO = useCallback(async () => {
     try {
       const draft = createManualRepairOrder();
-      const { repairOrder } = await api.createRepairOrder(draft);
+      const { repairOrder } = await api.createRepairOrder(draft, {
+        idempotencyKey: `manual-${draft.id}`.slice(0, 128),
+      });
       const withIds = ensureComplaintIds(
         draft.complaintIds && draft.complaintIds.length === repairOrder.complaints.length
           ? { ...repairOrder, complaintIds: draft.complaintIds }
