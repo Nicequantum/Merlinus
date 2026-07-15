@@ -20,7 +20,7 @@ import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
   probeCurrentSession,
-} from '@/lib/loginSession';
+} from '@/lib/authClient';
 import { useMerlinLogout } from '@/hooks/useMerlinLogout';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
 import type { TechnicianSession } from '@/types';

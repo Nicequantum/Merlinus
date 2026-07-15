@@ -194,29 +194,34 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         }
 
         const requestIp = getRequestIp(request);
-        for (const edit of warrantyStoryEdits) {
-          await appendAuditLogInTransaction(tx, {
-            action: 'story.edit',
-            dealershipId: session.dealershipId,
-            dealerId: dealerFields.dealerId,
-            technicianId: session.technicianId,
-            entityType: 'repairLine',
-            entityId: edit.lineId,
-            promptVersion: PROMPT_VERSION,
-            metadata: {
-              repairOrderId: id,
-              lineNumber: edit.lineNumber,
+        // Parallel audit writes for story edits (was serial N+1)
+        await Promise.all(
+          warrantyStoryEdits.map((edit) =>
+            appendAuditLogInTransaction(tx, {
+              action: 'story.edit',
+              dealershipId: session.dealershipId,
+              dealerId: dealerFields.dealerId,
+              technicianId: session.technicianId,
+              entityType: 'repairLine',
+              entityId: edit.lineId,
               promptVersion: PROMPT_VERSION,
-              previousStoryHash: edit.previousStoryHash,
-              storyHash: edit.storyHash,
-            },
-            ipAddress: requestIp,
-          });
-        }
+              metadata: {
+                repairOrderId: id,
+                lineNumber: edit.lineNumber,
+                promptVersion: PROMPT_VERSION,
+                previousStoryHash: edit.previousStoryHash,
+                storyHash: edit.storyHash,
+              },
+              ipAddress: requestIp,
+            })
+          )
+        );
 
         if (data.repairLines && Array.isArray(data.repairLines)) {
-          for (const line of data.repairLines) {
-            if (line.id) {
+          // Parallel line upserts — was serial updateMany/create per line (N+1 under load)
+          await Promise.all(
+            data.repairLines.map(async (line) => {
+              if (!line.id) return;
               const existingLine = existing.repairLines.find((l) => l.id === line.id);
               const existingMappedLine = existingMapped.repairLines.find((l) => l.id === line.id);
               // M1: explicit clearCustomerPay or dedicated clear endpoint strips the flag;
@@ -271,8 +276,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
                   },
                 });
               }
-            }
-          }
+            })
+          );
 
           const incomingIds = new Set(data.repairLines.map((l) => l.id).filter(Boolean));
           const dbLines = await tx.repairLine.findMany({
@@ -281,13 +286,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
               repairOrder: { dealershipId: session.dealershipId },
             },
           });
-          for (const dbLine of dbLines) {
-            if (!incomingIds.has(dbLine.id)) {
-              await tx.repairLine.deleteMany({
-                where: scopedRepairLineWhereForSession(dbLine.id, id, session),
-              });
-            }
-          }
+          await Promise.all(
+            dbLines
+              .filter((dbLine) => !incomingIds.has(dbLine.id))
+              .map((dbLine) =>
+                tx.repairLine.deleteMany({
+                  where: scopedRepairLineWhereForSession(dbLine.id, id, session),
+                })
+              )
+          );
         }
 
         if (!advisorNameToCapture) {

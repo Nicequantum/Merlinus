@@ -160,6 +160,28 @@ export const createRepairOrderSchema = z.object({
   repairLines: z.array(repairLineSchema).max(50).optional(),
 });
 
+/**
+ * Lightweight line field patch — used for typing notes/story without full-document PUT.
+ * At least one text field required.
+ */
+export const patchRepairLineSchema = z
+  .object({
+    description: safeTextOptional(500),
+    customerConcern: safeTextOptional(2000),
+    technicianNotes: safeTextOptional(50_000),
+    warrantyStory: safeTextOptional(STORY_TEXT_MAX_CHARS),
+    /** Optimistic concurrency token from the parent RO. */
+    updatedAt: z.string().datetime().optional(),
+  })
+  .refine(
+    (v) =>
+      v.description !== undefined ||
+      v.customerConcern !== undefined ||
+      v.technicianNotes !== undefined ||
+      v.warrantyStory !== undefined,
+    { message: 'At least one line field is required' }
+  );
+
 export const updateRepairOrderSchema = z.object({
   /** Optimistic concurrency — when provided, must match the server row updatedAt. */
   updatedAt: z.string().datetime().optional(),

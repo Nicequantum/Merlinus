@@ -17,7 +17,7 @@ import {
   linkClerkAccountSession,
   loginWithCredentials,
   probeCurrentSession,
-} from '@/lib/loginSession';
+} from '@/lib/authClient';
 import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
 import { needsConsent, needsLegalDisclaimer, needsPasswordChange } from '@/lib/complianceSession';

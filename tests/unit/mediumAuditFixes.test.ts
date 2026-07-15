@@ -133,9 +133,11 @@ describe('Medium audit fixes (M1–M30)', () => {
     assert.ok(readSrc('src/app/api/images/route.ts').includes('withAuth'));
   });
 
-  it('M25: useSession preserves session on non-401', () => {
-    const src = readSrc('src/hooks/useSession.ts');
-    assert.equal(src.includes('setSession(null);\n      } else {\n        setSession(null)'), false);
+  it('M25: session probe does not demote on timeout (loginSession, not dead useSession)', () => {
+    const src = readSrc('src/lib/loginSession.ts');
+    assert.match(src, /probeCurrentSession/);
+    assert.match(src, /status: 'timeout'/);
+    assert.match(src, /status: 'unauthorized'/);
   });
 
   it('M26: batched reencrypt script', () => {

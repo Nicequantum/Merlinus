@@ -1,6 +1,7 @@
 import type {
   AdvisorDetail,
   AdvisorListItem,
+  RepairLine,
   RepairLineSoldMetrics,
   AuditDashboardSummary,
   AuditLogEntry,
@@ -276,6 +277,28 @@ export const api = {
       // Never auto-retry full-document PUT (amplifies 409 / double-write risk).
       maxRetries: 0,
     }),
+
+  /** Lightweight line field patch (notes/story/concern/description) — not a full RO PUT. */
+  patchRepairLine: (
+    roId: string,
+    lineId: string,
+    data: {
+      description?: string;
+      customerConcern?: string;
+      technicianNotes?: string;
+      warrantyStory?: string;
+      updatedAt?: string;
+    }
+  ) =>
+    apiFetch<{ line: RepairLine; updatedAt: string }>(
+      `/api/repair-orders/${roId}/lines/${lineId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+        timeoutMs: RO_CRUD_CLIENT_MS,
+        maxRetries: 0,
+      }
+    ),
 
   deleteRepairOrder: (id: string) =>
     apiFetch<{ ok: boolean }>(`/api/repair-orders/${id}`, {

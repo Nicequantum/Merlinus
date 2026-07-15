@@ -274,9 +274,10 @@ describe('Third-party audit hardening', () => {
     assert.ok(shell.includes('needsLegalDisclaimer'));
     assert.ok(shell.includes('acceptConsentSession'));
     assert.ok(shell.includes('setSession(accepted)'));
-    const useSession = readSrc('src/hooks/useSession.ts');
-    assert.ok(useSession.includes('consentVersion'));
-    assert.ok(useSession.includes('legalDisclaimerVersion'));
+    // Dead useSession hook removed — consent/legal fields live on session + loginSession helpers.
+    const loginSession = readSrc('src/lib/loginSession.ts');
+    assert.ok(loginSession.includes('acceptConsentSession'));
+    assert.ok(loginSession.includes('acceptLegalDisclaimerSession'));
     assert.ok(readSrc('src/lib/complianceSession.ts').includes('CONSENT_VERSION'));
     assert.ok(readSrc('src/lib/sessionRefresh.ts').includes('complianceFieldsDiffer'));
     const scoreRoute = readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/score-story/route.ts');

@@ -517,6 +517,13 @@ export function useRepairOrders({
         updates.technicianNotes === undefined &&
         isStoryCertificationPending(lineId);
 
+      const lightKeys = Object.keys(nextUpdates);
+      const isLight =
+        lightKeys.length > 0 &&
+        lightKeys.every((k) =>
+          ['description', 'customerConcern', 'technicianNotes', 'warrantyStory'].includes(k)
+        );
+
       applyROUpdate(
         (ro) => ({
           ...ro,
@@ -526,9 +533,14 @@ export function useRepairOrders({
         }),
         skipPersist
           ? { skipPersist: true }
-          : options?.immediate
-            ? { immediate: true }
-            : undefined
+          : isLight
+            ? {
+                immediate: options?.immediate,
+                linePatch: { lineId, fields: nextUpdates },
+              }
+            : options?.immediate
+              ? { immediate: true }
+              : undefined
       );
     },
     [applyROUpdate, isStoryCertificationPending]

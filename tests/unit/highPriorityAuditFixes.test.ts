@@ -26,6 +26,7 @@ describe('High priority audit fixes (H1–H15)', () => {
     const persistSrc = readSrc('src/hooks/repairOrders/useROPersistence.ts');
     const storySrc = readSrc('src/hooks/repairOrders/useROStoryWorkflow.ts');
     assert.ok(queueSrc.includes('enqueueRepairOrderSave'));
+    assert.ok(queueSrc.includes('getQueue')); // per-RO queues
     assert.ok(debounceSrc.includes('flush: () => Promise<void>'));
     assert.ok(persistSrc.includes('awaitRepairOrderSaveQueue'));
     assert.ok(storySrc.includes('await deps.flushPendingSave()'));

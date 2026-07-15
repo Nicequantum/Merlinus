@@ -70,6 +70,8 @@ const ALLOWED_BOOL_KEYS = new Set([
   'sessionRevoked',
   'hasMore',
   'hasCursor',
+  'patch',
+  'idempotent',
 ]);
 
 const ALLOWED_NUMBER_KEYS = new Set([
