@@ -19,7 +19,7 @@ import { needsConsent, needsLegalDisclaimer, needsPasswordChange } from '@/lib/c
 import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
-  fetchCurrentSession,
+  probeCurrentSession,
 } from '@/lib/loginSession';
 import { useMerlinLogout } from '@/hooks/useMerlinLogout';
 import { cacheLegalDisclaimerLocally } from '@/lib/legalDisclaimer';
@@ -101,10 +101,15 @@ export function ApexPlatformApp() {
     async (options?: { clearOnMissing?: boolean }): Promise<TechnicianSession | null> => {
       const clearOnMissing = options?.clearOnMissing ?? !holdAuthenticatedRef.current;
       try {
-        const latest = await fetchCurrentSession({ timeoutMs: 8_000 });
-        if (latest) {
-          applySession(latest);
-          return latest;
+        const result = await probeCurrentSession({ timeoutMs: 8_000 });
+        if (result.status === 'ok') {
+          applySession(result.session);
+          return result.session;
+        }
+        if (result.status === 'timeout' || result.status === 'error') {
+          clientLog.warn('auth.session_refresh_soft_fail', { status: result.status });
+          // Never demote on timeout — cold DB must not look like logout.
+          return null;
         }
         if (clearOnMissing && !holdAuthenticatedRef.current) {
           setSession(null);
@@ -128,20 +133,25 @@ export function ApexPlatformApp() {
     let cancelled = false;
 
     // Cold start: leave "checking" as soon as me returns or times out.
-    fetchCurrentSession({ timeoutMs: 8_000 })
-      .then((existing) => {
+    // Timeout retries once — never treat a slow DB as logged-out on first paint.
+    void (async () => {
+      let result = await probeCurrentSession({ timeoutMs: 8_000 });
+      if (cancelled) return;
+      if (result.status === 'ok') {
+        applySession(result.session);
+        return;
+      }
+      if (result.status === 'timeout' || result.status === 'error') {
+        clientLog.warn('auth.session_check_retry', { status: result.status });
+        result = await probeCurrentSession({ timeoutMs: 12_000 });
         if (cancelled) return;
-        if (existing) {
-          applySession(existing);
+        if (result.status === 'ok') {
+          applySession(result.session);
           return;
         }
-        setSessionPhase('anonymous');
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        clientLog.error('auth.session_check_failed', error);
-        setSessionPhase('anonymous');
-      });
+      }
+      setSessionPhase('anonymous');
+    })();
 
     return () => {
       cancelled = true;

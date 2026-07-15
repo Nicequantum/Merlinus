@@ -4,80 +4,34 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import { toast } from 'sonner';
 import { api, ApiError } from '@/lib/api';
 import { debounce } from '@/lib/debounce';
+import { mergePersistedWithClient } from '@/lib/repairOrderMerge';
 import {
   awaitRepairOrderSaveQueue,
   awaitRepairOrderSaveQueueWithTimeout,
   enqueueRepairOrderSave,
+  isRepairOrderSaveQueueBusy,
 } from '@/lib/repairOrderSaveQueue';
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import type { RepairOrder, RepairOrderSummary } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
 
-/** Keep in-memory stories when a stale queued PUT returns before the server caught up. */
+/** @deprecated use mergePersistedWithClient — kept for tests/call sites. */
 export function preserveClientWarrantyStories(
   persisted: RepairOrder,
   client: RepairOrder | null
 ): RepairOrder {
-  if (!client || client.id !== persisted.id) return persisted;
-
-  let changed = false;
-  const repairLines = persisted.repairLines.map((line) => {
-    const clientLine = client.repairLines.find((l) => l.id === line.id);
-    const clientStory = clientLine?.warrantyStory?.trim();
-    if (!clientStory) return line;
-
-    const persistedStory = line.warrantyStory?.trim();
-    if (!persistedStory) {
-      changed = true;
-      return { ...line, warrantyStory: clientLine!.warrantyStory };
-    }
-    return line;
-  });
-
-  return changed ? { ...persisted, repairLines } : persisted;
+  return mergePersistedWithClient(persisted, client);
 }
 
-/**
- * Keep newer in-memory Xentry photos/OCR when a stale PUT response would wipe them.
- * Common after first capture: optimistic append → concurrent save returns older server RO.
- */
+/** @deprecated use mergePersistedWithClient */
 export function preserveClientXentryMedia(
   persisted: RepairOrder,
   client: RepairOrder | null
 ): RepairOrder {
-  if (!client || client.id !== persisted.id) return persisted;
-
-  let changed = false;
-  let next: RepairOrder = persisted;
-
-  const clientRoImages = client.xentryImages || [];
-  const persistedRoImages = persisted.xentryImages || [];
-  if (clientRoImages.length > persistedRoImages.length) {
-    next = {
-      ...next,
-      xentryImages: clientRoImages,
-      xentryOcrTexts: client.xentryOcrTexts ?? next.xentryOcrTexts,
-    };
-    changed = true;
-  }
-
-  const repairLines = next.repairLines.map((line) => {
-    const clientLine = client.repairLines.find((l) => l.id === line.id);
-    if (!clientLine) return line;
-    const clientImgs = clientLine.xentryImages || [];
-    const serverImgs = line.xentryImages || [];
-    if (clientImgs.length <= serverImgs.length) return line;
-    changed = true;
-    return {
-      ...line,
-      xentryImages: clientImgs,
-      xentryOcrTexts: clientLine.xentryOcrTexts ?? line.xentryOcrTexts,
-    };
-  });
-
-  if (!changed) return persisted;
-  return { ...next, repairLines };
+  return mergePersistedWithClient(persisted, client);
 }
+
+const DEFAULT_FLUSH_MAX_WAIT_MS = 5_000;
 
 /** M21: persistence, debounced save, and serialized PUT queue extracted from useRepairOrders. */
 export function useROPersistence(
@@ -86,12 +40,44 @@ export function useROPersistence(
   roRef: MutableRefObject<RepairOrder | null>,
   setCurrentRO: Dispatch<SetStateAction<RepairOrder | null>>
 ) {
+  /** Monotonic local edit counter — companion snapshots skip when dirty. */
+  const clientRevisionRef = useRef(0);
+  const dirtyRef = useRef(false);
+  /** Revision captured when the last successful save finished. */
+  const lastSavedRevisionRef = useRef(0);
+
+  const allROsRef = useRef(allROs);
+  allROsRef.current = allROs;
+
+  const saveROImmediateRef = useRef<(ro: RepairOrder | null, options?: { throwOnError?: boolean }) => Promise<void>>(
+    async () => undefined
+  );
+
+  const applySavedRo = useCallback(
+    (saved: RepairOrder) => {
+      roRef.current = saved;
+      setCurrentRO(saved);
+      setAllROs((prev) => {
+        const summary = repairOrderToSummary(saved);
+        const idx = prev.findIndex((r) => r.id === saved.id);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = summary;
+          return copy;
+        }
+        return [summary, ...prev];
+      });
+    },
+    [roRef, setAllROs, setCurrentRO]
+  );
+
   const persistRO = useCallback(
     async (ro: RepairOrder): Promise<RepairOrder> => {
       return enqueueRepairOrderSave(async () => {
         // Always PUT the latest in-memory RO — stale queue entries must not wipe generated stories.
         const payload = roRef.current?.id === ro.id ? roRef.current : ro;
-        const isNew = !allROs.some((r) => r.id === payload.id) || payload.id.startsWith('ro-');
+        const list = allROsRef.current;
+        const isNew = !list.some((r) => r.id === payload.id) || payload.id.startsWith('ro-');
         if (isNew && payload.id.startsWith('ro-')) {
           const { repairOrder } = await api.createRepairOrder(payload);
           setAllROs((prev) => [
@@ -107,33 +93,67 @@ export function useROPersistence(
         return repairOrder;
       });
     },
-    [allROs, roRef, setAllROs]
+    [roRef, setAllROs]
+  );
+
+  const resolveConflictAndRetry = useCallback(
+    async (local: RepairOrder): Promise<RepairOrder> => {
+      const { repairOrder: remote } = await api.getRepairOrder(local.id);
+      const merged = mergePersistedWithClient(remote, roRef.current ?? local);
+      // Server updatedAt is the concurrency token for the next PUT
+      const withToken = { ...merged, updatedAt: remote.updatedAt };
+      roRef.current = withToken;
+      setCurrentRO(withToken);
+      const { repairOrder } = await api.updateRepairOrder(withToken.id, withToken);
+      toast.message('Merged remote changes and saved');
+      return repairOrder;
+    },
+    [roRef, setCurrentRO]
   );
 
   const saveROImmediate = useCallback(
     async (ro: RepairOrder | null, options?: { throwOnError?: boolean }) => {
       if (ro) {
+        const revisionAtStart = clientRevisionRef.current;
         try {
-          const persisted = await persistRO(ro);
+          let persisted: RepairOrder;
+          try {
+            persisted = await persistRO(ro);
+          } catch (e) {
+            if (e instanceof ApiError && e.status === 409) {
+              try {
+                persisted = await resolveConflictAndRetry(roRef.current?.id === ro.id ? roRef.current! : ro);
+              } catch (retryError) {
+                toast.error(
+                  retryError instanceof Error
+                    ? retryError.message
+                    : 'Could not resolve save conflict — reopen the RO'
+                );
+                if (options?.throwOnError) throw retryError;
+                return;
+              }
+            } else {
+              throw e;
+            }
+          }
+
           let saved = ensureComplaintIds(
             ro.complaintIds && ro.complaintIds.length === persisted.complaints.length
               ? { ...persisted, complaintIds: ro.complaintIds }
               : persisted
           );
-          saved = preserveClientWarrantyStories(saved, roRef.current);
-          saved = preserveClientXentryMedia(saved, roRef.current);
-          roRef.current = saved;
-          setCurrentRO(saved);
-          setAllROs((prev) => {
-            const summary = repairOrderToSummary(saved);
-            const idx = prev.findIndex((r) => r.id === saved.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = summary;
-              return copy;
-            }
-            return [summary, ...prev];
-          });
+          // Always re-merge with whatever the tech edited while the PUT was in flight.
+          saved = mergePersistedWithClient(saved, roRef.current);
+
+          if (clientRevisionRef.current > revisionAtStart) {
+            // More local edits arrived during save — keep dirty so companion won't clobber.
+            dirtyRef.current = true;
+          } else {
+            dirtyRef.current = false;
+            lastSavedRevisionRef.current = clientRevisionRef.current;
+          }
+
+          applySavedRo(saved);
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) {
             toast.error(e.message);
@@ -149,22 +169,30 @@ export function useROPersistence(
       } else {
         roRef.current = null;
         setCurrentRO(null);
+        dirtyRef.current = false;
       }
     },
-    [persistRO, roRef, setAllROs, setCurrentRO]
+    [applySavedRo, persistRO, resolveConflictAndRetry, roRef, setCurrentRO]
   );
+
+  saveROImmediateRef.current = saveROImmediate;
 
   const debouncedPersistRef = useRef(
     debounce((ro: RepairOrder) => {
-      void saveROImmediate(ro);
+      void saveROImmediateRef.current(ro);
     }, 450)
   );
 
   const flushPendingSave = useCallback(async (options?: { maxWaitMs?: number }) => {
     await debouncedPersistRef.current.flush();
-    const maxWaitMs = options?.maxWaitMs;
+    // Default bound so navigation / certify never hang forever on a stuck PUT.
+    const maxWaitMs =
+      options?.maxWaitMs === undefined ? DEFAULT_FLUSH_MAX_WAIT_MS : options.maxWaitMs;
     if (maxWaitMs && maxWaitMs > 0) {
-      await awaitRepairOrderSaveQueueWithTimeout(maxWaitMs);
+      const ok = await awaitRepairOrderSaveQueueWithTimeout(maxWaitMs);
+      if (!ok) {
+        toast.message('Save still in progress — continuing with latest local data');
+      }
       return;
     }
     await awaitRepairOrderSaveQueue();
@@ -182,6 +210,10 @@ export function useROPersistence(
       const base = roRef.current;
       if (!base) return null;
       const updated = ensureComplaintIds(structuredClone(updater(base)));
+      clientRevisionRef.current += 1;
+      if (!options?.skipPersist) {
+        dirtyRef.current = true;
+      }
       roRef.current = updated;
       setCurrentRO(updated);
       setAllROs((prev) =>
@@ -192,17 +224,28 @@ export function useROPersistence(
       }
       if (options?.immediate) {
         debouncedPersistRef.current.cancel();
-        void saveROImmediate(updated);
+        void saveROImmediateRef.current(updated);
       } else {
         scheduleSaveRO(updated);
       }
       return updated;
     },
-    [roRef, saveROImmediate, scheduleSaveRO, setAllROs, setCurrentRO]
+    [roRef, scheduleSaveRO, setAllROs, setCurrentRO]
   );
 
   const cancelPendingSave = useCallback(() => {
     debouncedPersistRef.current.cancel();
+  }, []);
+
+  const isLocallyDirty = useCallback(() => {
+    return dirtyRef.current || isRepairOrderSaveQueueBusy();
+  }, []);
+
+  const getClientRevision = useCallback(() => clientRevisionRef.current, []);
+
+  const markCleanFromServer = useCallback(() => {
+    dirtyRef.current = false;
+    lastSavedRevisionRef.current = clientRevisionRef.current;
   }, []);
 
   return {
@@ -213,5 +256,8 @@ export function useROPersistence(
     scheduleSaveRO,
     applyROUpdate,
     debouncedPersistRef,
+    isLocallyDirty,
+    getClientRevision,
+    markCleanFromServer,
   };
 }

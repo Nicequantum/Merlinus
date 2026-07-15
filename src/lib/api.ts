@@ -263,7 +263,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
       timeoutMs: RO_CRUD_CLIENT_MS,
-      maxRetries: 1,
+      // Never auto-retry full-document PUT (amplifies 409 / double-write risk).
+      maxRetries: 0,
     }),
 
   deleteRepairOrder: (id: string) =>
@@ -394,6 +395,7 @@ export const api = {
       body: JSON.stringify({ imagePathnames: [imagePathname] }),
       timeoutMs: DIAGNOSTIC_EXTRACT_CLIENT_MS,
       signal: options?.signal,
+      maxRetries: 0,
     }),
 
   generateStory: (
@@ -407,6 +409,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
         timeoutMs: STORY_GENERATE_CLIENT_MS,
+        maxRetries: 0,
       }
     ),
 
@@ -434,7 +437,12 @@ export const api = {
   reviewStory: (roId: string, lineId: string, warrantyStory: string) =>
     apiFetch<{ review: StoryReviewResult }>(
       `/api/repair-orders/${roId}/lines/${lineId}/review-story`,
-      { method: 'POST', body: JSON.stringify({ warrantyStory }), timeoutMs: STORY_REVIEW_CLIENT_MS }
+      {
+        method: 'POST',
+        body: JSON.stringify({ warrantyStory }),
+        timeoutMs: STORY_REVIEW_CLIENT_MS,
+        maxRetries: 0,
+      }
     ),
 
   certifyStory: (roId: string, lineId: string, warrantyStory: string, certifiedByName: string) =>
@@ -444,6 +452,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ warrantyStory, certifiedByName }),
         timeoutMs: 30_000,
+        maxRetries: 0,
       }
     ),
 
@@ -451,14 +460,14 @@ export const api = {
   applyCustomerPayTemplate: (roId: string, lineId: string, templateId: string) =>
     apiFetch<{ warrantyStory: string; templateTitle: string; isCustomerPay: true; idempotent?: boolean; cdkSanitized?: boolean }>(
       `/api/repair-orders/${roId}/lines/${lineId}/apply-customer-pay-template`,
-      { method: 'POST', body: JSON.stringify({ templateId }), timeoutMs: 15_000 }
+      { method: 'POST', body: JSON.stringify({ templateId }), timeoutMs: 15_000, maxRetries: 0 }
     ),
 
   /** M1: clear Customer Pay mode so warranty AI generation can resume. */
   clearCustomerPayMode: (roId: string, lineId: string) =>
     apiFetch<{ ok: boolean; isCustomerPay: false }>(
       `/api/repair-orders/${roId}/lines/${lineId}/clear-customer-pay`,
-      { method: 'POST', timeoutMs: 15_000 }
+      { method: 'POST', timeoutMs: 15_000, maxRetries: 0 }
     ),
 
   listTemplates: (category?: TemplateCategory) => {
@@ -474,11 +483,15 @@ export const api = {
   saveTemplateFromStory: (payload: SaveTemplateFromStoryPayload) =>
     apiFetch<{ template: StoryTemplate; knowledgeBase: KnowledgeBaseEntry; tags: string[] }>(
       '/api/templates/save-from-story',
-      { method: 'POST', body: JSON.stringify(payload), timeoutMs: 30_000 }
+      { method: 'POST', body: JSON.stringify(payload), timeoutMs: 30_000, maxRetries: 0 }
     ),
 
   recordTemplateUse: (templateId: string) =>
-    apiFetch<{ ok: boolean }>(`/api/templates/${templateId}/use`, { method: 'POST', timeoutMs: 15_000 }),
+    apiFetch<{ ok: boolean }>(`/api/templates/${templateId}/use`, {
+      method: 'POST',
+      timeoutMs: 15_000,
+      maxRetries: 0,
+    }),
 
   decodeVin: (vin: string) =>
     apiFetch<{
@@ -492,6 +505,8 @@ export const api = {
     }>('/api/vin/decode', {
       method: 'POST',
       body: JSON.stringify({ vin }),
+      timeoutMs: API_DEFAULT_CLIENT_MS,
+      maxRetries: 1,
     }),
 
   listUsers: () => apiFetch<{ users: TechnicianUser[] }>('/api/users'),

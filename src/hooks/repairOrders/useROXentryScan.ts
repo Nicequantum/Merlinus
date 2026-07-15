@@ -439,25 +439,34 @@ export function useROXentryScan({
           clientLog.warn('xentry.ocr_warmup_failed', error);
         });
 
-        for (let pass = 0; pass < indicesToAnalyze.length; pass++) {
-          if (!isActive()) break;
+        // Limited concurrency (2) — serial was multi-minute for multi-photo jobs.
+        const XENTRY_ANALYSIS_CONCURRENCY = 2;
+        let completedPasses = 0;
+        const progressByPass = new Array(indicesToAnalyze.length).fill(0);
 
-          const { img: attachment, index: ocrIndex } = indicesToAnalyze[pass]!;
-          const file = await resolveAnalysisFile(attachment);
-
-          xentryPipeline.setStatusMessage(
-            `Analyzing photo ${pass + 1} of ${indicesToAnalyze.length} (fault codes, measurements, guided tests)…`
-          );
-
-          updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
-            idx === ocrIndex ? '[Analyzing diagnostic photo…]' : text
-          );
+        // Mark all as analyzing up front for UI feedback
+        updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
+          indicesToAnalyze.some((item) => item.index === idx)
+            ? '[Analyzing diagnostic photo…]'
+            : text
+        );
+        {
           const progressRo = roRef.current;
           if (progressRo) {
             syncROView(
               applyXentrySnapshot(progressRo, target, allImages, updatedOcrTexts, updatedExtracted)
             );
           }
+        }
+
+        const analyzeOne = async (pass: number) => {
+          if (!isActive()) return;
+          const { img: attachment, index: ocrIndex } = indicesToAnalyze[pass]!;
+          const file = await resolveAnalysisFile(attachment);
+
+          xentryPipeline.setStatusMessage(
+            `Analyzing photo ${Math.min(completedPasses + 1, indicesToAnalyze.length)} of ${indicesToAnalyze.length} (fault codes, measurements, guided tests)…`
+          );
 
           try {
             const result = await analyzeXentryImage(
@@ -465,34 +474,50 @@ export function useROXentryScan({
               attachment,
               (p) => {
                 if (!isActive()) return;
-                const slice = 12 + ((pass + p / 100) / indicesToAnalyze.length) * 82;
-                xentryPipeline.setProgress(Math.round(slice));
+                progressByPass[pass] = p / 100;
+                const avg =
+                  progressByPass.reduce((a, b) => a + b, 0) / indicesToAnalyze.length;
+                xentryPipeline.setProgress(Math.round(12 + avg * 82));
               },
               { signal: abortController.signal }
             );
-            if (!isActive()) break;
+            if (!isActive()) return;
 
             updatedExtracted = mergeExtracted(updatedExtracted, result.extracted);
             updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
               idx === ocrIndex ? result.text : text
             );
           } catch (err) {
-            if (isRequestAborted(err) || !isActive()) break;
+            if (isRequestAborted(err) || !isActive()) return;
             clientLog.warn('xentry.analysis_failed', err);
             updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
               idx === ocrIndex ? '[Analysis failed for this image]' : text
             );
+          } finally {
+            completedPasses += 1;
+            progressByPass[pass] = 1;
+            if (isActive()) {
+              const midRo = roRef.current;
+              if (midRo) {
+                syncROView(
+                  applyXentrySnapshot(midRo, target, allImages, updatedOcrTexts, updatedExtracted)
+                );
+              }
+            }
           }
+        };
 
-          if (!isActive()) break;
-
-          const midRo = roRef.current;
-          if (midRo) {
-            syncROView(
-              applyXentrySnapshot(midRo, target, allImages, updatedOcrTexts, updatedExtracted)
-            );
+        let nextPass = 0;
+        const workers = Array.from(
+          { length: Math.min(XENTRY_ANALYSIS_CONCURRENCY, indicesToAnalyze.length) },
+          async () => {
+            while (isActive() && nextPass < indicesToAnalyze.length) {
+              const pass = nextPass++;
+              await analyzeOne(pass);
+            }
           }
-        }
+        );
+        await Promise.all(workers);
 
         if (!isActive()) return;
 

@@ -48,6 +48,7 @@ import type { VisionPipelineControls, VisionPipelineId } from '@/hooks/visionPip
 import { isStoryCertificationPendingForLine } from '@/hooks/repairOrders/storyCertificationPending';
 import { resetStoryWorkflowUiState } from '@/hooks/repairOrders/storyWorkflowUiReset';
 import { applyCompanionROPatch } from '@/lib/companionMerge';
+import { mergePersistedWithClient } from '@/lib/repairOrderMerge';
 import {
   companionSnapshotHasChanges,
   diffCompanionRepairOrder,
@@ -132,8 +133,15 @@ export function useRepairOrders({
     todayROs,
   } = useROList(session, { onComplianceRequired });
 
-  const { flushPendingSave, cancelPendingSave, applyROUpdate, saveROImmediate, persistRO } =
-    useROPersistence(allROs, setAllROs, roRef, setCurrentRO);
+  const {
+    flushPendingSave,
+    cancelPendingSave,
+    applyROUpdate,
+    saveROImmediate,
+    persistRO,
+    isLocallyDirty,
+    markCleanFromServer,
+  } = useROPersistence(allROs, setAllROs, roRef, setCurrentRO);
 
   const syncROView = useCallback((ro: RepairOrder) => {
     roRef.current = ro;
@@ -399,10 +407,18 @@ export function useRepairOrders({
     ): Promise<CompanionSnapshotDelta | null> => {
       if (roRef.current?.id !== repairOrderId) return null;
 
+      // Never full-replace while the tech has unsaved local edits or a PUT in flight.
+      if (isLocallyDirty()) {
+        return null;
+      }
+
       const previous = roRef.current;
       try {
         const { repairOrder } = await api.getRepairOrder(repairOrderId);
-        const normalized = ensureComplaintIds(repairOrder);
+        // Merge so any edge-race local fields still win over remote.
+        const normalized = ensureComplaintIds(
+          mergePersistedWithClient(repairOrder, roRef.current)
+        );
         const delta = diffCompanionRepairOrder(previous, normalized);
         if (!companionSnapshotHasChanges(delta)) {
           return null;
@@ -414,6 +430,7 @@ export function useRepairOrders({
         flushSync(() => {
           roRef.current = normalized;
           setCurrentRO(normalized);
+          markCleanFromServer();
           if (preservedLineId && normalized.repairLines.some((line) => line.id === preservedLineId)) {
             setCurrentLineId(preservedLineId);
           }
@@ -435,7 +452,7 @@ export function useRepairOrders({
         return null;
       }
     },
-    [bumpCompanionRevision, setAllROs]
+    [bumpCompanionRevision, isLocallyDirty, markCleanFromServer, setAllROs]
   );
 
   const openRO = useCallback(

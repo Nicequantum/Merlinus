@@ -192,6 +192,15 @@ export function CompanionSyncBridge({ enabled, role, ro, ocr, children }: Compan
       if (cancelled) return;
       const api = getRoApi();
       if (!api.currentRO || api.currentRO.id !== repairOrderId) return;
+      // Skip while story gen / audit / xentry / scan are busy (avoids clobber mid-workflow).
+      if (
+        api.isGeneratingForLine ||
+        api.isScoringForLine ||
+        api.isReviewingForLine ||
+        api.isCertifyingStory
+      ) {
+        return;
+      }
 
       const delta = await api.syncCompanionRepairOrderSnapshot(repairOrderId, {
         lineId: api.currentLineId,

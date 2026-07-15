@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConsentModal } from '@/components/ConsentModal';
 import { ForcedPasswordChangeScreen } from '@/components/ForcedPasswordChangeScreen';
@@ -14,9 +14,9 @@ import {
   acceptConsentSession,
   acceptLegalDisclaimerSession,
   fetchClerkLinkStatus,
-  fetchCurrentSession,
   linkClerkAccountSession,
   loginWithCredentials,
+  probeCurrentSession,
 } from '@/lib/loginSession';
 import { isClerkSignInAvailable, shouldUseClerkOnlyLogin } from '@/lib/authModeClient';
 import { clientLog } from '@/lib/clientLog';
@@ -48,30 +48,45 @@ export function BenzTechApp() {
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>('checking');
   const [consentLoading, setConsentLoading] = useState(false);
   const [legalDisclaimerLoading, setLegalDisclaimerLoading] = useState(false);
+  /** After password login, soft probe failures must not kick the tech to the login screen. */
+  const holdAuthenticatedRef = useRef(false);
+
+  const applySession = useCallback((next: TechnicianSession) => {
+    setSession(next);
+    setSessionPhase('authenticated');
+    holdAuthenticatedRef.current = true;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    fetchCurrentSession()
-      .then((existing) => {
+    // Cold start: one probe; timeout retries once before treating as anonymous.
+    void (async () => {
+      const first = await probeCurrentSession();
+      if (cancelled) return;
+      if (first.status === 'ok') {
+        applySession(first.session);
+        return;
+      }
+      if (first.status === 'timeout' || first.status === 'error') {
+        clientLog.warn('auth.session_check_retry', { status: first.status });
+        const second = await probeCurrentSession({ timeoutMs: 12_000 });
         if (cancelled) return;
-        if (existing) {
-          setSession(existing);
-          setSessionPhase('authenticated');
+        if (second.status === 'ok') {
+          applySession(second.session);
           return;
         }
+        // Still no cookie — show login (true cold / logged out)
         setSessionPhase('anonymous');
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        clientLog.error('auth.session_check_failed', error);
-        setSessionPhase('anonymous');
-      });
+        return;
+      }
+      setSessionPhase('anonymous');
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applySession]);
 
   useEffect(() => {
     if (sessionPhase === 'anonymous' && shouldUseClerkOnlyLogin()) {
@@ -79,22 +94,34 @@ export function BenzTechApp() {
     }
   }, [sessionPhase, router]);
 
-  const refreshSession = useCallback(async () => {
-    try {
-      const latest = await fetchCurrentSession();
-      if (latest) {
-        setSession(latest);
-        setSessionPhase('authenticated');
-        return latest;
+  const refreshSession = useCallback(
+    async (options?: { clearOnMissing?: boolean }) => {
+      const clearOnMissing = options?.clearOnMissing ?? !holdAuthenticatedRef.current;
+      try {
+        const result = await probeCurrentSession();
+        if (result.status === 'ok') {
+          applySession(result.session);
+          return result.session;
+        }
+        if (result.status === 'timeout' || result.status === 'error') {
+          clientLog.warn('auth.session_refresh_soft_fail', { status: result.status });
+          // Keep authenticated shell when we already hold a password session.
+          if (!clearOnMissing || holdAuthenticatedRef.current) {
+            return session;
+          }
+        }
+        if (clearOnMissing && !holdAuthenticatedRef.current) {
+          setSession(null);
+          setSessionPhase('anonymous');
+        }
+        return null;
+      } catch (error: unknown) {
+        clientLog.error('auth.session_refresh_failed', error);
+        return holdAuthenticatedRef.current ? session : null;
       }
-      setSession(null);
-      setSessionPhase('anonymous');
-      return null;
-    } catch (error: unknown) {
-      clientLog.error('auth.session_refresh_failed', error);
-      return null;
-    }
-  }, []);
+    },
+    [applySession, session]
+  );
 
   useEffect(() => {
     if (sessionPhase !== 'authenticated' || searchParams.get('link_account') !== '1') return;
@@ -109,7 +136,7 @@ export function BenzTechApp() {
         if (cancelled) return;
         toast.success('Clerk account linked');
         router.replace('/');
-        await refreshSession();
+        await refreshSession({ clearOnMissing: false });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -121,16 +148,19 @@ export function BenzTechApp() {
     };
   }, [sessionPhase, searchParams, router, refreshSession]);
 
-  const login = useCallback(async (d7Number: string, password: string) => {
-    await loginWithCredentials(d7Number, password);
-    const latest = await refreshSession();
-    if (!latest) {
-      throw new Error('Login succeeded but session could not be verified');
-    }
-    return latest;
-  }, [refreshSession]);
+  const login = useCallback(
+    async (d7Number: string, password: string) => {
+      // Apply login body immediately (Apex pattern) — do not depend on a racing /me cookie read.
+      const fromLogin = await loginWithCredentials(d7Number, password);
+      applySession(fromLogin);
+      void refreshSession({ clearOnMissing: false });
+      return fromLogin;
+    },
+    [applySession, refreshSession]
+  );
 
   const logout = useCallback(async () => {
+    holdAuthenticatedRef.current = false;
     await merlinLogout();
     setSession(null);
     setSessionPhase('anonymous');

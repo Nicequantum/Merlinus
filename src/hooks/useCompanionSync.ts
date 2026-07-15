@@ -23,9 +23,12 @@ const PUBLISH_URL = '/api/companion/publish';
 const POLL_URL = '/api/companion/poll';
 const MAX_ACTIVITY = 40;
 const RECONNECT_MS = 2_000;
-const POLL_MS = 1_000;
+/** Poll only as SSE fallback — when connected, poll infrequently for missed events. */
+const POLL_MS_CONNECTED = 15_000;
+const POLL_MS_DISCONNECTED = 3_000;
 const POLL_LOOKBACK_MS = 120_000;
-const RO_SNAPSHOT_MS = 2_000;
+/** Desktop companion full-RO refresh — was 2s (too aggressive / clobber risk). */
+const RO_SNAPSHOT_MS = 8_000;
 
 interface CompanionHandlers {
   onNavigation: (payload: {
@@ -388,6 +391,7 @@ export function useCompanionSync({
     if (!enabled) return;
 
     let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
     const poll = async () => {
       if (cancelled) return;
@@ -410,13 +414,21 @@ export function useCompanionSync({
       }
     };
 
+    const armTimer = () => {
+      if (timer) clearInterval(timer);
+      // Prefer SSE when connected — poll is a slow safety net only.
+      const ms =
+        connectionState === 'connected' ? POLL_MS_CONNECTED : POLL_MS_DISCONNECTED;
+      timer = setInterval(() => void poll(), ms);
+    };
+
     void poll();
-    const timer = setInterval(() => void poll(), POLL_MS);
+    armTimer();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [enabled]);
+  }, [enabled, connectionState]);
 
   useEffect(() => {
     if (!enabled) {

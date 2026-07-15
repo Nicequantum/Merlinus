@@ -1,14 +1,25 @@
 /**
- * H2: Serializes repair-order PUTs so flush + immediate save cannot race.
+ * Serializes repair-order PUTs so flush + immediate save cannot race.
  */
 
 let saveChain: Promise<unknown> = Promise.resolve();
+let pendingCount = 0;
 
 export function enqueueRepairOrderSave<T>(task: () => Promise<T>): Promise<T> {
-  const next = saveChain.then(task, task);
+  pendingCount += 1;
+  const next = saveChain.then(
+    () => task(),
+    () => task()
+  );
   saveChain = next.then(
-    () => undefined,
-    () => undefined
+    () => {
+      pendingCount = Math.max(0, pendingCount - 1);
+      return undefined;
+    },
+    () => {
+      pendingCount = Math.max(0, pendingCount - 1);
+      return undefined;
+    }
   );
   return next;
 }
@@ -17,7 +28,12 @@ export async function awaitRepairOrderSaveQueue(): Promise<void> {
   await saveChain;
 }
 
-/** Prevent story generation from blocking on a stuck PUT chain. */
+/** True while one or more RO saves are queued or in flight. */
+export function isRepairOrderSaveQueueBusy(): boolean {
+  return pendingCount > 0;
+}
+
+/** Prevent story generation / navigation from blocking on a stuck PUT chain. */
 export async function awaitRepairOrderSaveQueueWithTimeout(timeoutMs: number): Promise<boolean> {
   try {
     await Promise.race([

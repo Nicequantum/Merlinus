@@ -38,12 +38,36 @@ export async function GET(request: Request) {
       const where = buildRepairOrderListWhere(session, params);
 
       const db = getRlsDb();
+      // Slim select for list — never pull full encrypted story/notes/OCR/image payloads.
+      // hasWarrantyStory only needs presence of warrantyStoryEncrypted ciphertext.
       const orders = await db.repairOrder.findMany({
         where,
-        include: {
-          repairLines: true,
+        select: {
+          id: true,
+          roNumberEncrypted: true,
+          year: true,
+          make: true,
+          model: true,
+          complaintsEncrypted: true,
+          createdAt: true,
+          updatedAt: true,
+          technicianId: true,
           technician: { select: { name: true } },
-          serviceAdvisor: { select: { id: true, displayNameEncrypted: true } },
+          repairLines: {
+            select: {
+              id: true,
+              lineNumber: true,
+              isCustomerPay: true,
+              warrantyStoryEncrypted: true,
+              soldLaborHours: true,
+              soldLaborAmount: true,
+              soldPartsAmount: true,
+              customerApproved: true,
+              isAddOn: true,
+              soldMetricsUpdatedAt: true,
+            },
+            orderBy: { lineNumber: 'asc' },
+          },
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: params.limit + 1,
@@ -58,7 +82,10 @@ export async function GET(request: Request) {
       const hasMore = orders.length > params.limit;
       const page = hasMore ? orders.slice(0, params.limit) : orders;
 
-      const repairOrders = page.map((ro) => dbToRepairOrderSummary(ro));
+      // Partial select is enough for summary mapping (only presence of ciphertext for hasWarrantyStory).
+      const repairOrders = page.map((ro) =>
+        dbToRepairOrderSummary(ro as Parameters<typeof dbToRepairOrderSummary>[0])
+      );
 
       // Phase 6.3 — fail-closed bulk PII list audit (no RO numbers in metadata).
       await writeAuditedAccess({
