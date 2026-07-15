@@ -80,15 +80,31 @@ export async function uploadRoScanAttachments(files: File[]): Promise<ImageAttac
   );
 }
 
+/** Client re-fetch of a saved image for OCR — never hang indefinitely on cold proxy. */
+export const FETCH_ATTACHMENT_TIMEOUT_MS = 20_000;
+
 /** Fetch a persisted blob as a File for on-device OCR when the original capture File is gone. */
 export async function fetchImageAttachmentAsFile(attachment: ImageAttachment): Promise<File> {
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Could not load saved image "${attachment.name}"`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_ATTACHMENT_TIMEOUT_MS);
+  try {
+    const response = await fetch(attachment.url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Could not load saved image "${attachment.name}"`);
+    }
+    const blob = await response.blob();
+    const type = blob.type || 'image/jpeg';
+    return new File([blob], attachment.name || 'diagnostic.jpg', { type });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(
+        `Timed out loading saved image "${attachment.name}" — check connection and retry.`
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  const blob = await response.blob();
-  const type = blob.type || 'image/jpeg';
-  return new File([blob], attachment.name || 'diagnostic.jpg', { type });
 }
 
 /** Resolve a pending scan/diagnostic image to a File for OCR — uses cache or blob URL. */

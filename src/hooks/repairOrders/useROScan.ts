@@ -367,7 +367,11 @@ export function useROScan({
           roScanPipeline.setProgress(78);
           roScanPipeline.setStatusMessage('AI vision complete — finalizing repair order…');
           ocrResult = emptyOcrResult();
-          void ocrPromise;
+          // Do not leave Tesseract recognize running on the shared worker — that wedges
+          // the next scan until app restart. Shut down after strong Grok path.
+          void ocrPromise.finally(() => {
+            void import('@/services/ocr').then((m) => m.shutdownOcrWorker()).catch(() => undefined);
+          });
         } else {
           roScanPipeline.setStatusMessage('AI vision inconclusive — finishing on-device OCR…');
           ocrResult = await ocrPromise;

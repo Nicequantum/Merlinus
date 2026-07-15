@@ -32,7 +32,9 @@ import {
 } from '@/lib/networkErrors';
 import { isRequestAborted } from '@/lib/requestAbort';
 import {
+  API_DEFAULT_CLIENT_MS,
   DIAGNOSTIC_EXTRACT_CLIENT_MS,
+  RO_CRUD_CLIENT_MS,
   RO_EXTRACT_CLIENT_MS,
   STORY_GENERATE_CLIENT_MS,
   STORY_REVIEW_CLIENT_MS,
@@ -234,10 +236,13 @@ export const api = {
       hasMore?: boolean;
       scope?: 'today' | 'previous' | 'search';
       todayStart?: string;
-    }>(`/api/repair-orders${suffix}`);
+    }>(`/api/repair-orders${suffix}`, { timeoutMs: API_DEFAULT_CLIENT_MS });
   },
 
-  getRepairOrder: (id: string) => apiFetch<{ repairOrder: RepairOrder }>(`/api/repair-orders/${id}`),
+  getRepairOrder: (id: string) =>
+    apiFetch<{ repairOrder: RepairOrder }>(`/api/repair-orders/${id}`, {
+      timeoutMs: RO_CRUD_CLIENT_MS,
+    }),
 
   createRepairOrder: (
     data: Partial<RepairOrder> & {
@@ -249,16 +254,24 @@ export const api = {
     apiFetch<{ repairOrder: RepairOrder }>('/api/repair-orders', {
       method: 'POST',
       body: JSON.stringify(data),
+      timeoutMs: RO_CRUD_CLIENT_MS,
+      maxRetries: 0,
     }),
 
   updateRepairOrder: (id: string, data: Partial<RepairOrder>) =>
     apiFetch<{ repairOrder: RepairOrder }>(`/api/repair-orders/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+      timeoutMs: RO_CRUD_CLIENT_MS,
+      maxRetries: 1,
     }),
 
   deleteRepairOrder: (id: string) =>
-    apiFetch<{ ok: boolean }>(`/api/repair-orders/${id}`, { method: 'DELETE' }),
+    apiFetch<{ ok: boolean }>(`/api/repair-orders/${id}`, {
+      method: 'DELETE',
+      timeoutMs: API_DEFAULT_CLIENT_MS,
+      maxRetries: 0,
+    }),
 
   uploadImage: (file: File) => {
     const formData = new FormData();
@@ -366,11 +379,13 @@ export const api = {
       };
     }>('/api/advisors/summary'),
 
-  extractRO: (imagePathnames: string[]) =>
+  extractRO: (imagePathnames: string[], options?: { signal?: AbortSignal }) =>
     apiFetch<StructuredROExtraction>('/api/repair-orders/extract', {
       method: 'POST',
       body: JSON.stringify({ imagePathnames }),
       timeoutMs: RO_EXTRACT_CLIENT_MS,
+      signal: options?.signal,
+      maxRetries: 0,
     }),
 
   extractDiagnostics: (imagePathname: string, options?: { signal?: AbortSignal }) =>

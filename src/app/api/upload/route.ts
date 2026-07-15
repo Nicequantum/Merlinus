@@ -15,7 +15,22 @@ const ALLOWED_TYPES = new Set([
   'image/gif',
   'image/heic',
   'image/heif',
+  'image/bmp',
+  'image/tiff',
 ]);
+
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+};
 
 type UploadFile = {
   name: string;
@@ -36,6 +51,23 @@ function isUploadFile(value: unknown): value is UploadFile {
   );
 }
 
+/** Mobile cameras often send empty MIME — infer from filename so first capture works. */
+function resolveUploadContentType(file: UploadFile): string | null {
+  const raw = (file.type || '').toLowerCase().trim();
+  if (raw && ALLOWED_TYPES.has(raw)) return raw === 'image/jpg' ? 'image/jpeg' : raw;
+  const name = (file.name || '').toLowerCase();
+  const dot = name.lastIndexOf('.');
+  if (dot >= 0) {
+    const ext = name.slice(dot + 1);
+    if (EXT_TO_MIME[ext]) return EXT_TO_MIME[ext];
+  }
+  // Last resort for camera captures with no name/type (still binary image payload)
+  if (!raw || raw === 'application/octet-stream') {
+    return 'image/jpeg';
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   return withAuth(
     request,
@@ -47,8 +79,12 @@ export async function POST(request: Request) {
         return apiError(VALIDATION_ERROR, 400);
       }
 
-      if (!ALLOWED_TYPES.has(file.type)) {
-        return apiError(`Unsupported image type "${file.type}". Use JPEG, PNG, WebP, GIF, or HEIC.`, 400);
+      const contentType = resolveUploadContentType(file);
+      if (!contentType) {
+        return apiError(
+          `Unsupported image type "${file.type || 'unknown'}". Use JPEG, PNG, WebP, GIF, or HEIC.`,
+          400
+        );
       }
 
       if (file.size > MAX_FILE_SIZE) {
@@ -58,7 +94,7 @@ export async function POST(request: Request) {
       let uploaded;
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
-        uploaded = await uploadImageToBlob(buffer, file.name, file.type);
+        uploaded = await uploadImageToBlob(buffer, file.name || 'capture.jpg', contentType);
       } catch (error) {
         const mapped = mapBlobRouteError(error, 'upload');
         // Phase 7.2 — no raw fileName (may contain RO/customer hints); report via shared path

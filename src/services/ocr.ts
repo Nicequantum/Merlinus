@@ -29,6 +29,10 @@ let progressListener: ((p: number) => void) | null = null;
 /** Serialize recognize() — the shared Tesseract worker is not safe for parallel jobs. */
 let ocrJobChain: Promise<unknown> = Promise.resolve();
 
+/** Worker create can hang on cold first-load of WASM — hard-fail so callers can recover. */
+const WORKER_INIT_TIMEOUT_MS = 20_000;
+const LOAD_IMAGE_TIMEOUT_MS = 15_000;
+
 function withOcrLock<T>(fn: () => Promise<T>): Promise<T> {
   const job = ocrJobChain.then(() => fn());
   ocrJobChain = job.then(() => undefined).catch(() => undefined);
@@ -37,7 +41,10 @@ function withOcrLock<T>(fn: () => Promise<T>): Promise<T> {
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)),
+      ms
+    );
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -51,38 +58,79 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+/**
+ * Soft timeout alone leaves Tesseract.recognize running on the shared worker and wedges
+ * every later OCR job until full page reload. Hard-reset the worker on timeout/failure.
+ */
+async function hardResetOcrWorker(reason: string): Promise<void> {
+  clientLog.warn('ocr.worker_hard_reset', { reason });
+  progressListener = null;
+  const worker = sharedWorker;
+  sharedWorker = null;
+  workerInitPromise = null;
+  // Drop the chain so a hung recognize cannot block forever behind a dead promise.
+  ocrJobChain = Promise.resolve();
+  if (worker) {
+    try {
+      await worker.terminate();
+    } catch (error) {
+      clientLog.warn('ocr.worker_terminate_failed', error);
+    }
+  }
+}
+
 async function getSharedWorker(): Promise<Tesseract.Worker> {
   if (sharedWorker) return sharedWorker;
   if (!workerInitPromise) {
-    workerInitPromise = Tesseract.createWorker('eng', 1, {
-      ...TESSERACT_OPTS,
-      logger: (message) => {
-        if (message.status === 'recognizing text' && progressListener) {
-          progressListener(Math.round(message.progress * 100));
-        }
-      },
-    }).then((worker) => {
-      sharedWorker = worker;
-      return worker;
-    });
+    workerInitPromise = (async () => {
+      try {
+        const worker = await withTimeout(
+          Tesseract.createWorker('eng', 1, {
+            ...TESSERACT_OPTS,
+            logger: (message) => {
+              if (message.status === 'recognizing text' && progressListener) {
+                progressListener(Math.round(message.progress * 100));
+              }
+            },
+          }),
+          WORKER_INIT_TIMEOUT_MS,
+          'OCR worker init'
+        );
+        sharedWorker = worker;
+        return worker;
+      } catch (error) {
+        workerInitPromise = null;
+        sharedWorker = null;
+        throw error;
+      }
+    })();
   }
   return workerInitPromise;
 }
 
 export async function shutdownOcrWorker(): Promise<void> {
-  if (sharedWorker) {
-    await sharedWorker.terminate();
-  }
-  sharedWorker = null;
-  workerInitPromise = null;
+  await hardResetOcrWorker('shutdown');
 }
 
 function loadImage(file: File | Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image for OCR'));
-    img.src = URL.createObjectURL(file);
+    const objectUrl = URL.createObjectURL(file);
+    const timer = window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load image for OCR (timeout)'));
+    }, LOAD_IMAGE_TIMEOUT_MS);
+    img.onload = () => {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load image for OCR'));
+    };
+    img.src = objectUrl;
   });
 }
 
@@ -346,6 +394,13 @@ export async function runOCR(
       const text = await withTimeout(recognize(), timeoutMs, 'On-device OCR');
       if (localProgress) localProgress(100);
       return text;
+    } catch (error) {
+      // Soft timeout / recognize failure leaves the worker mid-job — reset so the next
+      // scan does not hang until the user restarts the app.
+      await hardResetOcrWorker(
+        error instanceof Error ? error.message : 'recognize_failed'
+      );
+      throw error;
     } finally {
       if (progressListener === localProgress) {
         progressListener = null;

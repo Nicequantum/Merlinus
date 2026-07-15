@@ -37,6 +37,48 @@ export function preserveClientWarrantyStories(
   return changed ? { ...persisted, repairLines } : persisted;
 }
 
+/**
+ * Keep newer in-memory Xentry photos/OCR when a stale PUT response would wipe them.
+ * Common after first capture: optimistic append → concurrent save returns older server RO.
+ */
+export function preserveClientXentryMedia(
+  persisted: RepairOrder,
+  client: RepairOrder | null
+): RepairOrder {
+  if (!client || client.id !== persisted.id) return persisted;
+
+  let changed = false;
+  let next: RepairOrder = persisted;
+
+  const clientRoImages = client.xentryImages || [];
+  const persistedRoImages = persisted.xentryImages || [];
+  if (clientRoImages.length > persistedRoImages.length) {
+    next = {
+      ...next,
+      xentryImages: clientRoImages,
+      xentryOcrTexts: client.xentryOcrTexts ?? next.xentryOcrTexts,
+    };
+    changed = true;
+  }
+
+  const repairLines = next.repairLines.map((line) => {
+    const clientLine = client.repairLines.find((l) => l.id === line.id);
+    if (!clientLine) return line;
+    const clientImgs = clientLine.xentryImages || [];
+    const serverImgs = line.xentryImages || [];
+    if (clientImgs.length <= serverImgs.length) return line;
+    changed = true;
+    return {
+      ...line,
+      xentryImages: clientImgs,
+      xentryOcrTexts: clientLine.xentryOcrTexts ?? line.xentryOcrTexts,
+    };
+  });
+
+  if (!changed) return persisted;
+  return { ...next, repairLines };
+}
+
 /** M21: persistence, debounced save, and serialized PUT queue extracted from useRepairOrders. */
 export function useROPersistence(
   allROs: RepairOrderSummary[],
@@ -79,6 +121,7 @@ export function useROPersistence(
               : persisted
           );
           saved = preserveClientWarrantyStories(saved, roRef.current);
+          saved = preserveClientXentryMedia(saved, roRef.current);
           roRef.current = saved;
           setCurrentRO(saved);
           setAllROs((prev) => {

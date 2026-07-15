@@ -1,4 +1,4 @@
-import { fetchPrivateBlobAsDataUrl } from '@/lib/blob';
+import { fetchPrivateBlobAsVisionDataUrl } from '@/lib/blob';
 import { withAuth } from '@/lib/apiRoute';
 import { extractDiagnosticsFromImage } from '@/lib/grok';
 import { apiError, FORBIDDEN_ERROR, IMAGE_ACCESS_ERROR, reportMappedRouteError } from '@/lib/errors';
@@ -44,7 +44,9 @@ export async function POST(request: Request) {
 
       let imageDataUrl: string;
       try {
-        imageDataUrl = await fetchPrivateBlobAsDataUrl(pathname);
+        // Vision-downscaled payload (same as RO extract) — full-size base64 caused
+        // cold-start timeouts and multi-minute hangs on large Xentry screenshots.
+        imageDataUrl = await fetchPrivateBlobAsVisionDataUrl(pathname);
       } catch (error) {
         const mapped = mapBlobRouteError(error, 'fetch');
         return reportMappedRouteError(mapped, error, 'diagnostics.extract');

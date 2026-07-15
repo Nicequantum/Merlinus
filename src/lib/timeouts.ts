@@ -47,3 +47,9 @@ export const STORY_REVIEW_CLIENT_MS = STORY_REVIEW_ROUTE_MAX_DURATION_S * 1000 +
 
 /** Image upload during RO/diagnostic scans — allow slow dealership uplinks. */
 export const UPLOAD_CLIENT_MS = 60_000;
+
+/** Day-to-day RO CRUD — cold serverless + shop Wi‑Fi; never hang forever. */
+export const RO_CRUD_CLIENT_MS = 45_000;
+
+/** Default for list/me/light GETs. */
+export const API_DEFAULT_CLIENT_MS = 30_000;
