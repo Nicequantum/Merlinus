@@ -36,15 +36,22 @@ export async function analyzeXentryImage(
 
   let extracted: Partial<ExtractedData> = {};
   let text = '';
+  const startedAt = Date.now();
 
   throwIfAborted();
   onProgress(10);
   let extractError: string | null = null;
   try {
+    clientLog.info('xentry.vision_start', { pathname: attachment.pathname });
     const grokData = await api.extractDiagnostics(attachment.pathname, { signal });
     extracted = mergeExtracted(emptyExtractedData(), grokData);
     text = formatExtractionAsOcrText(grokData);
     onProgress(50);
+    clientLog.info('xentry.vision_done', {
+      pathname: attachment.pathname,
+      durationMs: Date.now() - startedAt,
+      hasContent: hasDiagnosticContent(extracted),
+    });
   } catch (err) {
     if (isRequestAborted(err)) throw err;
     extractError = formatScanApiError(err);
@@ -52,6 +59,7 @@ export async function analyzeXentryImage(
       message: extractError,
       status: err instanceof ApiError ? err.status : undefined,
       pathname: attachment.pathname,
+      durationMs: Date.now() - startedAt,
     });
   }
 
@@ -62,6 +70,10 @@ export async function analyzeXentryImage(
 
   throwIfAborted();
   try {
+    clientLog.info('xentry.ocr_fallback_start', {
+      pathname: attachment.pathname,
+      elapsedMs: Date.now() - startedAt,
+    });
     const ocrText = await runDiagnosticOCR(
       file,
       (p) => onProgress(text ? 50 + Math.round(p * 0.45) : Math.round(p * 0.9)),
@@ -72,11 +84,17 @@ export async function analyzeXentryImage(
       extracted = mergeExtracted(mergeExtracted(emptyExtractedData(), extracted), ocrExtracted);
       text = text ? `${text}\n\n[OCR SUPPLEMENT]\n${ocrText}` : ocrText;
     }
+    clientLog.info('xentry.ocr_fallback_done', {
+      pathname: attachment.pathname,
+      durationMs: Date.now() - startedAt,
+      textLen: text.length,
+    });
   } catch (err) {
     if (isRequestAborted(err)) throw err;
     clientLog.error('xentry.ocr_failed', {
       pathname: attachment.pathname,
       error: err instanceof Error ? err.message : 'unknown',
+      durationMs: Date.now() - startedAt,
     });
   }
 

@@ -2,8 +2,17 @@ import { getRlsDb, withRlsBypass } from '@/lib/apex/rlsContext';
 import { decryptSensitiveText } from '@/lib/encryption';
 import { apiError, NOT_FOUND_ERROR } from '@/lib/errors';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { hashShareToken } from '@/lib/videoInspection/shareTokens';
+import {
+  hashShareToken,
+  isValidRawShareToken,
+  verifyPasscodeHash,
+} from '@/lib/videoInspection/shareTokens';
 
+/**
+ * Public customer video metadata endpoint.
+ * Intentionally NOT wrapped with withAuth — access is share-token gated
+ * (opaque token → SHA-256 lookup, expiry, optional passcode, revoke).
+ */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -13,9 +22,9 @@ export async function GET(
 
   const { token } = await params;
   const raw = token?.trim();
-  if (!raw || raw.length < 16) return apiError(NOT_FOUND_ERROR, 404);
+  if (!isValidRawShareToken(raw)) return apiError(NOT_FOUND_ERROR, 404);
 
-  const tokenHash = hashShareToken(raw);
+  const tokenHash = hashShareToken(raw!);
   const share = await withRlsBypass(async () =>
     getRlsDb().videoInspectionShare.findUnique({
       where: { tokenHash },
@@ -35,12 +44,10 @@ export async function GET(
   const inspection = share.videoInspection;
   if (!inspection?.videoPathname) return apiError(NOT_FOUND_ERROR, 404);
 
-  // Optional passcode: if set, require header x-video-passcode matching hash
+  // Optional passcode: require header x-video-passcode matching stored hash
   if (share.passcodeHash) {
     const provided = request.headers.get('x-video-passcode')?.trim() || '';
-    const { createHash } = await import('crypto');
-    const providedHash = createHash('sha256').update(provided).digest('hex');
-    if (!provided || providedHash !== share.passcodeHash) {
+    if (!verifyPasscodeHash(provided, share.passcodeHash)) {
       return Response.json(
         { requiresPasscode: true, dealershipName: inspection.dealership?.name ?? null },
         { status: 401 }
@@ -60,7 +67,7 @@ export async function GET(
     vehicleLabel: inspection.vehicleLabel,
     dealershipName: inspection.dealership?.name ?? null,
     report: decryptSensitiveText(inspection.reportEncrypted || ''),
-    mediaUrl: `/api/public/video/${encodeURIComponent(raw)}/media`,
+    mediaUrl: `/api/public/video/${encodeURIComponent(raw!)}/media`,
     createdAt: inspection.createdAt.toISOString(),
   });
 }

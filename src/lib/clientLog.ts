@@ -1,6 +1,6 @@
 /** Client-side structured diagnostics — mirrors server logger JSON format. */
 
-type LogLevel = 'warn' | 'error';
+type LogLevel = 'info' | 'warn' | 'error';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -15,8 +15,21 @@ function normalizeContext(context?: unknown): Record<string, unknown> | undefine
   return { detail: context };
 }
 
+/** Scan/OCR breadcrumbs stay visible in production so cold-start hangs are diagnosable. */
+function isScanPipelineBreadcrumb(message: string): boolean {
+  return /^(ocr\.|ro\.scan\.|xentry\.|image\.compression)/.test(message);
+}
+
 function write(level: LogLevel, message: string, context?: unknown): void {
-  if (level === 'warn' && !isDev) return;
+  if (level === 'error') {
+    // always
+  } else if (isDev) {
+    // always in development
+  } else if (isScanPipelineBreadcrumb(message)) {
+    // production: only scan/OCR stage logs (first-scan hang diagnosis)
+  } else {
+    return;
+  }
 
   const normalized = normalizeContext(context);
   const entry = {
@@ -32,10 +45,15 @@ function write(level: LogLevel, message: string, context?: unknown): void {
     console.error(line);
     return;
   }
+  if (level === 'info') {
+    console.info(line);
+    return;
+  }
   console.warn(line);
 }
 
 export const clientLog = {
+  info: (message: string, context?: unknown) => write('info', message, context),
   warn: (message: string, context?: unknown) => write('warn', message, context),
   error: (message: string, context?: unknown) => write('error', message, context),
 };

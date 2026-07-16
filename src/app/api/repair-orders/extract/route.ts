@@ -59,15 +59,29 @@ export async function POST(request: Request) {
 
       let imageDataUrls: string[];
       try {
+        const blobStarted = Date.now();
         imageDataUrls = await Promise.all(
           pathnames.map((pathname) => fetchPrivateBlobAsVisionDataUrl(pathname))
         );
+        logger.info('ro.extract.blob_ready', {
+          technicianId: session.technicianId,
+          pageCount: pathnames.length,
+          blobMs: Date.now() - blobStarted,
+          elapsedMs: Date.now() - extractStartedAt,
+        });
       } catch (error) {
+        logger.warn('ro.extract.blob_failed', {
+          technicianId: session.technicianId,
+          pageCount: pathnames.length,
+          elapsedMs: Date.now() - extractStartedAt,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         const mapped = mapBlobRouteError(error, 'fetch');
         return reportMappedRouteError(mapped, error, 'ro.extract');
       }
 
       try {
+        const grokStarted = Date.now();
         const extracted = await extractROFromImages(imageDataUrls);
         const durationMs = Date.now() - extractStartedAt;
 
@@ -85,10 +99,17 @@ export async function POST(request: Request) {
           technicianId: session.technicianId,
           pageCount: pathnames.length,
           durationMs,
+          grokMs: Date.now() - grokStarted,
           complaintCount: extracted.complaints?.length ?? 0,
         });
         return extracted;
       } catch (error) {
+        logger.warn('ro.extract.grok_failed', {
+          technicianId: session.technicianId,
+          pageCount: pathnames.length,
+          elapsedMs: Date.now() - extractStartedAt,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         const mapped = mapGrokRouteError(error, 'Repair order scan');
         return reportMappedRouteError(mapped, error, 'ro.extract');
       }

@@ -8,10 +8,10 @@ import { findInspectionForSession } from '@/lib/videoInspection/access';
 import {
   buildCustomerViewerUrl,
   generateShareToken,
+  hashPasscode,
   hashShareToken,
 } from '@/lib/videoInspection/shareTokens';
 import { AUTH_JSON_BODY_LIMIT_BYTES, parseRequestBody, parseRouteParams } from '@/lib/validation';
-import { createHash } from 'crypto';
 import { z } from 'zod';
 
 const paramsSchema = z.object({ id: z.string().trim().min(1).max(64) });
@@ -41,9 +41,7 @@ export async function POST(
 
       const token = generateShareToken();
       const tokenHash = hashShareToken(token);
-      const passcodeHash = parsed.data.passcode
-        ? createHash('sha256').update(parsed.data.passcode).digest('hex')
-        : null;
+      const passcodeHash = parsed.data.passcode ? hashPasscode(parsed.data.passcode) : null;
       const expiresAt = parsed.data.expiresInHours
         ? new Date(Date.now() + parsed.data.expiresInHours * 3600_000)
         : new Date(Date.now() + 14 * 24 * 3600_000);

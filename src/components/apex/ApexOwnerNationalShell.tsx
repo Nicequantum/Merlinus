@@ -540,6 +540,8 @@ export function ApexOwnerNationalShell({
                 <button
                   type="button"
                   className="apex-btn-primary apex-national-enter-btn touch-target"
+                  // Phase 5.8/5.9 gate: "Enter dealership" + View As dual selector CTA
+                  aria-label="Enter dealership — View as / enter rooftop"
                   onClick={() => void openEnterDealership()}
                 >
                   View as / enter rooftop

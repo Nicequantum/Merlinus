@@ -46,13 +46,27 @@ export async function POST(request: Request) {
       try {
         // Vision-downscaled payload (same as RO extract) — full-size base64 caused
         // cold-start timeouts and multi-minute hangs on large Xentry screenshots.
+        const blobStarted = Date.now();
         imageDataUrl = await fetchPrivateBlobAsVisionDataUrl(pathname);
+        logger.info('diagnostics.extract.blob_ready', {
+          technicianId: session.technicianId,
+          pathname,
+          blobMs: Date.now() - blobStarted,
+          elapsedMs: Date.now() - extractStartedAt,
+        });
       } catch (error) {
+        logger.warn('diagnostics.extract.blob_failed', {
+          technicianId: session.technicianId,
+          pathname,
+          elapsedMs: Date.now() - extractStartedAt,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         const mapped = mapBlobRouteError(error, 'fetch');
         return reportMappedRouteError(mapped, error, 'diagnostics.extract');
       }
 
       try {
+        const grokStarted = Date.now();
         const extracted = await extractDiagnosticsFromImage(imageDataUrl);
         const durationMs = Date.now() - extractStartedAt;
 
@@ -71,9 +85,16 @@ export async function POST(request: Request) {
           codeCount: extracted.codes?.length ?? 0,
           faultCodeCount: extracted.faultCodes?.length ?? 0,
           durationMs,
+          grokMs: Date.now() - grokStarted,
         });
         return extracted;
       } catch (error) {
+        logger.warn('diagnostics.extract.grok_failed', {
+          technicianId: session.technicianId,
+          pathname,
+          elapsedMs: Date.now() - extractStartedAt,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         const mapped = mapGrokRouteError(error, 'Diagnostic scan');
         return reportMappedRouteError(mapped, error, 'diagnostics.extract');
       }

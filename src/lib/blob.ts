@@ -1,9 +1,32 @@
 import { get, put } from '@vercel/blob';
 import { bufferToVisionDataUrl } from './visionImagePrep';
+import { logger } from './logger';
 import { networkRetryDelayMs, sleep } from './networkErrors';
 import { buildImageProxyUrl, isAllowedImagePathname } from './imageUrls';
 
 const BLOB_PUT_MAX_ATTEMPTS = 3;
+/** Cold isolate + large private blob must not eat the entire Grok extract budget. */
+const BLOB_GET_TIMEOUT_MS = 20_000;
+const VISION_PREP_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)),
+      ms
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 function getBlobToken(): string {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -71,13 +94,38 @@ export async function fetchPrivateBlobAsVisionDataUrl(pathname: string): Promise
     throw new Error('Invalid image pathname');
   }
 
-  const result = await get(pathname, { access: 'private', token: getBlobToken() });
+  const started = Date.now();
+  const result = await withTimeout(
+    get(pathname, { access: 'private', token: getBlobToken() }),
+    BLOB_GET_TIMEOUT_MS,
+    'blob.get vision'
+  );
   if (!result) {
     throw new Error('Image not found in blob storage');
   }
-  const bytes = Buffer.from(await new Response(result.stream).arrayBuffer());
+  const getMs = Date.now() - started;
+  const bytes = Buffer.from(
+    await withTimeout(
+      new Response(result.stream).arrayBuffer(),
+      BLOB_GET_TIMEOUT_MS,
+      'blob.stream vision'
+    )
+  );
+  const streamMs = Date.now() - started;
   const contentType = result.blob.contentType || 'image/jpeg';
-  return bufferToVisionDataUrl(bytes, contentType);
+  const dataUrl = await withTimeout(
+    bufferToVisionDataUrl(bytes, contentType),
+    VISION_PREP_TIMEOUT_MS,
+    'vision.prep sharp'
+  );
+  logger.info('blob.vision_fetch_ok', {
+    pathname,
+    bytes: bytes.length,
+    getMs,
+    streamMs,
+    totalMs: Date.now() - started,
+  });
+  return dataUrl;
 }
 
 export async function streamPrivateBlob(pathname: string) {

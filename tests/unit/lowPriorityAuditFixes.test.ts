@@ -62,6 +62,17 @@ describe('Low priority audit fixes (L1–L5)', () => {
     assert.ok(script.includes('CODE ISSUES'));
     assert.ok(script.includes('CONFIG / ENV ISSUES'));
     assert.ok(script.includes('inferCheckKind'));
+    // Exit blocks only critical code failures (env gaps are non-blocking for ready-to-deploy).
+    assert.ok(script.includes("r.kind === 'code'"));
+    assert.ok(script.includes('criticalCodeFails'));
+  });
+
+  it('pre-deploy treats Sentry DSN and non-prod DB as warnings not blockers', () => {
+    const script = readSrc('scripts/validate-pre-deploy.mjs');
+    assert.ok(script.includes('function warn('));
+    assert.ok(script.includes('isStrictProductionDeployGate'));
+    assert.match(script, /NEXT_PUBLIC_SENTRY_DSN[\s\S]*warn\(/);
+    assert.ok(script.includes('non-production — does not block ready-to-deploy'));
   });
 
   it('pre-rollout validation accepts Svix-verified Clerk webhooks without withAuth', () => {
@@ -70,6 +81,13 @@ describe('Low priority audit fixes (L1–L5)', () => {
     assert.ok(script.includes('verifyWebhook('));
     assert.ok(script.includes('@clerk/nextjs/webhooks'));
     assert.ok(webhook.includes('verifyWebhook('));
+  });
+
+  it('pre-rollout validation accepts hardened public video share routes without withAuth', () => {
+    const script = readSrc('scripts/pre-rollout-validation.ts');
+    assert.ok(script.includes('hasPublicVideoShareHardening'));
+    assert.ok(script.includes('isValidRawShareToken'));
+    assert.ok(script.includes('verifyPasscodeHash'));
   });
 
   it('obsolete IMPROVED_CODE_STRUCTURE.md marked deprecated', () => {

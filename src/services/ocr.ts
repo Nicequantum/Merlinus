@@ -31,7 +31,10 @@ let ocrJobChain: Promise<unknown> = Promise.resolve();
 
 /** Worker create can hang on cold first-load of WASM — hard-fail so callers can recover. */
 const WORKER_INIT_TIMEOUT_MS = 20_000;
+/** terminate() can hang forever after a soft-timed-out recognize — never await unboundedly. */
+const WORKER_TERMINATE_TIMEOUT_MS = 2_000;
 const LOAD_IMAGE_TIMEOUT_MS = 15_000;
+const CANVAS_TO_BLOB_TIMEOUT_MS = 15_000;
 
 function withOcrLock<T>(fn: () => Promise<T>): Promise<T> {
   const job = ocrJobChain.then(() => fn());
@@ -61,6 +64,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 /**
  * Soft timeout alone leaves Tesseract.recognize running on the shared worker and wedges
  * every later OCR job until full page reload. Hard-reset the worker on timeout/failure.
+ *
+ * Critical: never `await worker.terminate()` without a ceiling — hung terminate was the
+ * cold-start / first-scan "loading forever" wedge after a soft OCR timeout.
  */
 async function hardResetOcrWorker(reason: string): Promise<void> {
   clientLog.warn('ocr.worker_hard_reset', { reason });
@@ -70,12 +76,24 @@ async function hardResetOcrWorker(reason: string): Promise<void> {
   workerInitPromise = null;
   // Drop the chain so a hung recognize cannot block forever behind a dead promise.
   ocrJobChain = Promise.resolve();
-  if (worker) {
-    try {
-      await worker.terminate();
-    } catch (error) {
-      clientLog.warn('ocr.worker_terminate_failed', error);
-    }
+  if (!worker) return;
+
+  try {
+    await withTimeout(
+      Promise.resolve().then(() => worker.terminate()),
+      WORKER_TERMINATE_TIMEOUT_MS,
+      'OCR worker terminate'
+    );
+    clientLog.info('ocr.worker_terminated', { reason });
+  } catch (error) {
+    clientLog.warn('ocr.worker_terminate_timed_out_or_failed', {
+      reason,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    // Detach — do not block the scan pipeline if terminate never settles.
+    void Promise.resolve()
+      .then(() => worker.terminate())
+      .catch(() => undefined);
   }
 }
 
@@ -83,6 +101,8 @@ async function getSharedWorker(): Promise<Tesseract.Worker> {
   if (sharedWorker) return sharedWorker;
   if (!workerInitPromise) {
     workerInitPromise = (async () => {
+      const started = Date.now();
+      clientLog.info('ocr.worker_init_start');
       try {
         const worker = await withTimeout(
           Tesseract.createWorker('eng', 1, {
@@ -97,10 +117,15 @@ async function getSharedWorker(): Promise<Tesseract.Worker> {
           'OCR worker init'
         );
         sharedWorker = worker;
+        clientLog.info('ocr.worker_init_ready', { durationMs: Date.now() - started });
         return worker;
       } catch (error) {
         workerInitPromise = null;
         sharedWorker = null;
+        clientLog.error('ocr.worker_init_failed', {
+          durationMs: Date.now() - started,
+          error: error instanceof Error ? error.message : 'unknown',
+        });
         throw error;
       }
     })();
@@ -110,6 +135,11 @@ async function getSharedWorker(): Promise<Tesseract.Worker> {
 
 export async function shutdownOcrWorker(): Promise<void> {
   await hardResetOcrWorker('shutdown');
+}
+
+/** True when a shared Tesseract worker is already created (warm path). */
+export function isOcrWorkerReady(): boolean {
+  return sharedWorker !== null;
 }
 
 function loadImage(file: File | Blob): Promise<HTMLImageElement> {
@@ -139,13 +169,17 @@ function canvasToBlob(
   mime: 'image/png' | 'image/jpeg' = 'image/png',
   quality = 0.92
 ): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode preprocessed image'))),
-      mime,
-      quality
-    );
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode preprocessed image'))),
+        mime,
+        quality
+      );
+    }),
+    CANVAS_TO_BLOB_TIMEOUT_MS,
+    'OCR canvas encode'
+  );
 }
 
 /** Faded / yellow paper / shadow-heavy scans — stronger contrast, lower binarization threshold. */
@@ -359,7 +393,13 @@ export async function preprocessImageForOCR(
 type OcrPageSegMode = '4' | '6' | '11';
 
 export async function warmupOcrWorker(): Promise<void> {
+  const alreadyReady = sharedWorker !== null;
+  const started = Date.now();
   await getSharedWorker();
+  clientLog.info('ocr.warmup_complete', {
+    durationMs: Date.now() - started,
+    alreadyReady,
+  });
 }
 
 export async function runOCR(
@@ -372,8 +412,14 @@ export async function runOCR(
   return withOcrLock(async () => {
     const localProgress = onProgress ?? null;
     progressListener = localProgress;
+    const stageStarted = Date.now();
     const recognize = async () => {
       const worker = await getSharedWorker();
+      clientLog.info('ocr.recognize_start', {
+        pageSegMode,
+        warm: true,
+        initToRecognizeMs: Date.now() - stageStarted,
+      });
       const ocrOptions: Record<string, string> = {
         tessedit_pageseg_mode: pageSegMode,
         tessedit_oem: '3',
@@ -393,8 +439,13 @@ export async function runOCR(
     try {
       const text = await withTimeout(recognize(), timeoutMs, 'On-device OCR');
       if (localProgress) localProgress(100);
+      clientLog.info('ocr.recognize_ok', { durationMs: Date.now() - stageStarted });
       return text;
     } catch (error) {
+      clientLog.warn('ocr.recognize_failed', {
+        durationMs: Date.now() - stageStarted,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
       // Soft timeout / recognize failure leaves the worker mid-job — reset so the next
       // scan does not hang until the user restarts the app.
       await hardResetOcrWorker(

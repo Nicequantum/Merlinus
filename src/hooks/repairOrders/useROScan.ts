@@ -278,6 +278,9 @@ export function useROScan({
         roScanPipeline.start('Preparing documents…');
         setPendingROImages(images);
         roScanPipeline.setProgress(8);
+        const scanStartedAt = Date.now();
+        // Warm Tesseract WASM while upload/Grok run — do not start recognize() yet.
+        // Racing cold OCR with Grok caused first-scan hangs (soft timeout + hung terminate).
         void warmupOcrWorker().catch((error) => {
           clientLog.warn('OCR worker warmup failed', error);
         });
@@ -288,9 +291,14 @@ export function useROScan({
           roScanPipeline.setStatusMessage(
             `Uploading ${needsUpload.length} page${needsUpload.length === 1 ? '' : 's'}…`
           );
+          clientLog.info('ro.scan.upload_start', { pageCount: needsUpload.length });
           const uploaded = await uploadRoScanAttachments(
             needsUpload.map((img) => img.file!).filter(Boolean)
           );
+          clientLog.info('ro.scan.upload_done', {
+            pageCount: uploaded.length,
+            durationMs: Date.now() - scanStartedAt,
+          });
           let uploadIndex = 0;
           for (const img of images) {
             if (img.attachment?.pathname) {
@@ -361,43 +369,47 @@ export function useROScan({
         };
 
         roScanPipeline.setProgress(35);
-        roScanPipeline.setStatusMessage('AI vision extraction started (on-device OCR runs as fallback)…');
-        const ocrPromise = runClientOcr().catch((error) => {
-          clientLog.error('ro.scan.ocr_failed', error);
-          return emptyOcrResult();
+        roScanPipeline.setStatusMessage('AI vision extraction in progress…');
+        clientLog.info('ro.scan.vision_start', {
+          pageCount: imagePathnames.length,
+          elapsedMs: Date.now() - scanStartedAt,
         });
 
         let extractError: string | null = null;
-        const grokPromise = api.extractRO(imagePathnames).catch((error) => {
+        // Grok-first: only run on-device OCR when vision is weak/failed.
+        // Avoids cold WASM recognize racing the extract route on first scan after deploy.
+        const grokExtracted = await api.extractRO(imagePathnames).catch((error) => {
           extractError = formatScanApiError(error);
           clientLog.error('ro.scan.extract_api_failed', {
             message: extractError,
             status: error instanceof ApiError ? error.status : undefined,
             pageCount: imagePathnames.length,
             pathnames: imagePathnames,
+            elapsedMs: Date.now() - scanStartedAt,
           });
           return null;
         });
-
-        roScanPipeline.setProgress(42);
-        roScanPipeline.setStatusMessage('AI vision extraction in progress…');
-
-        const grokExtracted = await grokPromise;
         if (!isActiveSession()) return;
+
+        clientLog.info('ro.scan.vision_done', {
+          strong: isStrongGrokExtraction(grokExtracted),
+          elapsedMs: Date.now() - scanStartedAt,
+          hasError: Boolean(extractError),
+        });
 
         let ocrResult: ClientOcrResult;
         if (isStrongGrokExtraction(grokExtracted)) {
           roScanPipeline.setProgress(78);
           roScanPipeline.setStatusMessage('AI vision complete — finalizing repair order…');
           ocrResult = emptyOcrResult();
-          // Do not leave Tesseract recognize running on the shared worker — that wedges
-          // the next scan until app restart. Shut down after strong Grok path.
-          void ocrPromise.finally(() => {
-            void import('@/services/ocr').then((m) => m.shutdownOcrWorker()).catch(() => undefined);
-          });
         } else {
-          roScanPipeline.setStatusMessage('AI vision inconclusive — finishing on-device OCR…');
-          ocrResult = await ocrPromise;
+          roScanPipeline.setStatusMessage('AI vision inconclusive — running on-device OCR fallback…');
+          clientLog.info('ro.scan.ocr_fallback_start', { elapsedMs: Date.now() - scanStartedAt });
+          ocrResult = await runClientOcr().catch((error) => {
+            clientLog.error('ro.scan.ocr_failed', error);
+            return emptyOcrResult();
+          });
+          clientLog.info('ro.scan.ocr_fallback_done', { elapsedMs: Date.now() - scanStartedAt });
         }
         if (!isActiveSession()) return;
 

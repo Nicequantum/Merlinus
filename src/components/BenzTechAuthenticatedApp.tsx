@@ -133,6 +133,35 @@ export function BenzTechAuthenticatedApp({
     setAppLanguage(session.preferredLanguage);
   }, [session.preferredLanguage]);
 
+  // Cold-start: load Tesseract WASM after auth shell mounts so the first RO/Xentry
+  // scan does not pay worker-init cost mid-pipeline (first-scan hang class).
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      void import('@/services/ocr')
+        .then((m) => m.warmupOcrWorker())
+        .then(() => {
+          if (!cancelled) clientLog.info('ocr.shell_warmup_ready');
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) clientLog.warn('ocr.shell_warmup_failed', error);
+        });
+    };
+    if (typeof requestIdleCallback !== 'undefined') {
+      const id = requestIdleCallback(warm, { timeout: 2_500 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(id);
+      };
+    }
+    const timer = window.setTimeout(warm, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   useEffect(() => {
     if (isServiceAdvisor || ro.loading || ro.listError) return;
     void recordTechnicianAppStart({

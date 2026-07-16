@@ -3,6 +3,13 @@
  * Final pre-production deploy gate — read-only checks except a light DB ping.
  * Safe to run before every production deploy; does not mutate application data.
  *
+ * Distinguishes:
+ *   - CODE defects (block exit 1) — missing source guards, forbidden public keys, etc.
+ *   - ENV / deployment gaps (warn, non-blocking in local/CI) — Sentry DSN, DB reachability
+ *
+ * Strict production blocking for env connectivity:
+ *   VERCEL_ENV=production or MERLIN_DEPLOY_GATE=production
+ *
  * Usage:
  *   npm run validate:pre-deploy
  *
@@ -15,6 +22,10 @@ import { applyApexDatabaseEnv } from './resolve-apex-database-env.mjs';
 
 const PREFIX = '[merlin:pre-deploy]';
 const ROOT = process.cwd();
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const GREEN = '\x1b[32m';
+const RESET = '\x1b[0m';
 
 const AI_ROUTE_FILES = [
   'src/app/api/diagnostics/extract/route.ts',
@@ -56,7 +67,21 @@ const PII_WRITE_GUARDS = [
   },
 ];
 
+/** Code defects that must block ready-to-deploy. */
 const failures = [];
+/** Env/deployment gaps — non-blocking outside strict production deploy gate. */
+const warnings = [];
+
+/**
+ * True only for real production deploy contexts.
+ * Local `npm run ready-to-deploy` and CI without VERCEL_ENV=production stay non-strict
+ * so missing optional monitoring / unreachable remote DB do not fail the gate.
+ */
+function isStrictProductionDeployGate() {
+  const vercel = process.env.VERCEL_ENV?.trim().toLowerCase();
+  const gate = process.env.MERLIN_DEPLOY_GATE?.trim().toLowerCase();
+  return vercel === 'production' || gate === 'production';
+}
 
 function loadDotEnvFile(filename) {
   const path = resolve(ROOT, filename);
@@ -78,11 +103,16 @@ function loadDotEnvFile(filename) {
 
 function fail(message) {
   failures.push(message);
-  console.error(`${PREFIX} FAIL: ${message}`);
+  console.error(`${PREFIX} ${RED}FAIL${RESET}: ${message}`);
+}
+
+function warn(message) {
+  warnings.push(message);
+  console.warn(`${PREFIX} ${YELLOW}WARN${RESET}: ${message}`);
 }
 
 function pass(message) {
-  console.log(`${PREFIX} OK: ${message}`);
+  console.log(`${PREFIX} ${GREEN}OK${RESET}: ${message}`);
 }
 
 function readSrc(relativePath) {
@@ -153,7 +183,10 @@ function checkScanningEnvironment() {
 function checkSentryDsn() {
   const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN?.trim();
   if (!dsn) {
-    fail('NEXT_PUBLIC_SENTRY_DSN is not set — production error monitoring will be disabled');
+    // Optional in local/CI — production should still set it on Vercel, but do not block code gates.
+    warn(
+      'NEXT_PUBLIC_SENTRY_DSN is not set — production error monitoring will be disabled until configured on Vercel'
+    );
     return;
   }
   pass('NEXT_PUBLIC_SENTRY_DSN is configured');
@@ -250,14 +283,24 @@ function checkOptimisticConcurrencyGuard() {
 }
 
 async function checkDatabaseConnection() {
+  const strict = isStrictProductionDeployGate();
+  const reportEnvIssue = (message) => {
+    if (strict) {
+      fail(message);
+    } else {
+      warn(`${message} (non-production — does not block ready-to-deploy)`);
+    }
+  };
+
   if (!process.env.DATABASE_URL?.trim()) {
-    fail('DATABASE_URL is not set — cannot run database connectivity check');
+    reportEnvIssue('DATABASE_URL is not set — cannot run database connectivity check');
     return;
   }
 
   try {
     execSync('npx prisma generate', { stdio: 'pipe', cwd: ROOT });
   } catch (error) {
+    // Prisma generate is a toolchain/code gate — always block.
     fail(`Prisma client generation failed: ${error instanceof Error ? error.message : 'unknown'}`);
     return;
   }
@@ -269,7 +312,7 @@ async function checkDatabaseConnection() {
     await prisma.$queryRaw`SELECT 1`;
     pass('Database connection (Prisma $queryRaw SELECT 1)');
   } catch (error) {
-    fail(
+    reportEnvIssue(
       `Database connection failed: ${error instanceof Error ? error.message : 'unknown'} — verify DATABASE_URL and network access`
     );
   } finally {
@@ -279,6 +322,13 @@ async function checkDatabaseConnection() {
 
 async function main() {
   console.log(`${PREFIX} Starting pre-deploy validation...`);
+  if (isStrictProductionDeployGate()) {
+    console.log(`${PREFIX} Strict production deploy gate (VERCEL_ENV/MERLIN_DEPLOY_GATE=production)`);
+  } else {
+    console.log(
+      `${PREFIX} Local/CI mode — env gaps (Sentry, DB reachability) are warnings; only code defects block`
+    );
+  }
 
   loadDotEnvFile('.env');
   loadDotEnvFile('.env.local');
@@ -302,12 +352,22 @@ async function main() {
   checkOptimisticConcurrencyGuard();
   await checkDatabaseConnection();
 
+  if (warnings.length > 0) {
+    console.warn(`${PREFIX} ${warnings.length} environment warning(s) — set on Vercel before production traffic.`);
+  }
+
   if (failures.length > 0) {
-    console.error(`${PREFIX} ${failures.length} check(s) failed — aborting deploy.`);
+    console.error(`${PREFIX} ${failures.length} code check(s) failed — aborting deploy.`);
     process.exit(1);
   }
 
-  console.log(`${PREFIX} All checks passed — safe to deploy to production.`);
+  if (warnings.length > 0) {
+    console.log(
+      `${PREFIX} Code checks passed with ${warnings.length} env warning(s) — ready-to-deploy may proceed; fix env on Vercel for production.`
+    );
+  } else {
+    console.log(`${PREFIX} All checks passed — safe to deploy to production.`);
+  }
 }
 
 main().catch((error) => {

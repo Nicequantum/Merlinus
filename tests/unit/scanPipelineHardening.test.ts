@@ -26,7 +26,10 @@ describe('scan pipeline hardening', () => {
     const src = readSrc('src/services/ocr.ts');
     assert.match(src, /hardResetOcrWorker/);
     assert.match(src, /WORKER_INIT_TIMEOUT_MS/);
+    assert.match(src, /WORKER_TERMINATE_TIMEOUT_MS/);
     assert.match(src, /await hardResetOcrWorker/);
+    // terminate() must not hang the pipeline forever after soft OCR timeout
+    assert.match(src, /ocr\.worker_terminate_timed_out_or_failed/);
   });
 
   it('image re-fetch and RO PUT have client timeouts', () => {
@@ -36,6 +39,20 @@ describe('scan pipeline hardening', () => {
     const api = readSrc('src/lib/api.ts');
     assert.match(api, /RO_CRUD_CLIENT_MS/);
     assert.match(api, /updateRepairOrder[\s\S]*timeoutMs:\s*RO_CRUD_CLIENT_MS/);
+  });
+
+  it('image compression load/encode cannot hang forever on cold first capture', () => {
+    const src = readSrc('src/utils/imageCompression.ts');
+    assert.match(src, /LOAD_IMAGE_TIMEOUT_MS/);
+    assert.match(src, /TO_BLOB_TIMEOUT_MS/);
+    assert.match(src, /Image load for compression timed out/);
+  });
+
+  it('vision blob fetch is time-bounded for cold serverless isolates', () => {
+    const src = readSrc('src/lib/blob.ts');
+    assert.match(src, /BLOB_GET_TIMEOUT_MS/);
+    assert.match(src, /VISION_PREP_TIMEOUT_MS/);
+    assert.match(src, /blob\.vision_fetch_ok/);
   });
 
   it('diagnostics extract uses vision-downscaled blob fetch', () => {
@@ -97,9 +114,19 @@ describe('scan pipeline hardening', () => {
     assert.equal(merged.repairLines[0].xentryImages?.length, 2);
   });
 
-  it('RO scan shuts down OCR worker after strong Grok path', () => {
+  it('RO scan is Grok-first and only runs OCR as fallback (no cold OCR race)', () => {
     const src = readSrc('src/hooks/repairOrders/useROScan.ts');
-    assert.match(src, /shutdownOcrWorker/);
+    assert.match(src, /Grok-first/);
+    assert.match(src, /ocr_fallback_start/);
+    assert.match(src, /warmupOcrWorker/);
+    // Must not start runClientOcr in parallel before Grok settles
+    assert.equal(/const ocrPromise = runClientOcr/.test(src), false);
+  });
+
+  it('authenticated shell warms OCR worker after mount for first-scan readiness', () => {
+    const src = readSrc('src/components/BenzTechAuthenticatedApp.tsx');
+    assert.match(src, /warmupOcrWorker/);
+    assert.match(src, /ocr\.shell_warmup_ready/);
   });
 
   it('photo grid falls back to blob preview when proxy fails', () => {

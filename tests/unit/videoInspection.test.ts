@@ -5,7 +5,10 @@ import { describe, it } from 'node:test';
 import {
   buildCustomerViewerUrl,
   generateShareToken,
+  hashPasscode,
   hashShareToken,
+  isValidRawShareToken,
+  verifyPasscodeHash,
 } from '../../src/lib/videoInspection/shareTokens';
 import { CUSTOMER_VIDEO_REPORT_SYSTEM_PROMPT } from '../../src/prompts/customerVideoReport/systemPrompt';
 import { buildCustomerVideoReportUserMessage } from '../../src/prompts/customerVideoReport/buildUserMessage';
@@ -24,6 +27,18 @@ describe('video inspection share tokens', () => {
     assert.ok(token.length >= 32);
     assert.equal(hashShareToken(token), hashShareToken(token));
     assert.notEqual(hashShareToken(token), hashShareToken(token + 'x'));
+  });
+
+  it('validates raw share token format and timing-safe passcode', () => {
+    const token = generateShareToken();
+    assert.equal(isValidRawShareToken(token), true);
+    assert.equal(isValidRawShareToken('short'), false);
+    assert.equal(isValidRawShareToken('bad token with spaces!!!!!!!'), false);
+    assert.equal(isValidRawShareToken(null), false);
+    const h = hashPasscode('secret12');
+    assert.equal(verifyPasscodeHash('secret12', h), true);
+    assert.equal(verifyPasscodeHash('wrong', h), false);
+    assert.equal(verifyPasscodeHash('', h), false);
   });
 
   it('builds customer viewer URLs', () => {
@@ -134,5 +149,20 @@ describe('must-do security hardening', () => {
   it('public video media uses no-store cache', () => {
     const media = readSrc('src/app/api/public/video/[token]/media/route.ts');
     assert.match(media, /Cache-Control': 'private, no-store'/);
+  });
+
+  it('public video routes stay unauthenticated but enforce share token gates', () => {
+    const meta = readSrc('src/app/api/public/video/[token]/route.ts');
+    const media = readSrc('src/app/api/public/video/[token]/media/route.ts');
+    for (const src of [meta, media]) {
+      assert.equal(src.includes('withAuth('), false);
+      assert.match(src, /isValidRawShareToken/);
+      assert.match(src, /hashShareToken/);
+      assert.match(src, /expiresAt/);
+      assert.match(src, /passcodeHash/);
+      assert.match(src, /verifyPasscodeHash/);
+      assert.match(src, /checkRateLimit/);
+      assert.match(src, /revokedAt/);
+    }
   });
 });
