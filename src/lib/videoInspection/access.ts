@@ -1,11 +1,15 @@
 import type { SessionPayload } from '@/lib/auth';
 import { getRlsDb } from '@/lib/apex/rlsContext';
-import { effectiveRole } from '@/lib/apex/viewAs';
+import { effectiveIsAdmin, effectiveRole } from '@/lib/apex/viewAs';
 
-/** Managers / owners in dealership scope see all rooftop inspections; techs see own. */
+/**
+ * Managers / owners / GM lens see all rooftop inspections.
+ * View As technician/advisor must not inherit seed isAdmin for list-all.
+ */
 export function canListAllInspections(session: SessionPayload): boolean {
   const role = effectiveRole(session);
-  return role === 'manager' || role === 'owner' || Boolean(session.isAdmin);
+  if (role === 'manager' || role === 'owner') return true;
+  return effectiveIsAdmin(session);
 }
 
 export async function findInspectionForSession(session: SessionPayload, id: string) {

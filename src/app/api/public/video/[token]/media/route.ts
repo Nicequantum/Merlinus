@@ -50,7 +50,7 @@ export async function GET(
       headers: {
         'Content-Type':
           share.videoInspection.contentType || result.blob.contentType || 'video/webm',
-        'Cache-Control': 'private, max-age=300',
+        'Cache-Control': 'private, no-store',
         'Content-Disposition': 'inline',
       },
     });

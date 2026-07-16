@@ -92,3 +92,47 @@ describe('golden path isolation', () => {
     assert.match(schema, /model VideoInspectionShare /);
   });
 });
+
+describe('must-do security hardening', () => {
+  it('SMS never accepts client shareUrl', () => {
+    const sms = readSrc('src/app/api/video-inspections/[id]/send-sms/route.ts');
+    assert.equal(sms.includes('shareUrl: z'), false);
+    assert.equal(sms.includes('parsed.data.shareUrl'), false);
+    assert.match(sms, /buildCustomerViewerUrl\(token\)/);
+    assert.match(sms, /generateShareToken/);
+  });
+
+  it('refresh rotation preserves View As lens', () => {
+    const session = readSrc('src/lib/apex/apexSession.ts');
+    assert.match(
+      session,
+      /buildOwnerDealershipSession\([\s\S]*?viewAsRole:\s*lenientClaims\.viewAsRole/
+    );
+  });
+
+  it('video list ACL uses effectiveIsAdmin not seed isAdmin alone', () => {
+    const access = readSrc('src/lib/videoInspection/access.ts');
+    assert.match(access, /effectiveIsAdmin/);
+    assert.equal(access.includes('Boolean(session.isAdmin)'), false);
+  });
+
+  it('users DELETE requires manager + dealership context', () => {
+    const users = readSrc('src/app/api/users/[id]/route.ts');
+    assert.match(users, /users\.delete[\s\S]*requireManager:\s*true/);
+    assert.match(users, /users\.delete[\s\S]*requireDealershipContext:\s*true/);
+  });
+
+  it('video upload has Content-Length gate and UUID blob keys', () => {
+    const upload = readSrc('src/app/api/video-inspections/upload/route.ts');
+    assert.match(upload, /content-length/i);
+    assert.match(upload, /normalizePreferredLanguage/);
+    assert.match(upload, /MAX_TRANSCRIPT_CHARS|20_000/);
+    const blob = readSrc('src/lib/videoBlob.ts');
+    assert.match(blob, /randomUUID/);
+  });
+
+  it('public video media uses no-store cache', () => {
+    const media = readSrc('src/app/api/public/video/[token]/media/route.ts');
+    assert.match(media, /Cache-Control': 'private, no-store'/);
+  });
+});

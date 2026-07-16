@@ -305,11 +305,7 @@ export function VideoInspectionView({ session, onBack }: VideoInspectionViewProp
     if (!selected || !phone.trim()) return;
     setBusy(true);
     try {
-      const result = await api.sendVideoInspectionSms(
-        selected.id,
-        phone.trim(),
-        shareUrl || undefined
-      );
+      const result = await api.sendVideoInspectionSms(selected.id, phone.trim());
       setShareUrl(result.shareUrl);
       toast.success(`Text sent (…${result.phoneLast4})`);
     } catch (e: unknown) {

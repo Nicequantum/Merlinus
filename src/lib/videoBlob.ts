@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { get, put } from '@vercel/blob';
 import { networkRetryDelayMs, sleep } from './networkErrors';
 
@@ -33,9 +34,10 @@ export async function uploadVideoToBlob(
   contentType: string,
   dealershipId: string
 ): Promise<UploadedVideoBlob> {
-  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const safeDealer = dealershipId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
-  const key = `benz-tech/video/${safeDealer}/${Date.now()}-${safeName}`;
+  // UUID keys — avoid Date.now() collisions / predictable overwrites.
+  const key = `benz-tech/video/${safeDealer}/${randomUUID()}-${safeName}`;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < BLOB_PUT_MAX_ATTEMPTS; attempt++) {
@@ -63,9 +65,9 @@ export async function uploadVideoFrameToBlob(
   contentType: string,
   dealershipId: string
 ): Promise<UploadedVideoBlob> {
-  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
   const safeDealer = dealershipId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
-  const key = `benz-tech/video-frame/${safeDealer}/${Date.now()}-${safeName}`;
+  const key = `benz-tech/video-frame/${safeDealer}/${randomUUID()}-${safeName}`;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < BLOB_PUT_MAX_ATTEMPTS; attempt++) {

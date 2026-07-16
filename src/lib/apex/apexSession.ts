@@ -505,7 +505,12 @@ export async function rotateApexRefreshToken(request: Request): Promise<RefreshR
 
   if (tech.role === 'owner') {
     if (lenientClaims?.scopeMode === 'dealership' && lenientClaims.activeDealershipId) {
-      session = await buildOwnerDealershipSession(tech.id, lenientClaims.activeDealershipId);
+      // Preserve View As lens across refresh rotation (same as access-token rebuild).
+      session = await buildOwnerDealershipSession(tech.id, lenientClaims.activeDealershipId, {
+        viewAsRole: lenientClaims.viewAsRole,
+        viewAsAdmin: lenientClaims.viewAsAdmin,
+        viewAsServiceAdvisorId: lenientClaims.viewAsServiceAdvisorId,
+      });
     } else if (lenientClaims?.scopeMode === 'group' && lenientClaims.activeDealerGroupId) {
       session = await buildOwnerGroupSession(tech.id, lenientClaims.activeDealerGroupId);
     } else {

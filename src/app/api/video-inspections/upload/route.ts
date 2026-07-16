@@ -5,9 +5,10 @@ import { resolveDealerIdForWrite } from '@/lib/apex/dealerContext';
 import { getRlsDb } from '@/lib/apex/rlsContext';
 import { encryptSensitiveText } from '@/lib/encryption';
 import { apiError, reportMappedRouteError } from '@/lib/errors';
+import { normalizePreferredLanguage } from '@/lib/i18n/locales';
 import { getRequestIp, RATE_LIMITS } from '@/lib/rate-limit';
 import { mapBlobRouteError } from '@/lib/scanRouteErrors';
-import { getVideoMaxBytes } from '@/lib/videoInspection/shareTokens';
+import { getVideoMaxBytes, getVideoMaxDurationSec } from '@/lib/videoInspection/shareTokens';
 import { mapVideoInspectionDetail } from '@/lib/videoInspection/mappers';
 import { uploadVideoFrameToBlob, uploadVideoToBlob } from '@/lib/videoBlob';
 
@@ -19,6 +20,12 @@ const ALLOWED_VIDEO_TYPES = new Set([
 ]);
 
 const ALLOWED_FRAME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+/** Cap spoken/typed transcript on upload (align with PATCH). */
+const MAX_TRANSCRIPT_CHARS = 20_000;
+
+/** Multipart overhead allowance on top of max video bytes. */
+const MULTIPART_OVERHEAD_BYTES = 8 * 1024 * 1024;
 
 type UploadFile = {
   name: string;
@@ -52,6 +59,21 @@ export async function POST(request: Request) {
   return withAuth(
     request,
     async (session) => {
+      const maxBytes = getVideoMaxBytes();
+      const maxDurationSec = getVideoMaxDurationSec();
+
+      // Early reject oversized bodies before buffering formData (DoS mitigation).
+      const contentLengthHeader = request.headers.get('content-length');
+      if (contentLengthHeader) {
+        const contentLength = Number(contentLengthHeader);
+        if (Number.isFinite(contentLength) && contentLength > maxBytes + MULTIPART_OVERHEAD_BYTES) {
+          return apiError(
+            `Upload too large (max ${Math.floor(maxBytes / (1024 * 1024))} MB video).`,
+            413
+          );
+        }
+      }
+
       let form: FormData;
       try {
         form = await request.formData();
@@ -69,19 +91,22 @@ export async function POST(request: Request) {
         return apiError('Unsupported video type. Use WebM or MP4.', 400);
       }
 
-      const maxBytes = getVideoMaxBytes();
       if (file.size > maxBytes) {
         return apiError(`Video exceeds max size (${Math.floor(maxBytes / (1024 * 1024))} MB)`, 400);
       }
 
       const title = String(form.get('title') || 'Video inspection').slice(0, 200);
       const vehicleLabel = String(form.get('vehicleLabel') || '').slice(0, 200) || null;
-      const transcript = String(form.get('transcript') || '');
-      const transcriptLanguage = String(
+      const transcript = String(form.get('transcript') || '').slice(0, MAX_TRANSCRIPT_CHARS);
+      const transcriptLanguage = normalizePreferredLanguage(
         form.get('transcriptLanguage') || session.preferredLanguage || 'en'
-      ).slice(0, 8);
+      );
       const durationRaw = Number(form.get('durationSec'));
-      const durationSec = Number.isFinite(durationRaw) && durationRaw > 0 ? durationRaw : null;
+      let durationSec: number | null =
+        Number.isFinite(durationRaw) && durationRaw > 0 ? durationRaw : null;
+      if (durationSec !== null && durationSec > maxDurationSec) {
+        return apiError(`Video exceeds max duration (${maxDurationSec}s).`, 400);
+      }
 
       const buffer = Buffer.from(await file.arrayBuffer());
       let uploaded;

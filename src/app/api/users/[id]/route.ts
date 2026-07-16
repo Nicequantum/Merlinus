@@ -132,6 +132,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
       return { ok: true };
     },
-    { rateLimitKey: 'users.delete' }
+    {
+      rateLimitKey: 'users.delete',
+      // Align with PATCH — manager (effectiveRole) + dealership context for PII lifecycle.
+      requireManager: true,
+      requireDealershipContext: true,
+    }
   );
 }

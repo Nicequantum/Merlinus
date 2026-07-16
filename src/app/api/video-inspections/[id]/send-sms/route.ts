@@ -16,10 +16,9 @@ import { AUTH_JSON_BODY_LIMIT_BYTES, parseRequestBody, parseRouteParams } from '
 import { z } from 'zod';
 
 const paramsSchema = z.object({ id: z.string().trim().min(1).max(64) });
+/** Phone only — share URLs are always server-minted (no client shareUrl). */
 const bodySchema = z.object({
   phone: z.string().trim().min(7).max(32),
-  /** Optional existing share URL (must be full /v/ token URL). If omitted, creates a new share. */
-  shareUrl: z.string().url().optional(),
 });
 
 export async function POST(
@@ -41,6 +40,9 @@ export async function POST(
 
       const existing = await findInspectionForSession(session, routeParams.data.id);
       if (!existing) return apiError(NOT_FOUND_ERROR, 404);
+      if (!existing.videoPathname?.trim()) {
+        return apiError('Upload a video before sending a customer link.', 400);
+      }
 
       const parsed = await parseRequestBody(request, bodySchema, AUTH_JSON_BODY_LIMIT_BYTES);
       if ('error' in parsed) return parsed.error;
@@ -48,24 +50,20 @@ export async function POST(
       const phone = normalizeE164(parsed.data.phone);
       if (!phone) return apiError('Enter a valid mobile number (US 10-digit or E.164).', 400);
 
-      let shareUrl = parsed.data.shareUrl;
-      let shareId: string | null = null;
+      // Always mint a fresh share on the server — never trust a client URL (anti-phishing).
+      const token = generateShareToken();
+      const share = await getRlsDb().videoInspectionShare.create({
+        data: {
+          videoInspectionId: existing.id,
+          tokenHash: hashShareToken(token),
+          expiresAt: new Date(Date.now() + 14 * 24 * 3600_000),
+          createdByTechnicianId: session.technicianId,
+        },
+      });
+      const shareUrl = buildCustomerViewerUrl(token);
 
-      if (!shareUrl) {
-        const token = generateShareToken();
-        const share = await getRlsDb().videoInspectionShare.create({
-          data: {
-            videoInspectionId: existing.id,
-            tokenHash: hashShareToken(token),
-            expiresAt: new Date(Date.now() + 14 * 24 * 3600_000),
-            createdByTechnicianId: session.technicianId,
-          },
-        });
-        shareId = share.id;
-        shareUrl = buildCustomerViewerUrl(token);
-      }
-
-      const dealership = existing.dealership?.name || session.dealershipName || 'Your service team';
+      const dealershipRaw = existing.dealership?.name || session.dealershipName || 'Your service team';
+      const dealership = dealershipRaw.replace(/[\r\n\t]/g, ' ').trim().slice(0, 40);
       const body = `${dealership}: Your vehicle video inspection is ready. Watch & read your report: ${shareUrl}`;
 
       try {
@@ -73,7 +71,7 @@ export async function POST(
         await getRlsDb().videoInspectionSmsLog.create({
           data: {
             videoInspectionId: existing.id,
-            shareId,
+            shareId: share.id,
             phoneEncrypted: encryptSensitiveText(phone),
             phoneLast4: phone.slice(-4),
             providerMessageId: sid,
@@ -93,7 +91,11 @@ export async function POST(
           technicianId: session.technicianId,
           entityType: 'video_inspection',
           entityId: existing.id,
-          metadata: { phoneLast4: phone.slice(-4), providerMessageId: sid },
+          metadata: {
+            phoneLast4: phone.slice(-4),
+            providerMessageId: sid,
+            shareId: share.id,
+          },
           ipAddress: getRequestIp(request),
         });
 

@@ -265,10 +265,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify(body ?? {}) }
     ),
 
-  sendVideoInspectionSms: (id: string, phone: string, shareUrl?: string) =>
+  sendVideoInspectionSms: (id: string, phone: string) =>
     apiFetch<{ ok: boolean; shareUrl: string; phoneLast4: string }>(
       `/api/video-inspections/${id}/send-sms`,
-      { method: 'POST', body: JSON.stringify({ phone, shareUrl }) }
+      { method: 'POST', body: JSON.stringify({ phone }) }
     ),
 
   listRepairOrders: (
