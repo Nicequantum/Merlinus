@@ -28,10 +28,12 @@ describe('ApexDealershipSelector (Phase 5.8)', () => {
 
   it('ApexOwnerNationalShell wires enter dealership CTA and flow', () => {
     const shell = readSrc('src/components/apex/ApexOwnerNationalShell.tsx');
-    assert.match(shell, /Enter dealership/);
+    // View As dual selector: CTA label is "View as / enter rooftop" (not legacy "Enter dealership")
+    assert.match(shell, /View as \/ enter rooftop|enter rooftop/i);
     assert.match(shell, /fetchOwnerDealerships/);
     assert.match(shell, /enterOwnerDealership/);
     assert.match(shell, /ApexDealershipSelector/);
+    assert.match(shell, /VIEW_AS_ROLE_OPTIONS|viewAsRole/);
   });
 
   it('apexLoginSession passes rememberAsDefault to select-dealership', () => {

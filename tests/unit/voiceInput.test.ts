@@ -69,7 +69,8 @@ describe('voice dictation stability', () => {
     const app = readFileSync(join(process.cwd(), 'src/components/BenzTechAuthenticatedApp.tsx'), 'utf8');
     const provider = readFileSync(join(process.cwd(), 'src/components/VoiceInputProvider.tsx'), 'utf8');
     const button = readFileSync(join(process.cwd(), 'src/components/VoiceInputButton.tsx'), 'utf8');
-    assert.match(app, /<VoiceInputProvider>/);
+    // speechLanguage prop optional for preferred_language STT map
+    assert.match(app, /<VoiceInputProvider(?:\s|>)/);
     assert.match(provider, /VoiceInputContext/);
     assert.match(button, /useSharedVoiceInput/);
     assert.match(button, /activeTarget === targetRef\.current/);

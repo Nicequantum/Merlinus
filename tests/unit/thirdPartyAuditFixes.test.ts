@@ -226,7 +226,8 @@ describe('Third-party audit hardening', () => {
     assert.equal(shell.includes("from '@/lib/api'"), false);
     assert.equal(shell.includes("from '@/hooks/useSession'"), false);
     assert.ok(shell.includes('BenzTechAuthenticatedApp'));
-    assert.ok(shell.includes('loginSession'));
+    // Auth helpers live in authClient (legacy name was loginSession)
+    assert.ok(shell.includes('authClient') || shell.includes('loginWithCredentials'));
     assert.ok(readSrc('src/components/BenzTechAuthenticatedApp.tsx').includes('useRepairOrders'));
   });
 
