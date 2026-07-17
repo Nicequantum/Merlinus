@@ -97,26 +97,21 @@ function normalizeScanMatchText(text: string): string {
 }
 
 /**
- * Legacy B-service filter — scanned RO service lines pass through for narrative work.
+ * Passthrough for scanned RO lines — no letter-code or menu-service filtering.
  *
- * Prior behavior skipped every line whose service code was B:
- *   if (code === 'B') continue;
- *
- * B services are now processed normally so warranty narratives can be written for B-line
- * repairs (e.g. multi-line ROs where B is a legitimate customer concern, not mislabeled
- * inspection detail).
+ * Historical note: an older path skipped every line whose service code was B
+ * (`if (code === 'B') continue`), which dropped legitimate letter-B concerns and
+ * "B Service" menu packages. All lettered lines now pass through unchanged
+ * (warranty, Customer Pay, A/B/C Service, QC, etc.).
  */
 export function filterLegacyScannedServiceLines<T extends ScannedServiceLine>(lines: T[]): T[] {
-  const kept: T[] = [];
-  for (const line of lines) {
-    // Legacy: if (line.code === 'B') continue;
-    // B-service lines are retained for warranty narrative support.
-    kept.push(line);
-  }
-  return kept;
+  return lines.slice();
 }
 
-/** Pair complaints with letter codes, applying the legacy B-service filter policy. */
+/**
+ * Pair complaints with letter codes. Does not drop any line (including B Service /
+ * A Service / Customer Pay menu items) — only aligns labels.
+ */
 export function filterScannedComplaintsForProcessing(
   complaints: string[],
   complaintLabels?: string[]

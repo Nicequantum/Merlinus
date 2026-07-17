@@ -147,8 +147,26 @@ export function isObviousOcrGarbage(text: string): boolean {
   return false;
 }
 
+/**
+ * Menu-priced / Customer Pay service packages printed on ROs (A Service, B Service, etc.).
+ * These are real line items — never drop them as junk or "non-warranty noise".
+ */
+export function isMenuServiceLine(text: string): boolean {
+  const trimmed = normalizeComplaintText(text);
+  if (!trimmed || trimmed.length < 3) return false;
+  // A Service, B Service, C-SERVICE, "B SERVICE 15K", "Mercedes B Service"
+  if (/\b[A-D]\s*[-–—]?\s*SERVICE\b/i.test(trimmed)) return true;
+  if (/^(?:[A-Z]\s*[-–—]?\s*)?SERVICE\s+(?:PACKAGE|MENU|INTERVAL|PLAN)\b/i.test(trimmed)) {
+    return true;
+  }
+  if (/\b(?:MAINTENANCE|MENU)\s+(?:SERVICE|PACKAGE)\b/i.test(trimmed)) return true;
+  if (/\bSERVICE\s+PACKAGE\b/i.test(trimmed)) return true;
+  return false;
+}
+
 function isShortServiceLine(text: string): boolean {
   const trimmed = normalizeComplaintText(text);
+  if (isMenuServiceLine(trimmed)) return true;
   if (trimmed.length <= 4 && /^[A-Z]{2,4}$/.test(trimmed)) return true;
   return /^(?:QC|QUALITY\s+CONTROL|INSPECTION|STATE\s+INSPECTION)$/i.test(trimmed);
 }
@@ -158,7 +176,7 @@ function isStackedPairingJunk(text: string): boolean {
   if (!text?.trim()) return true;
   if (isObviousOcrGarbage(text)) return true;
   if (isInspectionDetailLine(text)) return true;
-  if (isShortServiceLine(text)) return false;
+  if (isShortServiceLine(text) || isMenuServiceLine(text)) return false;
   return !isPlausibleComplaintText(text);
 }
 
@@ -222,6 +240,8 @@ type ComplaintTimelineEntry =
 
 /** Reject VIN fragments, form codes, and OCR noise misread as complaints. */
 export function isPlausibleComplaintText(text: string): boolean {
+  // Menu services (A/B Service, packages) are first-class line items — always keep.
+  if (isMenuServiceLine(text)) return true;
   if (!isValidComplaintText(text)) return false;
   const trimmed = normalizeComplaintText(text);
   const compact = trimmed.replace(/\s/g, '');
@@ -940,12 +960,16 @@ function trimComplaintContinuation(text: string): string {
 
 function isValidComplaintText(text: string): boolean {
   const trimmed = normalizeComplaintText(text);
+  if (isMenuServiceLine(trimmed)) return true;
   if (trimmed.length < 4) return false;
   if (!/[A-Za-z]/.test(trimmed)) return false;
   if (/^\d{3,}/.test(trimmed)) return false;
   if (/^complaints?:?$/i.test(trimmed)) return false;
   if (/^customer\s+complaints?:?$/i.test(trimmed)) return false;
-  if (JUNK_COMPLAINT_PREFIX.test(trimmed.split(/\s+/)[0] || '')) return false;
+  // Do not treat the word "service" inside menu packages as form-field junk.
+  if (JUNK_COMPLAINT_PREFIX.test(trimmed.split(/\s+/)[0] || '') && !isMenuServiceLine(trimmed)) {
+    return false;
+  }
   if (JUNK_COMPLAINT_PREFIX.test(trimmed)) return false;
   return true;
 }
@@ -1750,13 +1774,18 @@ export function parseStructuredROText(text: string): StructuredROExtraction {
       const parsed = parseComplaintLabelSegment(line);
       if (parsed) {
         const c = trimComplaintContinuation(parsed.text);
-        if (isValidComplaintText(c)) structuredComplaints.push(c);
+        // Keep warranty concerns and menu/Customer Pay services (A/B Service, etc.).
+        if (isValidComplaintText(c) || isMenuServiceLine(c) || isShortServiceLine(c)) {
+          structuredComplaints.push(c);
+        }
       } else {
         const numbered = line.match(/^(\d{1,2})[\.\)\:\s\-–—–—]+\s*(.+)$/i);
         if (numbered && numbered[2]) {
           const c = trimComplaintContinuation(numbered[2]);
-          if (isValidComplaintText(c)) structuredComplaints.push(c);
-        } else if (isValidComplaintText(line)) {
+          if (isValidComplaintText(c) || isMenuServiceLine(c) || isShortServiceLine(c)) {
+            structuredComplaints.push(c);
+          }
+        } else if (isValidComplaintText(line) || isMenuServiceLine(line)) {
           structuredComplaints.push(normalizeComplaintText(line));
         }
       }
@@ -1826,7 +1855,11 @@ export function extractRoNumberFromText(text: string): string {
 export function sanitizeComplaints(complaints: string[]): string[] {
   return complaints
     .map((c) => normalizeComplaintForDisplay(c))
-    .filter((c) => isPlausibleComplaintText(c))
+    .filter(
+      (c) =>
+        Boolean(c) &&
+        (isPlausibleComplaintText(c) || isMenuServiceLine(c) || isShortServiceLine(c))
+    )
     .slice(0, 15);
 }
 

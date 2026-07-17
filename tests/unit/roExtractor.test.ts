@@ -5,6 +5,8 @@ import {
   extractLetterLabeledComplaints,
   extractLetterLabeledComplaintsWithLabels,
   extractServiceAdvisorFromText,
+  finalizeLabeledComplaints,
+  isMenuServiceLine,
   isPlausibleComplaintText,
   mergeMultiPassOcrExtractions,
   mergeROExtractions,
@@ -12,6 +14,7 @@ import {
   normalizeComplaintForDisplay,
   parseStructuredROText,
   recoverComplaintsWithLabelsFromText,
+  sanitizeComplaints,
 } from '../../src/utils/roExtractor';
 
 const REAL_RO_SNIPPET = `RO Number: 482910
@@ -249,6 +252,37 @@ N. SPECTION`;
     assert.equal(isPlausibleComplaintText('=EA,-MO'), false);
     assert.equal(isPlausibleComplaintText('Thai ENIIA Ts Rees'), false); // short gibberish tokens
     assert.equal(isPlausibleComplaintText('RHODE ISLAND STATE INSPECTION'), true);
+  });
+
+  test('keeps A/B Service and menu packages (not warranty-only filtering)', () => {
+    assert.equal(isMenuServiceLine('B Service'), true);
+    assert.equal(isMenuServiceLine('A Service'), true);
+    assert.equal(isMenuServiceLine('B SERVICE 15K'), true);
+    assert.equal(isMenuServiceLine('Service Package'), true);
+    assert.equal(isPlausibleComplaintText('B Service'), true);
+    assert.equal(isPlausibleComplaintText('A Service'), true);
+
+    const sanitized = sanitizeComplaints(['Check engine light', 'B Service', 'A Service']);
+    assert.equal(sanitized.length, 3);
+    assert.match(sanitized[1], /B\s*SERVICE/i);
+    assert.match(sanitized[2], /A\s*SERVICE/i);
+
+    const finalized = finalizeLabeledComplaints(
+      ['Check engine light on', 'B Service', 'A Service'],
+      ['A', 'B', 'C']
+    );
+    assert.deepEqual(finalized.labels, ['A', 'B', 'C']);
+    assert.match(finalized.complaints[1], /B\s*SERVICE/i);
+    assert.match(finalized.complaints[2], /A\s*SERVICE/i);
+
+    const parsed = parseStructuredROText(`Customer Complaints:
+A. Check engine light on
+B. B Service
+C. A Service
+D. Front brake pads`);
+    assert.deepEqual(parsed.complaintLabels, ['A', 'B', 'C', 'D']);
+    assert.match(parsed.complaints[1], /B\s*SERVICE/i);
+    assert.match(parsed.complaints[2], /A\s*SERVICE/i);
   });
 
   test('pairs stacked label column with complaint text skipping form junk lines', () => {
