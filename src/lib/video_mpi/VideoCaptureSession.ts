@@ -8,6 +8,34 @@ import type {
 
 const FINALIZE_TIMEOUT_MS = 20_000;
 
+/** Optional Wake Lock API (not in all TS DOM lib targets). */
+type WakeLockSentinelLike = {
+  release: () => Promise<void>;
+  addEventListener?: (type: string, fn: () => void) => void;
+};
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<WakeLockSentinelLike>;
+  };
+};
+
+/** WebKit / iOS fullscreen + orientation lock extensions. */
+type ElementWithWebkitFullscreen = HTMLElement & {
+  webkitRequestFullscreen?: () => void | Promise<void>;
+};
+
+type DocumentWithWebkitFullscreen = Document & {
+  webkitExitFullscreen?: () => void;
+};
+
+type ScreenWithOrientation = Screen & {
+  orientation?: {
+    lock?: (orientation: string) => Promise<void>;
+    unlock?: () => void;
+  };
+};
+
 /**
  * Video MPI capture session — owns camera stream, MediaRecorder, wake lock,
  * fullscreen shell, frame grabs, and deterministic cleanup.
@@ -405,8 +433,7 @@ export class VideoCaptureSession {
 
   private async acquireWakeLock(): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nav = navigator as any;
+      const nav = navigator as NavigatorWithWakeLock;
       if (!nav.wakeLock?.request) return;
       this.wakeLock = await nav.wakeLock.request('screen');
       this.wakeLock?.addEventListener?.('release', () => {
@@ -437,18 +464,16 @@ export class VideoCaptureSession {
         await shell.requestFullscreen.call(shell);
       } else {
         // iOS / WebKit legacy
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const anyShell = shell as any;
-        if (typeof anyShell.webkitRequestFullscreen === 'function') {
-          await anyShell.webkitRequestFullscreen();
+        const webkitShell = shell as ElementWithWebkitFullscreen;
+        if (typeof webkitShell.webkitRequestFullscreen === 'function') {
+          await webkitShell.webkitRequestFullscreen();
         }
       }
     } catch {
       // Pseudo-fullscreen CSS still covers mobile when API is blocked.
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orientation = (screen as any).orientation;
+      const orientation = (screen as ScreenWithOrientation).orientation;
       if (orientation?.lock) {
         await orientation.lock('landscape').catch(() => undefined);
       }
@@ -459,8 +484,7 @@ export class VideoCaptureSession {
 
   private async exitFullscreen(): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orientation = (screen as any).orientation;
+      const orientation = (screen as ScreenWithOrientation).orientation;
       if (orientation?.unlock) orientation.unlock();
     } catch {
       // ignore
@@ -469,10 +493,9 @@ export class VideoCaptureSession {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const doc = document as any;
-        if (typeof doc.webkitExitFullscreen === 'function') {
-          doc.webkitExitFullscreen();
+        const webkitDoc = document as DocumentWithWebkitFullscreen;
+        if (typeof webkitDoc.webkitExitFullscreen === 'function') {
+          webkitDoc.webkitExitFullscreen();
         }
       }
     } catch {

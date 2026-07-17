@@ -17,21 +17,23 @@ export function VoiceInputProvider({
   speechLanguage?: string | null;
 }) {
   const voice = useVoiceInput();
+  // Stable useCallback from useVoiceInput — destructure so exhaustive-deps is satisfied.
+  const { setSpeechLanguage } = voice;
 
   useEffect(() => {
     if (speechLanguage?.trim()) {
-      voice.setSpeechLanguage(speechLanguage.trim());
+      setSpeechLanguage(speechLanguage.trim());
     }
-  }, [speechLanguage, voice.setSpeechLanguage]);
+  }, [speechLanguage, setSpeechLanguage]);
 
   useEffect(() => {
     const onSpeechLang = (event: Event) => {
       const detail = (event as CustomEvent<{ lang?: string }>).detail;
-      if (detail?.lang) voice.setSpeechLanguage(detail.lang);
+      if (detail?.lang) setSpeechLanguage(detail.lang);
     };
     window.addEventListener('merlin:speech-language', onSpeechLang);
     return () => window.removeEventListener('merlin:speech-language', onSpeechLang);
-  }, [voice.setSpeechLanguage]);
+  }, [setSpeechLanguage]);
 
   return <VoiceInputContext.Provider value={voice}>{children}</VoiceInputContext.Provider>;
 }
