@@ -131,12 +131,24 @@ export function filterScannedComplaintsForProcessing(
   };
 }
 
-function scoreCustomerPayTemplateMatch(scanText: string, templateTitle: string): number {
+function scoreCustomerPayTemplateMatch(
+  scanText: string,
+  templateTitle: string,
+  matchAliases: string[] = []
+): number {
   const normalized = normalizeScanMatchText(scanText);
   if (normalized.length < 6) return 0;
 
   const titleNorm = normalizeScanMatchText(templateTitle);
   if (normalized.includes(titleNorm)) return 1000 + titleNorm.length;
+
+  // Alias hits score just under exact title inclusion so title still wins ties.
+  for (const alias of matchAliases) {
+    const aliasNorm = normalizeScanMatchText(alias);
+    if (aliasNorm.length >= 3 && normalized.includes(aliasNorm)) {
+      return 900 + aliasNorm.length;
+    }
+  }
 
   const titleTokens = titleNorm.split(' ').filter((token) => token.length > 2);
   if (titleTokens.length === 0) return 0;
@@ -160,6 +172,38 @@ function scoreCustomerPayTemplateMatch(scanText: string, templateTitle: string):
     titleNorm.includes('oil') &&
     (/\ba\s*service\b/.test(normalized) || /\bb\s*service\b/.test(normalized)) &&
     !/\blube\b|\blof\b|oil\s*(and|&)?\s*filter\b/.test(normalized)
+  ) {
+    return 0;
+  }
+  // Auction inspection vs recon package.
+  if (
+    titleNorm.includes('auction inspection') &&
+    normalized.includes('recon') &&
+    !normalized.includes('inspect')
+  ) {
+    return 0;
+  }
+  if (
+    titleNorm.includes('auction reconditioning') &&
+    normalized.includes('inspect') &&
+    !normalized.includes('recon') &&
+    !normalized.includes('recondition')
+  ) {
+    return 0;
+  }
+  // Offline MPI vs offline repair.
+  if (
+    titleNorm.includes('offline multi point') &&
+    normalized.includes('repair') &&
+    !normalized.includes('inspect') &&
+    !normalized.includes('mpi')
+  ) {
+    return 0;
+  }
+  if (
+    titleNorm.includes('offline customer pay') &&
+    (normalized.includes('mpi') || normalized.includes('multi point')) &&
+    !normalized.includes('repair')
   ) {
     return 0;
   }
@@ -248,7 +292,11 @@ export function matchCustomerPayTemplateFromScanText(scanText: string): Customer
   let bestScore = 0;
 
   for (const template of CUSTOMER_PAY_TEMPLATES) {
-    const score = scoreCustomerPayTemplateMatch(trimmed, template.title);
+    const score = scoreCustomerPayTemplateMatch(
+      trimmed,
+      template.title,
+      template.matchAliases ?? []
+    );
     if (score > bestScore) {
       bestScore = score;
       best = { templateTitle: template.title, preWrittenStory: template.preWrittenStory };

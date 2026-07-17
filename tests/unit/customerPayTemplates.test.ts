@@ -34,6 +34,24 @@ describe('Customer Pay templates', () => {
     assert.match(bService?.preWrittenStory ?? '', /oil and filter/i);
   });
 
+  it('includes Auction and Offline templates with match aliases', () => {
+    const titles = new Set(CUSTOMER_PAY_TEMPLATES.map((t) => t.title));
+    assert.ok(titles.has('Auction Inspection'));
+    assert.ok(titles.has('Auction Reconditioning'));
+    assert.ok(titles.has('Offline Customer Pay Repair'));
+    assert.ok(titles.has('Offline Multi-Point Inspection'));
+    for (const title of [
+      'Auction Inspection',
+      'Auction Reconditioning',
+      'Offline Customer Pay Repair',
+      'Offline Multi-Point Inspection',
+    ]) {
+      const tpl = CUSTOMER_PAY_TEMPLATES.find((t) => t.title === title);
+      assert.ok(tpl?.matchAliases && tpl.matchAliases.length > 0, title);
+      assert.ok(tpl!.preWrittenStory.startsWith('Performed'));
+    }
+  });
+
   it('identifies customer pay template rows by explicit flag only (H14)', () => {
     assert.equal(
       templateRowIsCustomerPay({ isCustomerPay: true, templateType: 'CustomerPay', category: 'customer' }),

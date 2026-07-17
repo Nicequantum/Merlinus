@@ -104,6 +104,25 @@ describe('scan pipeline service lines', () => {
     assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
   });
 
+  it('auto-matches Auction and Offline lines via title and aliases', () => {
+    assert.equal(
+      matchCustomerPayTemplateFromScanText('A. Auction Inspection — Manheim unit')?.templateTitle,
+      'Auction Inspection'
+    );
+    assert.equal(
+      matchCustomerPayTemplateFromScanText('B. Wholesale recon package')?.templateTitle,
+      'Auction Reconditioning'
+    );
+    assert.equal(
+      matchCustomerPayTemplateFromScanText('C. Offline customer pay repair — cash')?.templateTitle,
+      'Offline Customer Pay Repair'
+    );
+    assert.equal(
+      matchCustomerPayTemplateFromScanText('D. Paid multi point inspection')?.templateTitle,
+      'Offline Multi-Point Inspection'
+    );
+  });
+
   it('does not match ambiguous warranty concerns', () => {
     assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
   });
