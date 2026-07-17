@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { ApexOwnerDealershipBar } from '@/components/apex/ApexOwnerDealershipBar';
 import { viewAsRoleLabel } from '@/lib/apex/viewAs';
@@ -34,13 +34,16 @@ export function ApexOwnerDealershipWorkspace({
   AuthenticatedApp,
 }: ApexOwnerDealershipWorkspaceProps) {
   const [exiting, setExiting] = useState(false);
+  const exitInFlightRef = useRef(false);
   const rooftopName = session.dealershipName;
   const lensLabel = viewAsRoleLabel(session);
   const exitLabel = session.activeDealerGroupId
     ? 'Return to Group Owner'
     : 'Return to National Owner';
 
-  const handleExit = async () => {
+  const handleExit = useCallback(async () => {
+    if (exitInFlightRef.current || exiting) return;
+    exitInFlightRef.current = true;
     setExiting(true);
     try {
       await exitOwnerDealership();
@@ -57,9 +60,10 @@ export function ApexOwnerDealershipWorkspace({
       clientLog.error('owner.dealership_exit_failed', error);
       toast.error(error instanceof Error ? error.message : 'Could not exit dealership');
     } finally {
+      exitInFlightRef.current = false;
       setExiting(false);
     }
-  };
+  }, [exiting, onSessionRefresh]);
 
   return (
     <div data-platform="apex" className="apex-app-root min-h-dvh flex flex-col">

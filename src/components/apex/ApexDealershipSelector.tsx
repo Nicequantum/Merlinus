@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   filterApexDealerships,
   sortApexDealerships,
@@ -37,14 +37,26 @@ export function ApexDealershipSelector({
   const [query, setQuery] = useState('');
   const [rememberAsDefault, setRememberAsDefault] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const selectInFlightRef = useRef(false);
 
   const sorted = useMemo(() => sortApexDealerships(dealerships), [dealerships]);
   const filtered = useMemo(() => filterApexDealerships(sorted, query), [sorted, query]);
 
+  // Allow a new selection once the parent finishes an enter attempt (success or fail).
+  useEffect(() => {
+    if (!loading) {
+      selectInFlightRef.current = false;
+      setActiveId(null);
+    }
+  }, [loading]);
+
   const handleSelect = (dealershipId: string) => {
-    if (loading) return;
-    setActiveId(dealershipId);
-    onSelect(dealershipId, { rememberAsDefault: showRememberDefault && rememberAsDefault });
+    if (loading || selectInFlightRef.current) return;
+    const id = dealershipId?.trim();
+    if (!id) return;
+    selectInFlightRef.current = true;
+    setActiveId(id);
+    onSelect(id, { rememberAsDefault: showRememberDefault && rememberAsDefault });
   };
 
   return (
@@ -106,7 +118,11 @@ export function ApexDealershipSelector({
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                onClick={() => handleSelect(dealership.id)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleSelect(dealership.id);
+                }}
               >
                 <span className="apex-dealership-option-top">
                   <span className="apex-dealership-name">{dealership.name}</span>

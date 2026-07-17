@@ -1226,6 +1226,9 @@
   .touch-target {
     min-height: 48px;
     min-width: 48px;
+    /* First-tap reliability on iOS/Android — skip 300ms double-tap zoom wait */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .status-pill {

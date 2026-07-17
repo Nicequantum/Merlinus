@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApexDealershipSelector } from '@/components/apex/ApexDealershipSelector';
 import { ApexLogoMark } from '@/components/apex/ApexLogoMark';
 import {
@@ -211,9 +211,14 @@ function RooftopCard({
         type="button"
         className="apex-btn-secondary apex-rooftop-enter touch-target"
         disabled={entering}
-        onClick={() => onEnter(rooftop.dealershipId)}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (entering) return;
+          onEnter(rooftop.dealershipId);
+        }}
       >
-        Enter rooftop
+        {entering ? 'Entering…' : 'Enter rooftop'}
       </button>
     </article>
   );
@@ -238,6 +243,12 @@ export function ApexOwnerNationalShell({
   const [advisors, setAdvisors] = useState<OwnerDealershipAdvisorOption[]>([]);
   const [loadingAdvisors, setLoadingAdvisors] = useState(false);
   const [advisorRooftopId, setAdvisorRooftopId] = useState<string | null>(null);
+  const [dealershipsError, setDealershipsError] = useState<string | null>(null);
+
+  // Sync refs prevent double-tap / multi-fire before React re-renders disabled state.
+  const openEnterInFlightRef = useRef(false);
+  const enterRooftopInFlightRef = useRef(false);
+  const switchGroupInFlightRef = useRef(false);
 
   const isGroupHome = session.scopeMode === 'group';
   const homeTitle = isGroupHome
@@ -283,8 +294,9 @@ export function ApexOwnerNationalShell({
 
   const onSwitchGroup = useCallback(
     async (dealerGroupId: string) => {
-      if (switchingGroup) return;
+      if (switchGroupInFlightRef.current || switchingGroup) return;
       if (dealerGroupId === (session.activeDealerGroupId || '')) return;
+      switchGroupInFlightRef.current = true;
       setSwitchingGroup(true);
       try {
         await selectOwnerDealerGroup(dealerGroupId);
@@ -295,6 +307,7 @@ export function ApexOwnerNationalShell({
         clientLog.error('owner.select_group_failed', error);
         toast.error(error instanceof Error ? error.message : 'Could not switch group');
       } finally {
+        switchGroupInFlightRef.current = false;
         setSwitchingGroup(false);
       }
     },
@@ -302,72 +315,95 @@ export function ApexOwnerNationalShell({
   );
 
   const openEnterDealership = useCallback(async () => {
+    // Immediate navigation — do not wait for network before showing the panel.
+    if (openEnterInFlightRef.current) return;
+    openEnterInFlightRef.current = true;
     setView('enter-dealership');
     setLoadingDealerships(true);
+    setDealershipsError(null);
     setAdvisors([]);
     setSelectedAdvisorId('');
     setAdvisorRooftopId(null);
     try {
       const list = await fetchOwnerDealerships();
       setDealerships(list);
+      if (list.length === 0) {
+        setDealershipsError('No rooftops available for your portfolio.');
+      }
     } catch (error: unknown) {
       clientLog.error('owner.dealerships_load_failed', error);
-      toast.error(error instanceof Error ? error.message : 'Could not load dealerships');
-      setView('dashboard');
+      const message = error instanceof Error ? error.message : 'Could not load dealerships';
+      setDealershipsError(message);
+      toast.error(message);
+      // Stay on enter panel with retry — bouncing to dashboard felt like a missed click.
     } finally {
       setLoadingDealerships(false);
+      openEnterInFlightRef.current = false;
     }
   }, []);
 
-  const handleEnterDealership = async (dealershipId: string) => {
-    setActionLoading(true);
-    try {
-      let advisorId: string | null = null;
-      if (viewAsRole === 'service_advisor') {
-        let list = advisors;
-        if (advisorRooftopId !== dealershipId || list.length === 0) {
-          setLoadingAdvisors(true);
-          setAdvisorRooftopId(dealershipId);
-          try {
-            list = await fetchOwnerDealershipAdvisors(dealershipId);
-            setAdvisors(list);
-            const pick =
-              selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
+  const handleEnterDealership = useCallback(
+    async (dealershipId: string) => {
+      const id = dealershipId?.trim();
+      if (!id || enterRooftopInFlightRef.current || actionLoading) return;
+      enterRooftopInFlightRef.current = true;
+      setActionLoading(true);
+      try {
+        let advisorId: string | null = null;
+        if (viewAsRole === 'service_advisor') {
+          let list = advisors;
+          if (advisorRooftopId !== id || list.length === 0) {
+            setLoadingAdvisors(true);
+            setAdvisorRooftopId(id);
+            try {
+              list = await fetchOwnerDealershipAdvisors(id);
+              setAdvisors(list);
+              const pick =
+                selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
+                  ? selectedAdvisorId
+                  : list[0]?.id ?? '';
+              setSelectedAdvisorId(pick);
+              advisorId = pick || null;
+            } finally {
+              setLoadingAdvisors(false);
+            }
+          } else {
+            advisorId =
+              (selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
                 ? selectedAdvisorId
-                : list[0]?.id ?? '';
-            setSelectedAdvisorId(pick);
-            advisorId = pick || null;
-          } finally {
-            setLoadingAdvisors(false);
+                : list[0]?.id) || null;
           }
-        } else {
-          advisorId =
-            (selectedAdvisorId && list.some((a) => a.id === selectedAdvisorId)
-              ? selectedAdvisorId
-              : list[0]?.id) || null;
         }
-        // Server auto-binds first advisor when id omitted; prefer explicit when available.
-      }
 
-      const roleLabel =
-        VIEW_AS_ROLE_OPTIONS.find((o) => o.value === viewAsRole)?.label ?? viewAsRole;
+        const roleLabel =
+          VIEW_AS_ROLE_OPTIONS.find((o) => o.value === viewAsRole)?.label ?? viewAsRole;
 
-      await enterOwnerDealership(dealershipId, {
-        viewAsRole,
-        viewAsServiceAdvisorId: viewAsRole === 'service_advisor' ? advisorId : null,
-      });
-      const latest = await onSessionRefresh();
-      if (!latest || latest.scopeMode !== 'dealership') {
-        throw new Error('Dealership entered but session did not update');
+        await enterOwnerDealership(id, {
+          viewAsRole,
+          viewAsServiceAdvisorId: viewAsRole === 'service_advisor' ? advisorId : null,
+        });
+        const latest = await onSessionRefresh();
+        if (!latest || latest.scopeMode !== 'dealership') {
+          throw new Error('Dealership entered but session did not update');
+        }
+        toast.success(`Viewing ${latest.dealershipName} as ${roleLabel}`);
+      } catch (error: unknown) {
+        clientLog.error('owner.dealership_enter_failed', error);
+        toast.error(error instanceof Error ? error.message : 'Could not enter dealership');
+      } finally {
+        enterRooftopInFlightRef.current = false;
+        setActionLoading(false);
       }
-      toast.success(`Viewing ${latest.dealershipName} as ${roleLabel}`);
-    } catch (error: unknown) {
-      clientLog.error('owner.dealership_enter_failed', error);
-      toast.error(error instanceof Error ? error.message : 'Could not enter dealership');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+    },
+    [
+      actionLoading,
+      advisors,
+      advisorRooftopId,
+      onSessionRefresh,
+      selectedAdvisorId,
+      viewAsRole,
+    ]
+  );
 
   const viewAsControls = (
     <div className="apex-view-as-controls">
@@ -490,7 +526,10 @@ export function ApexOwnerNationalShell({
                 type="button"
                 className="apex-btn-secondary touch-target"
                 disabled={actionLoading}
-                onClick={() => setView('dashboard')}
+                onClick={() => {
+                  setView('dashboard');
+                  setDealershipsError(null);
+                }}
               >
                 Back
               </button>
@@ -503,6 +542,17 @@ export function ApexOwnerNationalShell({
             </div>
             {loadingDealerships ? (
               <p className="apex-hint apex-enter-loading">Loading rooftops…</p>
+            ) : dealershipsError ? (
+              <div className="apex-error-panel apex-card" role="alert">
+                <p className="apex-hint">{dealershipsError}</p>
+                <button
+                  type="button"
+                  className="apex-btn-primary touch-target"
+                  onClick={() => void openEnterDealership()}
+                >
+                  Retry rooftops
+                </button>
+              </div>
             ) : (
               <ApexDealershipSelector
                 dealerships={dealerships}
@@ -542,11 +592,16 @@ export function ApexOwnerNationalShell({
                   className="apex-btn-primary apex-national-enter-btn touch-target"
                   // Phase 5.8/5.9 gate: "Enter dealership" + View As dual selector CTA
                   aria-label="Enter dealership — View as / enter rooftop"
-                  onClick={() => void openEnterDealership()}
+                  disabled={loadingDealerships || actionLoading}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void openEnterDealership();
+                  }}
                 >
-                  View as / enter rooftop
+                  {loadingDealerships ? 'Opening…' : 'View as / enter rooftop'}
                 </button>
-                <p className="apex-hint" style={{ marginTop: '0.5rem', maxWidth: '16rem' }}>
+                <p className="apex-hint apex-national-enter-hint">
                   Video Inspection: enter a rooftop to record bay videos and send customer
                   reports.
                 </p>
@@ -554,7 +609,10 @@ export function ApexOwnerNationalShell({
                   type="button"
                   className="apex-btn-secondary touch-target"
                   disabled={summaryLoading}
-                  onClick={() => void loadSummary()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void loadSummary();
+                  }}
                 >
                   Refresh metrics
                 </button>
