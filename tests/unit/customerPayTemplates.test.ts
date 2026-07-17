@@ -24,6 +24,16 @@ describe('Customer Pay templates', () => {
     }
   });
 
+  it('restores original A Service / B Service / LOF menu packages from seed history', () => {
+    const titles = new Set(CUSTOMER_PAY_TEMPLATES.map((t) => t.title));
+    assert.ok(titles.has('B Service'));
+    assert.ok(titles.has('A Service'));
+    assert.ok(titles.has('Lube, Oil & Filter Service'));
+    const bService = CUSTOMER_PAY_TEMPLATES.find((t) => t.title === 'B Service');
+    assert.match(bService?.preWrittenStory ?? '', /Service B/i);
+    assert.match(bService?.preWrittenStory ?? '', /oil and filter/i);
+  });
+
   it('identifies customer pay template rows by explicit flag only (H14)', () => {
     assert.equal(
       templateRowIsCustomerPay({ isCustomerPay: true, templateType: 'CustomerPay', category: 'customer' }),

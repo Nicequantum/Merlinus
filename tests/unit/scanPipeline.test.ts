@@ -92,6 +92,18 @@ describe('scan pipeline service lines', () => {
     assert.match(match?.preWrittenStory ?? '', /^Performed a complete front brake service/);
   });
 
+  it('auto-matches restored B Service / A Service menu packages from scan text', () => {
+    const b = matchCustomerPayTemplateFromScanText('B. B Service');
+    assert.equal(b?.templateTitle, 'B Service');
+    assert.match(b?.preWrittenStory ?? '', /Service B/i);
+
+    const a = matchCustomerPayTemplateFromScanText('C. A Service — scheduled maintenance');
+    assert.equal(a?.templateTitle, 'A Service');
+
+    // Bare "service" / unrelated concerns must not map to lettered packages.
+    assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
+  });
+
   it('does not match ambiguous warranty concerns', () => {
     assert.equal(matchCustomerPayTemplateFromScanText('Customer states vibration at highway speed'), null);
   });

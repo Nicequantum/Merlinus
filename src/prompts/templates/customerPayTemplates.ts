@@ -16,6 +16,26 @@ export interface CustomerPayTemplate {
 }
 
 export const CUSTOMER_PAY_TEMPLATES: CustomerPayTemplate[] = [
+  // ─── Restored from original storyTemplateSeed (68f28e7) — menu maintenance packages ───
+  {
+    title: 'B Service',
+    description:
+      'Scheduled Mercedes-Benz Service B maintenance per maintenance booklet and mileage interval.',
+    preWrittenStory:
+      'Performed Service B per Mercedes-Benz maintenance booklet: replaced engine oil and filter, reset service indicator, completed maintenance inspection per workshop manual, checked and topped fluids as required, inspected brakes/tires/belts/hoses/lights/wipers, verified tire pressures, and road tested vehicle. Returned vehicle to customer with service documentation and next service due recommendation.',
+  },
+  {
+    title: 'A Service',
+    description: 'Scheduled Mercedes-Benz Service A maintenance per maintenance booklet.',
+    preWrittenStory:
+      'Performed Service A per Mercedes-Benz maintenance booklet: replaced engine oil and filter, reset service indicator, completed maintenance inspection, checked fluids and tire pressures, inspected brakes and tires, and verified proper operation on road test. Vehicle returned to customer.',
+  },
+  {
+    title: 'Lube, Oil & Filter Service',
+    description: 'Routine lube, oil, and filter service at interval.',
+    preWrittenStory:
+      'Performed lube, oil, and filter service: drained engine oil, replaced oil filter, installed approved engine oil to specification, checked and topped fluids as needed, reset service reminder if applicable, and verified no leaks. Road tested — no issues noted.',
+  },
   {
     title: 'Front Brake Job',
     description: 'Complete front brake rotor and pad replacement with hardware service.',

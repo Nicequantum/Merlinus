@@ -147,6 +147,22 @@ function scoreCustomerPayTemplateMatch(scanText: string, templateTitle: string):
   const coverage = matchedTokens.length / titleTokens.length;
   if (coverage < 0.66) return 0;
 
+  // Guardrail: lettered maintenance packages must match letter + service (not bare "service").
+  if (titleNorm === 'b service' && !/\bb\s*service\b/.test(normalized)) {
+    return 0;
+  }
+  if (titleNorm === 'a service' && !/\ba\s*service\b/.test(normalized)) {
+    return 0;
+  }
+  // LOF should not steal pure A/B Service package lines.
+  if (
+    titleNorm.includes('lube') &&
+    titleNorm.includes('oil') &&
+    (/\ba\s*service\b/.test(normalized) || /\bb\s*service\b/.test(normalized)) &&
+    !/\blube\b|\blof\b|oil\s*(and|&)?\s*filter\b/.test(normalized)
+  ) {
+    return 0;
+  }
   // Guardrail: disambiguate front vs rear brake templates on partial matches.
   if (titleNorm.includes('front brake') && normalized.includes('rear') && !normalized.includes('front')) {
     return 0;
