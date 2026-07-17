@@ -1642,3 +1642,121 @@
 .benz-app-footer-sep {
   @apply mx-1.5 opacity-50;
 }
+/* -- Video MPI capture (fullscreen-friendly mobile shell) ----------------- */
+.video-mpi-capture-shell {
+  position: relative;
+  width: 100%;
+  border-radius: var(--benz-radius-lg);
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--benz-border);
+}
+
+.video-mpi-capture-shell--live {
+  /* Pseudo-fullscreen on phones/tablets when Fullscreen API is unavailable (iOS). */
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border-radius: 0;
+  border: none;
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: #000;
+}
+
+.video-mpi-capture-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  background: #000;
+}
+
+.video-mpi-capture-shell--live .video-mpi-capture-stage {
+  min-height: 100%;
+  height: 100%;
+}
+
+.video-mpi-capture-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+}
+
+.video-mpi-capture-shell--live .video-mpi-capture-video {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+
+.video-mpi-capture-chrome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.25rem, env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    transparent 28%,
+    transparent 72%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+.video-mpi-rec-badge {
+  pointer-events: none;
+  align-self: flex-start;
+  background: #b91c1c;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  animation: video-mpi-rec-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes video-mpi-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.video-mpi-stop-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  min-width: 11rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 999px;
+  border: none;
+  background: #b91c1c;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.video-mpi-stop-btn:disabled {
+  opacity: 0.65;
+}
+
+/* When live fullscreen, keep underlying page from scrolling under the shell */
+body:has(.video-mpi-capture-shell--live) {
+  overflow: hidden;
+}
