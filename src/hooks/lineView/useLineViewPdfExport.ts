@@ -2,10 +2,15 @@
 
 import { useCallback } from 'react';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { clientLog } from '@/lib/clientLog';
 import { getWarrantyStoryTextareaValue } from '@/lib/lineViewUtils';
 import type { RepairLine, RepairOrder } from '@/types';
 import { exportWarrantyStoryPdf } from '@/utils/pdfExport';
+
+function lineT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'line', ...options });
+}
 
 interface UseLineViewPdfExportInput {
   ro: RepairOrder;
@@ -23,7 +28,7 @@ export function useLineViewPdfExport({
   return useCallback(async () => {
     const storyText = getWarrantyStoryTextareaValue(line.id, line.warrantyStory);
     if (!storyText.trim()) {
-      toast.error(isCustomerPayLine ? 'No story to export yet' : 'No warranty story to export');
+      toast.error(isCustomerPayLine ? lineT('pdfNoStoryCp') : lineT('pdfNoStory'));
       return;
     }
 
@@ -57,10 +62,10 @@ export function useLineViewPdfExport({
         clientLog.warn('Could not record PDF export audit log', err);
       });
 
-      toast.success('PDF downloaded successfully');
+      toast.success(lineT('pdfExported'));
     } catch (err) {
       clientLog.error('PDF export failed', err);
-      toast.error('PDF export failed — try again');
+      toast.error(lineT('pdfFailed'));
     }
   }, [ro, line, technicianName, isCustomerPayLine]);
 }

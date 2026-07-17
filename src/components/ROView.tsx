@@ -1,4 +1,7 @@
+'use client';
+
 import { ChevronRight, ClipboardList, FileText, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { BenzEmptyState } from '@/components/BenzEmptyState';
 import { XentryDiagnosticSection } from '@/components/XentryDiagnosticSection';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
@@ -70,24 +73,26 @@ export function ROView({
   onOpenLine,
   onDeleteRO,
 }: ROViewProps) {
+  const { t } = useTranslation('ro');
+  const { t: tCommon } = useTranslation('common');
   const vehicleSummary =
-    [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || 'Vehicle';
-  const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} mi` : '';
+    [ro.vehicle.year, ro.vehicle.make, ro.vehicle.model].filter(Boolean).join(' ') || tCommon('vehicle');
+  const mileageStr = ro.vehicle.mileageIn ? `${ro.vehicle.mileageIn} ${tCommon('mi')}` : '';
 
   return (
     <div className="benz-page">
       <div className="benz-ro-header flex justify-between items-start gap-4">
         <div className="min-w-0">
           <div className="benz-ro-title">{ro.roNumber}</div>
-          <div className="benz-ro-subtitle">Repair Order · Pre-populated from scan or manual entry</div>
+          <div className="benz-ro-subtitle">{t('subtitle')}</div>
           {(ro.serviceAdvisor?.displayName || ro.serviceAdvisorName) && (
             <div className="benz-advisor-badge">
-              Advisor: {ro.serviceAdvisor?.displayName || ro.serviceAdvisorName}
+              {t('advisor', { name: ro.serviceAdvisor?.displayName || ro.serviceAdvisorName })}
             </div>
           )}
         </div>
         <button onClick={onDone} className="benz-link text-sm shrink-0 pt-1">
-          Done
+          {tCommon('done')}
         </button>
       </div>
 
@@ -95,24 +100,28 @@ export function ROView({
         <div className="text-sm font-semibold tracking-tight text-benz-primary">
           {vehicleSummary}
           {mileageStr ? ` · ${mileageStr}` : ''}
-          {ro.vehicle.vin ? ` · VIN ${ro.vehicle.vin}` : ''}
+          {ro.vehicle.vin ? ` · ${t('vin')} ${ro.vehicle.vin}` : ''}
         </div>
         {ro.vehicle.engine && (
-          <div className="text-xs text-benz-secondary mt-1">Engine: {ro.vehicle.engine}</div>
+          <div className="text-xs text-benz-secondary mt-1">
+            {t('engine', { engine: ro.vehicle.engine })}
+          </div>
         )}
         {ro.customer?.name && (
-          <div className="text-xs text-benz-secondary mt-1">Customer: {ro.customer.name}</div>
+          <div className="text-xs text-benz-secondary mt-1">
+            {t('customer', { name: ro.customer.name })}
+          </div>
         )}
       </div>
 
       <div className="benz-card p-5 sm:p-6 mb-6 space-y-4 min-w-0 w-full">
         <div>
-          <div className="benz-section-title mb-1">RO Details</div>
-          <p className="benz-hint">From first scan block — RO#, vehicle fields, and complaints from any page</p>
+          <div className="benz-section-title mb-1">{t('detailsTitle')}</div>
+          <p className="benz-hint">{t('detailsHint')}</p>
         </div>
 
         <div>
-          <label className="benz-label">RO Number</label>
+          <label className="benz-label">{t('roNumber')}</label>
           <StableInput
             fieldKey={`${ro.id}-roNumber`}
             value={ro.roNumber}
@@ -124,7 +133,7 @@ export function ROView({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="min-w-0">
-            <label className="benz-label">Year</label>
+            <label className="benz-label">{t('year')}</label>
             <StableInput
               fieldKey={`${ro.id}-year`}
               value={ro.vehicle.year}
@@ -134,7 +143,7 @@ export function ROView({
             />
           </div>
           <div className="min-w-0">
-            <label className="benz-label">Make</label>
+            <label className="benz-label">{t('make')}</label>
             <StableInput
               fieldKey={`${ro.id}-make`}
               value={ro.vehicle.make}
@@ -144,7 +153,7 @@ export function ROView({
             />
           </div>
           <div className="min-w-0">
-            <label className="benz-label">Model</label>
+            <label className="benz-label">{t('model')}</label>
             <StableInput
               fieldKey={`${ro.id}-model`}
               value={ro.vehicle.model}
@@ -154,7 +163,7 @@ export function ROView({
             />
           </div>
           <div className="min-w-0">
-            <label className="benz-label">Mileage In</label>
+            <label className="benz-label">{t('mileageIn')}</label>
             <StableInput
               fieldKey={`${ro.id}-mileageIn`}
               value={ro.vehicle.mileageIn}
@@ -164,7 +173,7 @@ export function ROView({
             />
           </div>
           <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-            <label className="benz-label">Mileage Out</label>
+            <label className="benz-label">{t('mileageOut')}</label>
             <StableInput
               fieldKey={`${ro.id}-mileageOut`}
               value={ro.vehicle.mileageOut}
@@ -176,7 +185,7 @@ export function ROView({
         </div>
 
         <div>
-          <label className="benz-label">VIN</label>
+          <label className="benz-label">{t('vin')}</label>
           <div className="flex gap-2 min-w-0">
             <StableInput
               fieldKey={`${ro.id}-vin`}
@@ -191,25 +200,25 @@ export function ROView({
               disabled={ro.vehicle.vin.length < 17}
               className="secondary-btn px-4 text-xs font-semibold whitespace-nowrap disabled:opacity-50 h-[42px]"
             >
-              Decode
+              {t('decode')}
             </button>
           </div>
-          <p className="benz-hint mt-1.5">NHTSA vPIC — auto-fills year, make, model, engine</p>
+          <p className="benz-hint mt-1.5">{t('vinHint')}</p>
         </div>
 
         <div>
-          <label className="benz-label">Engine</label>
+          <label className="benz-label">{t('engineLabel')}</label>
           <StableInput
             fieldKey={`${ro.id}-engine`}
             value={ro.vehicle.engine || ''}
             onChange={(v) => onUpdateVehicle('engine', v)}
-            placeholder="3.0L 6-cyl (from VIN decode)"
+            placeholder={t('enginePlaceholder')}
             className="benz-input"
           />
         </div>
 
         <div>
-          <label className="benz-label">Customer Name</label>
+          <label className="benz-label">{t('customerName')}</label>
           <StableInput
             fieldKey={`${ro.id}-customer`}
             value={ro.customer?.name || ''}
@@ -222,11 +231,11 @@ export function ROView({
         <div className="benz-divider pt-5">
           <div className="benz-section-header">
             <div>
-              <div className="benz-section-title">Customer Complaints</div>
-              <p className="benz-hint mt-1">Labels A, B, C… from any scan page — edit as needed</p>
+              <div className="benz-section-title">{t('complaintsTitle')}</div>
+              <p className="benz-hint mt-1">{t('complaintsHint')}</p>
             </div>
             <button onClick={onAddComplaint} className="benz-link text-xs flex items-center gap-1 shrink-0">
-              <Plus size={14} /> Add
+              <Plus size={14} /> {t('add')}
             </button>
           </div>
 
@@ -243,15 +252,15 @@ export function ROView({
                         fieldKey={stableId}
                         value={c}
                         onChange={(v) => onEditComplaint(idx, v)}
-                        placeholder="Describe customer concern or symptom..."
+                        placeholder={t('complaintPlaceholder')}
                         className="benz-textarea min-h-[52px]"
                       />
                     </div>
                     <button
                       onClick={() => onRemoveComplaint(idx)}
                       className="benz-danger-icon-btn mt-2"
-                      title="Remove complaint"
-                      aria-label="Remove complaint"
+                      title={t('removeComplaint')}
+                      aria-label={t('removeComplaint')}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -263,15 +272,15 @@ export function ROView({
             <BenzEmptyState
               compact
               icon={ClipboardList}
-              title="No complaints yet"
-              hint="Add manually or rescan the repair order to extract A, B, C…"
-              actionLabel="Add complaint"
+              title={t('noComplaints')}
+              hint={t('noComplaintsHint')}
+              actionLabel={t('addComplaint')}
               onAction={onAddComplaint}
               className="mb-2"
             />
           )}
           <button onClick={onAddComplaint} className="benz-link text-xs mt-2">
-            + Add another complaint
+            {t('addAnotherComplaint')}
           </button>
         </div>
       </div>
@@ -297,11 +306,11 @@ export function ROView({
 
       <div className="benz-section-header px-0.5">
         <div>
-          <div className="text-sm font-semibold text-benz-silver tracking-wide">Repair Lines</div>
-          <p className="benz-hint mt-0.5">Complaints A/B/C map to lines</p>
+          <div className="text-sm font-semibold text-benz-silver tracking-wide">{t('repairLines')}</div>
+          <p className="benz-hint mt-0.5">{t('repairLinesHint')}</p>
         </div>
         <button onClick={onAddRepairLine} className="benz-link text-sm flex items-center gap-1 font-semibold">
-          <Plus size={16} /> Add Line
+          <Plus size={16} /> {t('addLine')}
         </button>
       </div>
 
@@ -314,39 +323,38 @@ export function ROView({
           >
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-[15px] tracking-tight break-words leading-snug">
-                Line {line.lineNumber}: {line.description}
+                {t('lineLabel', { number: line.lineNumber, description: line.description })}
               </div>
               {line.customerConcern && (
                 <div className="text-xs text-benz-secondary mt-1 break-words leading-relaxed line-clamp-2">
                   {line.customerConcern}
                 </div>
               )}
-              {line.warrantyStory && (
-                isCustomerPayRepairLine(line) ? (
+              {line.warrantyStory &&
+                (isCustomerPayRepairLine(line) ? (
                   <span className="benz-story-badge benz-story-badge-cp benz-story-badge-compact mt-1.5">
                     <FileText size={12} aria-hidden />
-                    Instant story
+                    {t('instantStory')}
                   </span>
                 ) : (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                     <span className="benz-story-badge benz-story-badge-ai benz-story-badge-compact">
                       <Sparkles size={12} aria-hidden />
-                      AI story ready
+                      {t('aiStoryReady')}
                     </span>
                     {line.storyQualityAudit &&
                       isStoryQualityCurrent(line.storyQualityAudit, line.warrantyStory) && (
                         <span className="benz-story-badge benz-story-badge-compact text-benz-blue border-benz-blue/30 bg-benz-blue/10">
-                          MI {line.storyQualityAudit.score}/100
+                          {t('miScore', { score: line.storyQualityAudit.score })}
                         </span>
                       )}
                     {line.storyCertification && (
                       <span className="benz-story-badge benz-story-badge-compact text-benz-green border-benz-green/30 bg-benz-green/10">
-                        Certified
+                        {t('certified')}
                       </span>
                     )}
                   </div>
-                )
-              )}
+                ))}
               {hasSoldMetrics(line.soldMetrics) && line.soldMetrics ? (
                 <SoldMetricsSummary metrics={line.soldMetrics} compact />
               ) : null}
@@ -358,14 +366,14 @@ export function ROView({
 
       <div className="flex flex-col gap-3">
         <button onClick={onDone} className="w-full secondary-btn h-12 text-sm font-medium">
-          Back to list
+          {t('backToList')}
         </button>
         <button
           onClick={onDeleteRO}
           className="w-full benz-danger-btn h-12 flex items-center justify-center gap-2"
         >
           <Trash2 size={16} />
-          Delete repair order
+          {t('deleteRo')}
         </button>
       </div>
     </div>

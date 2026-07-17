@@ -1,3 +1,5 @@
+import { ensureI18n } from '@/i18n/config';
+
 /** RO document scan vs line/RO Xentry diagnostic — mutually exclusive vision pipelines. */
 export type VisionPipelineId = 'ro_scan' | 'xentry';
 
@@ -17,6 +19,6 @@ export interface VisionPipelineControls {
 
 export function visionPipelineBlockedMessage(blocker: VisionPipelineId): string {
   return blocker === 'xentry'
-    ? 'Xentry diagnostic processing is in progress — wait or cancel it first.'
-    : 'Repair order scan is in progress — wait or cancel it first.';
+    ? ensureI18n().t('pipelineBlockedXentry', { ns: 'xentry' })
+    : ensureI18n().t('pipelineBlockedRo', { ns: 'xentry' });
 }

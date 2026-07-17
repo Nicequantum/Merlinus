@@ -30,7 +30,7 @@ import {
 } from '@/lib/apex/viewAs';
 import { useTranslation } from 'react-i18next';
 import { localeToSpeechLang } from '@/lib/i18n/locales';
-import { setAppLanguage } from '@/i18n/config';
+import { ensureI18n, setAppLanguage } from '@/i18n/config';
 import type { TechnicianSession } from '@/types';
 
 const ManagerDashboard = dynamic(
@@ -505,7 +505,7 @@ export function BenzTechAuthenticatedApp({
                   lineId,
                   hasGenerateStory: typeof ro.generateStory === 'function',
                 });
-                toast.error('Story generation is unavailable — refresh and try again');
+                toast.error(ensureI18n().t('generateUnavailable', { ns: 'story' }));
                 return;
               }
               companion.publishActivity('Generating warranty story', {

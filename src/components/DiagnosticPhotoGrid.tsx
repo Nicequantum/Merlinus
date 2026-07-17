@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { AlertCircle, Check, Loader2, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import type { ImageAttachment, PendingImage } from '@/types';
 
@@ -30,9 +31,11 @@ function toLightboxAttachment(img: PendingImage): ImageAttachment {
 function PendingThumb({
   img,
   onOpen,
+  previewLabel,
 }: {
   img: PendingImage;
   onOpen: () => void;
+  previewLabel: string;
 }) {
   const proxyUrl = img.attachment?.url;
   const [useProxy, setUseProxy] = useState(Boolean(proxyUrl));
@@ -43,7 +46,7 @@ function PendingThumb({
       type="button"
       onClick={onOpen}
       className="relative block h-20 w-full focus:outline-none focus:ring-2 focus:ring-benz-accent/50"
-      aria-label={`Preview ${img.name}`}
+      aria-label={previewLabel}
     >
       <Image
         key={displayUrl}
@@ -66,6 +69,7 @@ export function DiagnosticPhotoGrid({
   isProcessing = false,
   onDeleteImage,
 }: DiagnosticPhotoGridProps) {
+  const { t } = useTranslation('common');
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = images.find((img) => img.id === activeId) ?? null;
 
@@ -82,7 +86,11 @@ export function DiagnosticPhotoGrid({
               key={img.id}
               className="relative rounded-benz overflow-hidden border border-[var(--benz-border)]"
             >
-              <PendingThumb img={img} onOpen={() => setActiveId(img.id)} />
+              <PendingThumb
+                img={img}
+                onOpen={() => setActiveId(img.id)}
+                previewLabel={t('viewImage')}
+              />
 
               {img.uploadStatus === 'uploading' && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -116,7 +124,7 @@ export function DiagnosticPhotoGrid({
                     onDeleteImage?.(img.id);
                   }}
                   className="absolute top-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white hover:bg-benz-red/90 transition-colors"
-                  aria-label={`Delete ${img.name}`}
+                  aria-label={t('deleteAria', { name: img.name })}
                 >
                   <Trash2 size={14} />
                 </button>

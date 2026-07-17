@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { api, ApiError } from '@/lib/api';
 import { debounce } from '@/lib/debounce';
 import { mergePersistedWithClient } from '@/lib/repairOrderMerge';
@@ -16,6 +17,10 @@ import { cloneRepairOrderForUpdate } from '@/utils/cloneRepairOrder';
 import { repairOrderToSummary } from '@/utils/repairOrderSummary';
 import type { RepairLine, RepairOrder, RepairOrderSummary } from '@/types';
 import { ensureComplaintIds } from '@/utils/repairOrderFactory';
+
+function roT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'ro', ...options });
+}
 
 /** @deprecated use mergePersistedWithClient — kept for tests/call sites. */
 export function preserveClientWarrantyStories(
@@ -126,7 +131,7 @@ export function useROPersistence(
         dirtyRef.current = false;
         lastSavedRevisionRef.current = clientRevisionRef.current;
         pendingLinePatchesRef.current.clear();
-        toast.message('Loaded server version — your device edits were replaced');
+        toast.message(roT('saveConflictServer'));
         return { repairOrder: serverCopy, fullyApplied: true };
       }
 
@@ -135,7 +140,7 @@ export function useROPersistence(
       roRef.current = withToken;
       setCurrentRO(withToken);
       const { repairOrder } = await api.updateRepairOrder(withToken.id, withToken);
-      toast.success('Kept your edits and saved');
+      toast.success(roT('saveConflictKept'));
       return { repairOrder, fullyApplied: false };
     },
     [applySavedRo, roRef, setCurrentRO]
@@ -219,7 +224,7 @@ export function useROPersistence(
           if (ro) void saveROImmediateRef.current(ro);
           return;
         }
-        toast.error(e instanceof Error ? e.message : 'Failed to save line changes');
+        toast.error(e instanceof Error ? e.message : roT('saveLineFailed'));
       });
     }, 450)
   );
@@ -238,7 +243,7 @@ export function useROPersistence(
             if (ro) void saveROImmediateRef.current(ro);
             return;
           }
-          toast.error(e instanceof Error ? e.message : 'Failed to save line changes');
+          toast.error(e instanceof Error ? e.message : roT('saveLineFailed'));
         });
       } else {
         debouncedLinePatchRef.current();
@@ -338,7 +343,7 @@ export function useROPersistence(
       if (maxWaitMs && maxWaitMs > 0) {
         const ok = await awaitRepairOrderSaveQueueWithTimeout(maxWaitMs, roId);
         if (!ok) {
-          toast.message('Save still in progress — continuing with latest local data');
+          toast.message(roT('saveInProgress'));
         }
         return;
       }

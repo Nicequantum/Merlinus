@@ -104,7 +104,7 @@ export function useROStoryWorkflow(
       if (!latestRO) return;
       const roId = latestRO.id;
       if (!line) {
-        toast.error('Repair line not found — refresh the RO and try again');
+        toast.error(storyT('lineNotFound'));
         return;
       }
 
@@ -127,10 +127,10 @@ export function useROStoryWorkflow(
           setters.setCdkSanitizedByLine((prev) => ({ ...prev, [lineId]: true }));
         }
         if (!result.idempotent) {
-          toast.success(`"${result.templateTitle}" applied — Customer Pay instant story`);
+          toast.success(storyT('cpApplied', { title: result.templateTitle }));
         }
       } catch (error: unknown) {
-        toast.error(getStoryWorkflowErrorMessage(error, 'Failed to apply Customer Pay template'));
+        toast.error(getStoryWorkflowErrorMessage(error, storyT('cpApplyFailed')));
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setters object is stable for hook lifetime
@@ -153,9 +153,9 @@ export function useROStoryWorkflow(
           }),
           { immediate: true }
         );
-        toast.success('Customer Pay mode cleared — warranty AI generation is available');
+        toast.success(storyT('cpCleared'));
       } catch (error: unknown) {
-        toast.error(getStoryWorkflowErrorMessage(error, 'Failed to clear Customer Pay mode'));
+        toast.error(getStoryWorkflowErrorMessage(error, storyT('cpClearFailed')));
       }
     },
     [deps, refs.roRef]
@@ -257,11 +257,11 @@ export function useROStoryWorkflow(
   const scoreStory = useCallback(
     async (lineId: string, storyTextOverride?: string) => {
       if (refs.storyScoringInFlightRef.current) {
-        toast.message('Story audit already in progress…');
+        toast.message(storyT('scoreInProgress'));
         return;
       }
       if (refs.storyGenerationInFlightRef.current) {
-        toast.error('Wait for story generation to finish before auditing');
+        toast.error(storyT('scoreWaitGenerate'));
         return;
       }
 
@@ -269,7 +269,7 @@ export function useROStoryWorkflow(
       refs.storyScoringInFlightRef.current = true;
       setters.setScoringLineId(lineId);
       setters.setIsScoring(true);
-      toast.message('Running MI quality audit…');
+      toast.message(storyT('scoreRunning'));
 
       try {
         // Lock + loading before flush so the first click always gets feedback (was multi-click bug).
@@ -277,17 +277,17 @@ export function useROStoryWorkflow(
 
         const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (isCustomerPayRepairLine(targetLine)) {
-          toast.message('Customer Pay stories skip AI audit — edit the text if needed.');
+          toast.message(storyT('scoreCustomerPaySkip'));
           return;
         }
         if (!latestRO) {
-          toast.error('Repair order not loaded — go back and reopen the line');
+          toast.error(storyT('roNotLoaded'));
           return;
         }
         const roId = latestRO.id;
         const storyText = (storyTextOverride?.trim() || targetLine?.warrantyStory?.trim()) ?? '';
         if (!storyText) {
-          toast.error('Generate or write a warranty story before running the audit');
+          toast.error(storyT('scoreNeedStory'));
           return;
         }
 
@@ -305,11 +305,11 @@ export function useROStoryWorkflow(
 
         const activeRO = refs.roRef.current;
         if (!activeRO || activeRO.id !== roId) {
-          toast.success('Audit complete — reopen the repair line to view the score');
+          toast.success(storyT('scoreCompleteReopen'));
           return;
         }
         if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
-          toast.message('Story changed during audit — run Audit Story again.');
+          toast.message(storyT('scoreStale'));
           return;
         }
 
@@ -335,11 +335,11 @@ export function useROStoryWorkflow(
           }),
           { skipPersist: true }
         );
-        toast.success(`MI audit score: ${quality.score}/100 (${quality.grade})`);
+        toast.success(storyT('scoreComplete', { score: quality.score, grade: quality.grade }));
       } catch (error: unknown) {
         if (seq === refs.scoreStorySeqRef.current) {
           clientLog.error('story.audit_failed', error);
-          toast.error(getStoryWorkflowErrorMessage(error, 'Story audit failed'));
+          toast.error(getStoryWorkflowErrorMessage(error, storyT('scoreFailed')));
         }
       } finally {
         if (seq === refs.scoreStorySeqRef.current) {
@@ -355,15 +355,15 @@ export function useROStoryWorkflow(
   const reviewStory = useCallback(
     async (lineId: string, storyTextOverride?: string) => {
       if (refs.storyReviewInFlightRef.current) {
-        toast.message('AI review already in progress…');
+        toast.message(storyT('reviewInProgress'));
         return;
       }
       if (refs.storyScoringInFlightRef.current) {
-        toast.error('Wait for the audit to finish before running a full review');
+        toast.error(storyT('reviewWaitAudit'));
         return;
       }
       if (refs.storyGenerationInFlightRef.current) {
-        toast.error('Wait for story generation to finish before reviewing');
+        toast.error(storyT('reviewWaitGenerate'));
         return;
       }
 
@@ -373,24 +373,24 @@ export function useROStoryWorkflow(
       refs.storyReviewInFlightRef.current = true;
       setters.setReviewingLineId(lineId);
       setters.setIsReviewing(true);
-      toast.message(`Running full ${MI_PRODUCT_LABEL} review…`);
+      toast.message(storyT('reviewRunning', { mi: MI_PRODUCT_LABEL }));
 
       try {
         await deps.flushPendingSave({ maxWaitMs: 2_500 });
 
         const { ro: latestRO, line: targetLine } = getLatestRoAndLine(refs.roRef, lineId);
         if (isCustomerPayRepairLine(targetLine)) {
-          toast.message('Customer Pay stories skip AI review — edit the text if needed.');
+          toast.message(storyT('reviewCustomerPaySkip'));
           return;
         }
         if (!latestRO) {
-          toast.error('Repair order not loaded — go back and reopen the line');
+          toast.error(storyT('roNotLoaded'));
           return;
         }
         const roId = latestRO.id;
         const storyText = (storyTextOverride?.trim() || targetLine?.warrantyStory?.trim()) ?? '';
         if (!storyText) {
-          toast.error('Write or generate a warranty story before reviewing');
+          toast.error(storyT('reviewNeedStory'));
           return;
         }
 
@@ -399,11 +399,11 @@ export function useROStoryWorkflow(
 
         const activeRO = refs.roRef.current;
         if (!activeRO || activeRO.id !== roId) {
-          toast.success('Review complete — reopen the repair line to view feedback');
+          toast.success(storyT('reviewCompleteReopen'));
           return;
         }
         if (isWarrantyStoryStale(activeRO, lineId, storyText)) {
-          toast.message('Story changed during review — run the review again.');
+          toast.message(storyT('reviewStale'));
           return;
         }
 
@@ -430,11 +430,17 @@ export function useROStoryWorkflow(
           }),
           { skipPersist: true }
         );
-        toast.success(`${MI_PRODUCT_LABEL} review complete — ${review.score}/100 (${review.grade})`);
+        toast.success(
+          storyT('reviewCompleteScore', {
+            mi: MI_PRODUCT_LABEL,
+            score: review.score,
+            grade: review.grade,
+          })
+        );
       } catch (error: unknown) {
         if (seq === refs.reviewStorySeqRef.current) {
           clientLog.error('story.review_failed', error);
-          toast.error(getStoryWorkflowErrorMessage(error, 'Story review failed'));
+          toast.error(getStoryWorkflowErrorMessage(error, storyT('reviewFailed')));
         }
       } finally {
         if (seq === refs.reviewStorySeqRef.current) {

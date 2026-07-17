@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { api, ApiError } from '@/lib/api';
 import type { RepairOrderSummary, TechnicianSession } from '@/types';
 import {
@@ -9,6 +10,14 @@ import {
   mergeRepairOrders,
   PREVIOUS_PAGE_SIZE,
 } from '@/hooks/repairOrders/roListUtils';
+
+function roT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'ro', ...options });
+}
+
+function homeT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'home', ...options });
+}
 
 function isComplianceBlockedError(error: ApiError): boolean {
   return (
@@ -97,7 +106,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
         onComplianceRequiredRef.current?.();
         return;
       }
-      setListError('Could not load repair orders. Check your connection and try again.');
+      setListError(homeT('listLoadFailed'));
       // Do not rethrow — effect-driven loads must not produce unhandled rejections.
       // retryListLoad can call refreshList and still see listError.
     } finally {
@@ -132,7 +141,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
           onComplianceRequiredRef.current?.();
           return;
         }
-        toast.error('Could not load previous repair orders — try again.');
+        toast.error(roT('previousLoadFailed'));
       } finally {
         setPreviousLoading(false);
         setPreviousLoadingMore(false);
@@ -162,7 +171,7 @@ export function useROList(session: TechnicianSession | null, options: UseROListO
     try {
       await refreshList();
     } catch {
-      toast.error('Still unable to load repair orders — check Wi‑Fi or ask your manager.');
+      toast.error(roT('listLoadFailedRetry'));
     }
   }, [refreshList]);
 

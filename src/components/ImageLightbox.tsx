@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ImageAttachment } from '@/types';
 
 const MIN_ZOOM = 1;
@@ -22,6 +23,7 @@ export function ImageLightbox({
   onClose,
   onDelete,
 }: ImageLightboxProps) {
+  const { t } = useTranslation('common');
   const [index, setIndex] = useState(() =>
     Math.min(Math.max(startIndex, 0), Math.max(images.length - 1, 0))
   );
@@ -112,13 +114,13 @@ export function ImageLightbox({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Image preview"
+      aria-label={t('viewImage')}
     >
       <button
         type="button"
         onClick={onClose}
         className="absolute top-4 right-4 z-[101] flex h-11 w-11 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white transition-colors touch-target"
-        aria-label="Close image"
+        aria-label={t('closePreview')}
       >
         <X size={22} />
       </button>
@@ -131,7 +133,7 @@ export function ImageLightbox({
             setZoom((current) => Math.min(MAX_ZOOM, current + ZOOM_STEP));
           }}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white"
-          aria-label="Zoom in"
+          aria-label={t('zoomIn')}
         >
           <ZoomIn size={18} />
         </button>
@@ -146,7 +148,7 @@ export function ImageLightbox({
             });
           }}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white"
-          aria-label="Zoom out"
+          aria-label={t('zoomOut')}
         >
           <ZoomOut size={18} />
         </button>
@@ -163,10 +165,10 @@ export function ImageLightbox({
             onDelete(image);
           }}
           className="absolute top-4 left-4 z-[101] flex h-11 items-center gap-2 rounded-full benz-danger-btn px-4 text-sm touch-target border-none"
-          aria-label="Delete image"
+          aria-label={t('deleteImage')}
         >
           <Trash2 size={18} />
-          Delete
+          {t('delete')}
         </button>
       )}
 
@@ -179,7 +181,7 @@ export function ImageLightbox({
               goPrev();
             }}
             className="absolute left-3 top-1/2 z-[101] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white"
-            aria-label="Previous image"
+            aria-label={t('previousImage')}
           >
             <ChevronLeft size={24} />
           </button>
@@ -190,7 +192,7 @@ export function ImageLightbox({
               goNext();
             }}
             className="absolute right-3 top-1/2 z-[101] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-benz-surface/80 border border-benz-surface-3 text-benz-silver hover:text-white"
-            aria-label="Next image"
+            aria-label={t('nextImage')}
           >
             <ChevronRight size={24} />
           </button>

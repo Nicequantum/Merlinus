@@ -1,4 +1,5 @@
 import type { RepairLine, TechnicianDetailPrompt } from '@/types';
+import { ensureI18n } from '@/i18n/config';
 import { AUDIT_ENHANCEMENT_NOTES_MARKER } from '@/prompts/story/shared/regenerateRules';
 import { mergePendingCorrectionsIntoNotes } from '@/lib/storyRegenerateGuard';
 import {
@@ -89,16 +90,17 @@ export function applyAllTechnicianDetails(
 }
 
 export function technicianDetailActionLabel(field: TechnicianDetailPrompt['field']): string {
+  const t = (key: string) => ensureI18n().t(key, { ns: 'line' });
   switch (field) {
     case 'technicianNotes':
-      return 'Add to Story + Notes';
+      return t('addToStoryNotes');
     case 'customerConcern':
-      return 'Add to Story + Concern';
+      return t('addToStoryConcern');
     case 'diagnostic':
-      return 'Add Diagnostic to Story';
+      return t('addToStory');
     case 'workflow':
-      return 'Add Workflow to Story';
+      return t('addToStory');
     default:
-      return 'Add to Story';
+      return t('addToStory');
   }
 }

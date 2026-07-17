@@ -77,7 +77,7 @@ describe('story generation performance settings', () => {
 
   test('generation phase messages cover story writing only', () => {
     assert.equal(STORY_GENERATION_PHASES.length, 3);
-    assert.match(STORY_GENERATION_PHASES[0], /Thinking/i);
-    assert.match(STORY_GENERATION_PHASES[2], /Polishing/i);
+    assert.equal(STORY_GENERATION_PHASES[0], 'phaseThinking');
+    assert.equal(STORY_GENERATION_PHASES[2], 'phasePolishing');
   });
 });

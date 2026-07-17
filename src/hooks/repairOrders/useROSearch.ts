@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { api, ApiError } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
 import { isRequestAborted } from '@/lib/requestAbort';
@@ -12,6 +13,10 @@ import {
   SEARCH_PAGE_SIZE,
   sortRepairOrdersNewestFirst,
 } from '@/hooks/repairOrders/roListUtils';
+
+function homeT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'home', ...options });
+}
 
 interface UseROSearchOptions {
   session: TechnicianSession | null;
@@ -56,7 +61,7 @@ export function useROSearch({
           if (isRequestAborted(error) || controller.signal.aborted) return;
           if (error instanceof ApiError && error.status === 401) return;
           clientLog.warn('Repair order search failed', error);
-          toast.message('Search failed — try again');
+          toast.message(homeT('searchFailed'));
         })
         .finally(() => {
           if (seq === searchSeqRef.current) setSearchLoading(false);

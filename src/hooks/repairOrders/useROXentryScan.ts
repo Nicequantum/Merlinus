@@ -12,8 +12,8 @@ import {
   type VisionPipelineId,
   visionPipelineBlockedMessage,
 } from '@/hooks/visionPipeline';
+import { ensureI18n } from '@/i18n/config';
 import { clientLog } from '@/lib/clientLog';
-import { MI_PRODUCT_LABEL } from '@/lib/grokModels';
 import { isRequestAborted } from '@/lib/requestAbort';
 import { xentryImageNeedsAnalysis } from '@/lib/xentryAnalysisState';
 import { warmupOcrWorker } from '@/services/ocr';
@@ -31,6 +31,10 @@ import { normalizeScanFiles } from '@/utils/scanFileHelpers';
 import { fetchImageAttachmentAsFile, uploadFileAsAttachment } from '@/utils/uploadHelpers';
 
 export type { XentryTarget } from '@/hooks/repairOrders/xentryDataModel';
+
+function xentryT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'xentry', ...options });
+}
 
 interface UseROXentryScanOptions {
   roRef: MutableRefObject<RepairOrder | null>;
@@ -115,7 +119,7 @@ export function useROXentryScan({
 
         const ro = roRef.current;
         if (!ro) {
-          throw new Error('Repair order not loaded — go back and reopen the line.');
+          throw new Error(xentryT('roNotLoaded'));
         }
 
         const persisted = appendXentryImage(ro, target, attachment);
@@ -183,20 +187,20 @@ export function useROXentryScan({
       if (xentryInFlightRef.current || getActivePipeline() === 'ro_scan') {
         const blocker = getActivePipeline();
         toast.message(
-          blocker ? visionPipelineBlockedMessage(blocker) : 'Diagnostic processing already in progress…'
+          blocker ? visionPipelineBlockedMessage(blocker) : xentryT('alreadyInProgress')
         );
         return;
       }
 
       if (!roRef.current) {
-        toast.error('Repair order not loaded — go back and reopen the line.');
+        toast.error(xentryT('roNotLoaded'));
         return;
       }
 
       try {
         const normalizedFiles = await normalizeScanFiles(rawFiles);
         if (normalizedFiles.length === 0) {
-          toast.error('No supported images were selected.');
+          toast.error(xentryT('noImages'));
           return;
         }
 
@@ -228,7 +232,7 @@ export function useROXentryScan({
         }
       } catch (error) {
         clientLog.error('xentry.file_prepare_failed', error);
-        toast.error(error instanceof Error ? error.message : 'Could not prepare diagnostic photos.');
+        toast.error(error instanceof Error ? error.message : xentryT('prepareFailed'));
       }
     },
     [getActivePipeline, roRef, uploadAndSavePending, xentryInFlightRef]
@@ -239,7 +243,7 @@ export function useROXentryScan({
       if (xentryInFlightRef.current || getActivePipeline() === 'ro_scan') {
         const blocker = getActivePipeline();
         toast.message(
-          blocker ? visionPipelineBlockedMessage(blocker) : 'Diagnostic processing already in progress…'
+          blocker ? visionPipelineBlockedMessage(blocker) : xentryT('alreadyInProgress')
         );
         return;
       }
@@ -260,7 +264,7 @@ export function useROXentryScan({
       if (xentryInFlightRef.current || getActivePipeline() === 'ro_scan') {
         const blocker = getActivePipeline();
         toast.message(
-          blocker ? visionPipelineBlockedMessage(blocker) : 'Diagnostic processing already in progress…'
+          blocker ? visionPipelineBlockedMessage(blocker) : xentryT('alreadyInProgress')
         );
         return;
       }
@@ -297,7 +301,7 @@ export function useROXentryScan({
         }
         return { ...prev, [key]: nextList };
       });
-      toast.message('Queued photo removed');
+      toast.message(xentryT('queuedRemoved'));
     },
     [clearPendingPreviews, pendingByKey]
   );
@@ -318,7 +322,7 @@ export function useROXentryScan({
         delete next[key];
         return next;
       });
-      toast.message('Queued diagnostic photos cleared');
+      toast.message(xentryT('queuedCleared'));
     },
     [clearPendingPreviews, pendingByKey]
   );
@@ -342,7 +346,7 @@ export function useROXentryScan({
       });
       return {};
     });
-    toast.message('Diagnostic processing cancelled');
+    toast.message(xentryT('cancelled'));
   }, [clearPendingPreviews, xentryInFlightRef, xentryPipeline]);
 
   const toastProcessResult = useCallback((fileCount: number, ocrTexts: string[]) => {
@@ -350,18 +354,14 @@ export function useROXentryScan({
     const failed = failedTexts.length;
     if (failed === fileCount) {
       const firstFailure = failedTexts[0];
-      toast.error(firstFailure ? xentryAnalysisFailureDetail(firstFailure) : 'Diagnostic analysis failed.');
+      toast.error(firstFailure ? xentryAnalysisFailureDetail(firstFailure) : xentryT('analysisFailed'));
       return;
     }
     if (failed > 0) {
-      toast.warning(
-        `${fileCount - failed} photo${fileCount - failed === 1 ? '' : 's'} analyzed; ${failed} need a retake or sharper image.`
-      );
+      toast.warning(xentryT('analysisPartial'));
       return;
     }
-    toast.success(
-      `${fileCount} diagnostic photo${fileCount === 1 ? '' : 's'} processed — tap Generate ${MI_PRODUCT_LABEL} to use extracted data.`
-    );
+    toast.success(xentryT('analysisSuccess'));
   }, []);
 
   const resolveAnalysisFile = useCallback(
@@ -381,11 +381,11 @@ export function useROXentryScan({
       const pending = pendingByKey[key] ?? [];
       const stillUploading = pending.some((img) => img.uploadStatus === 'uploading');
       if (stillUploading) {
-        toast.message('Wait for photos to finish saving before processing.');
+        toast.message(xentryT('waitSaving'));
         return;
       }
       if (xentryInFlightRef.current) {
-        toast.message('Diagnostic processing already in progress…');
+        toast.message(xentryT('alreadyInProgress'));
         return;
       }
       if (!xentryPipeline.tryAcquire()) {
@@ -408,7 +408,7 @@ export function useROXentryScan({
 
         const ro = roRef.current;
         if (!ro) {
-          throw new Error('Repair order not loaded — go back and reopen the line.');
+          throw new Error(xentryT('roNotLoaded'));
         }
 
         const baseline = readXentryBaseline(ro, target);
@@ -417,7 +417,7 @@ export function useROXentryScan({
           .filter(({ index }) => xentryImageNeedsAnalysis(baseline.ocrTexts, index));
 
         if (indicesToAnalyze.length === 0) {
-          toast.message('Add at least one diagnostic photo before processing.');
+          toast.message(xentryT('addPhotoFirst'));
           return;
         }
 
@@ -430,10 +430,13 @@ export function useROXentryScan({
         );
         if (!isActive()) return;
 
-        xentryPipeline.start('Running AI vision extraction…');
+        xentryPipeline.start(xentryT('statusRunningAi'));
         xentryPipeline.setProgress(12);
         xentryPipeline.setStatusMessage(
-          `Analyzing ${indicesToAnalyze.length} diagnostic photo${indicesToAnalyze.length === 1 ? '' : 's'}…`
+          xentryT(
+            indicesToAnalyze.length === 1 ? 'statusAnalyzing_one' : 'statusAnalyzing_other',
+            { count: indicesToAnalyze.length }
+          )
         );
         void warmupOcrWorker().catch((error) => {
           clientLog.warn('xentry.ocr_warmup_failed', error);
@@ -447,7 +450,7 @@ export function useROXentryScan({
         // Mark all as analyzing up front for UI feedback
         updatedOcrTexts = updatedOcrTexts.map((text, idx) =>
           indicesToAnalyze.some((item) => item.index === idx)
-            ? '[Analyzing diagnostic photo…]'
+            ? xentryT('statusAnalyzingPlaceholder')
             : text
         );
         {
@@ -465,7 +468,10 @@ export function useROXentryScan({
           const file = await resolveAnalysisFile(attachment);
 
           xentryPipeline.setStatusMessage(
-            `Analyzing photo ${Math.min(completedPasses + 1, indicesToAnalyze.length)} of ${indicesToAnalyze.length} (fault codes, measurements, guided tests)…`
+            xentryT('statusAnalyzingPhoto', {
+              current: Math.min(completedPasses + 1, indicesToAnalyze.length),
+              total: indicesToAnalyze.length,
+            })
           );
 
           try {
@@ -523,7 +529,7 @@ export function useROXentryScan({
 
         const finalRo = roRef.current;
         if (!finalRo) {
-          throw new Error('Repair order not loaded — go back and reopen the line.');
+          throw new Error(xentryT('roNotLoaded'));
         }
         const persisted = applyXentrySnapshot(
           finalRo,
@@ -543,7 +549,7 @@ export function useROXentryScan({
       } catch (error) {
         if (!isActive() || isRequestAborted(error)) return;
         clientLog.error('xentry.process_failed', error);
-        toast.error(error instanceof Error ? error.message : 'Failed to process diagnostic photos');
+        toast.error(error instanceof Error ? error.message : xentryT('processFailed'));
       } finally {
         abortControllerRef.current = null;
         if (sessionRef.current === sessionId) {

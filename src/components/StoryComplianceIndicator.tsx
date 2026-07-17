@@ -1,20 +1,12 @@
 'use client';
 
 import { CheckCircle2, Circle, Shield } from 'lucide-react';
-import {
-  STORY_COMPLIANCE_LABELS,
-  type StoryComplianceState,
-} from '@/lib/storyComplianceState';
+import { useTranslation } from 'react-i18next';
+import type { StoryComplianceState } from '@/lib/storyComplianceState';
 
 interface StoryComplianceIndicatorProps {
   state: StoryComplianceState;
 }
-
-const STEPS: { key: StoryComplianceState; label: string }[] = [
-  { key: 'not-audited', label: 'Not Audited' },
-  { key: 'audited', label: 'Audited' },
-  { key: 'certified', label: 'Certified' },
-];
 
 function stepIndex(state: StoryComplianceState): number {
   if (state === 'certified') return 2;
@@ -23,15 +15,31 @@ function stepIndex(state: StoryComplianceState): number {
 }
 
 export function StoryComplianceIndicator({ state }: StoryComplianceIndicatorProps) {
+  const { t } = useTranslation('story');
   const activeIndex = stepIndex(state);
   const isStale = state === 'audit-stale';
+
+  const statusLabel =
+    state === 'not-audited'
+      ? t('complianceNotAudited')
+      : state === 'audited'
+        ? t('complianceAudited')
+        : state === 'audit-stale'
+          ? t('complianceStale')
+          : t('complianceCertified');
+
+  const steps: { key: StoryComplianceState; label: string }[] = [
+    { key: 'not-audited', label: t('complianceNotAudited') },
+    { key: 'audited', label: t('complianceAudited') },
+    { key: 'certified', label: t('complianceCertified') },
+  ];
 
   return (
     <div className="benz-card p-3.5 mb-4 border border-benz-accent/20 bg-benz-accent/5">
       <div className="flex items-center gap-2 mb-2.5">
         <Shield size={14} className="text-benz-blue shrink-0" />
         <span className="text-xs font-semibold uppercase tracking-wider text-benz-silver">
-          Story Compliance
+          {t('complianceTitle')}
         </span>
         <span
           className={`ml-auto text-xs font-semibold ${
@@ -44,12 +52,12 @@ export function StoryComplianceIndicator({ state }: StoryComplianceIndicatorProp
                   : 'text-benz-secondary'
           }`}
         >
-          {STORY_COMPLIANCE_LABELS[state]}
+          {statusLabel}
         </span>
       </div>
 
       <div className="flex items-center gap-1">
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const done = index < activeIndex || (index === activeIndex && state === 'certified');
           const current = index === activeIndex && state !== 'certified';
 
@@ -67,7 +75,7 @@ export function StoryComplianceIndicator({ state }: StoryComplianceIndicatorProp
                 )}
                 <span className="text-[11px] font-medium truncate">{step.label}</span>
               </div>
-              {index < STEPS.length - 1 && (
+              {index < steps.length - 1 && (
                 <div
                   className={`h-px flex-1 mx-0.5 ${
                     index < activeIndex ? 'bg-benz-green/50' : 'bg-benz-border'
@@ -81,22 +89,22 @@ export function StoryComplianceIndicator({ state }: StoryComplianceIndicatorProp
 
       {state === 'not-audited' && (
         <p className="text-xs text-benz-secondary mt-2.5 leading-snug">
-          Run Audit Story before you can certify or copy to CDK.
+          {t('complianceHintNotAudited')}
         </p>
       )}
       {state === 'audited' && (
         <p className="text-xs text-benz-secondary mt-2.5 leading-snug">
-          MI audit complete — certify below to unlock Copy for CDK.
+          {t('complianceHintAudited')}
         </p>
       )}
       {isStale && (
         <p className="text-xs text-benz-amber mt-2.5 leading-snug">
-          Story changed since the last audit — re-run Audit Story before copying.
+          {t('complianceHintStale')}
         </p>
       )}
       {state === 'certified' && (
         <p className="text-xs text-benz-green mt-2.5 leading-snug">
-          Story audited and certified — Copy for CDK is enabled.
+          {t('complianceHintCertified')}
         </p>
       )}
     </div>

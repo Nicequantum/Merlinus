@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
+import { ensureI18n } from '@/i18n/config';
 import { api } from '@/lib/api';
 import { clientLog } from '@/lib/clientLog';
 import { sanitizeForCDKWithMeta } from '@/lib/sanitizeForCDK';
@@ -28,6 +29,14 @@ import {
 } from '@/hooks/repairOrders/useROStoryWorkflow';
 import { isCustomerPayRepairLine } from '@/lib/customerPayLine';
 import { hydrateStoryWorkflowFromRO } from '@/lib/storyCertificationClient';
+
+function roT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'ro', ...options });
+}
+
+function storyT(key: string, options?: Record<string, unknown>): string {
+  return ensureI18n().t(key, { ns: 'story', ...options });
+}
 import { hydrateStoryQualityFromRO } from '@/lib/storyQualityHydration';
 import {
   createManualRepairOrder,
@@ -250,7 +259,7 @@ export function useRepairOrders({
 
   const deleteRO = useCallback(
     async (id: string) => {
-      if (!window.confirm('Delete this RO and all its data?')) return;
+      if (!window.confirm(roT('deleteConfirm'))) return;
       try {
         await api.deleteRepairOrder(id);
         setAllROs((prev) => prev.filter((r) => r.id !== id));
@@ -280,10 +289,10 @@ export function useRepairOrders({
           );
           setView('home');
         }
-        toast.success('Repair order deleted');
+        toast.success(roT('deleted'));
       } catch (e) {
         clientLog.error('ro.delete_failed', e);
-        toast.error(e instanceof Error ? e.message : 'Delete failed');
+        toast.error(e instanceof Error ? e.message : roT('deleteFailed'));
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
@@ -478,9 +487,9 @@ export function useRepairOrders({
       setAllROs((prev) => [repairOrderToSummary(withIds), ...prev]);
       setCurrentRO(withIds);
       navigateView('ro');
-      toast.success('Manual repair order created');
+      toast.success(roT('manualCreated'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create repair order');
+      toast.error(e instanceof Error ? e.message : roT('manualCreateFailed'));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setAllROs is a stable state setter
   }, [navigateView]);
@@ -566,13 +575,13 @@ export function useRepairOrders({
     flushPendingSave();
     const latestRO = roRef.current;
     if (!latestRO?.vehicle.vin || latestRO.vehicle.vin.length < 17) {
-      toast.error('Enter a valid 17-character VIN first');
+      toast.error(roT('vinDecodeFailed'));
       return;
     }
     try {
       const result = await api.decodeVin(latestRO.vehicle.vin);
       if (!result.valid) {
-        toast.error('VIN could not be decoded — verify and try again');
+        toast.error(roT('vinDecodeFailed'));
         return;
       }
       updateVehicle({
@@ -581,9 +590,9 @@ export function useRepairOrders({
         model: result.model || latestRO.vehicle.model,
         engine: result.engine || latestRO.vehicle.engine,
       });
-      toast.success('Vehicle details filled from NHTSA VIN decode');
+      toast.success(roT('vinDecoded'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'VIN decode failed');
+      toast.error(e instanceof Error ? e.message : roT('vinDecodeFailed'));
     }
   }, [flushPendingSave, updateVehicle]);
 
@@ -606,7 +615,7 @@ export function useRepairOrders({
 
   const deleteLineXentryImage = useCallback(
     async (lineId: string, imageId: string) => {
-      if (!window.confirm('Delete this diagnostic photo? Extracted data will be updated.')) return;
+      if (!window.confirm(roT('photoDeleteConfirm'))) return;
       const latestRO = roRef.current;
       if (!latestRO) return;
       const line = latestRO.repairLines.find((l) => l.id === lineId);
@@ -627,10 +636,10 @@ export function useRepairOrders({
       );
       try {
         await saveROImmediate({ ...latestRO, repairLines: updatedLines });
-        toast.success('Diagnostic photo deleted');
+        toast.success(roT('photoDeleted'));
       } catch (error: unknown) {
         clientLog.error('ro.delete_diagnostic_photo_failed', error);
-        toast.error(error instanceof Error ? error.message : 'Failed to delete diagnostic photo');
+        toast.error(error instanceof Error ? error.message : roT('photoDeleteFailed'));
       }
     },
     [saveROImmediate]
@@ -638,7 +647,7 @@ export function useRepairOrders({
 
   const deleteROXentryImage = useCallback(
     async (imageId: string) => {
-      if (!window.confirm('Delete this Xentry photo? Extracted data will be updated.')) return;
+      if (!window.confirm(roT('xentryPhotoDeleteConfirm'))) return;
       const latestRO = roRef.current;
       if (!latestRO) return;
 
@@ -659,10 +668,10 @@ export function useRepairOrders({
           xentryOcrTexts: result.nextOcr,
           repairLines: updatedLines,
         });
-        toast.success('Xentry photo deleted');
+        toast.success(roT('photoDeleted'));
       } catch (error: unknown) {
         clientLog.error('ro.delete_xentry_photo_failed', error);
-        toast.error(error instanceof Error ? error.message : 'Failed to delete Xentry photo');
+        toast.error(error instanceof Error ? error.message : roT('photoDeleteFailed'));
       }
     },
     [saveROImmediate]
@@ -787,17 +796,17 @@ export function useRepairOrders({
       await flushPendingSave();
       const latestRO = roRef.current;
       if (!latestRO) {
-        toast.error('Repair order not loaded — go back and reopen the line');
+        toast.error(storyT('roNotLoaded'));
         return;
       }
 
       const line = latestRO.repairLines.find((l) => l.id === lineId);
       if (!line) {
-        toast.error('Repair line not found — refresh the RO and try again');
+        toast.error(storyT('lineNotFound'));
         return;
       }
       if (isCustomerPayRepairLine(line)) {
-        toast.error('Customer Pay stories do not require certification');
+        toast.error(storyT('cpNoCertify'));
         return;
       }
 
@@ -838,9 +847,9 @@ export function useRepairOrders({
           }),
           { immediate: true }
         );
-        toast.success('Story certified and saved');
+        toast.success(storyT('certified'));
       } catch (error: unknown) {
-        throw error instanceof Error ? error : new Error('Failed to certify and save story');
+        throw error instanceof Error ? error : new Error(storyT('certifyFailed'));
       } finally {
         setIsCertifyingStory(false);
       }

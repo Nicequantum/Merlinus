@@ -4,6 +4,7 @@ import {
   isXentryAnalysisFailure,
   xentryAnalysisFailureDetail,
 } from '@/hooks/repairOrders/xentryToastHelpers';
+import { ensureI18n } from '@/i18n/config';
 
 describe('Xentry toast failure detection (H3)', () => {
   it('detects colon-style analysis failures', () => {
@@ -11,19 +12,19 @@ describe('Xentry toast failure detection (H3)', () => {
     assert.equal(xentryAnalysisFailureDetail('[Analysis failed: Grok timeout]'), 'Grok timeout');
   });
 
-  it('detects per-image catch failures', () => {
+  it('detects per-image catch failures and returns localized analysisFailed', () => {
     assert.ok(isXentryAnalysisFailure('[Analysis failed for this image]'));
-    assert.match(
+    assert.equal(
       xentryAnalysisFailureDetail('[Analysis failed for this image]'),
-      /sharper photo/i
+      ensureI18n().t('analysisFailed', { ns: 'xentry' })
     );
   });
 
-  it('detects empty extraction failures', () => {
+  it('detects empty extraction failures and returns localized analysisFailed', () => {
     assert.ok(isXentryAnalysisFailure('[No diagnostic text extracted from image]'));
-    assert.match(
+    assert.equal(
       xentryAnalysisFailureDetail('[No diagnostic text extracted from image]'),
-      /No diagnostic text/i
+      ensureI18n().t('analysisFailed', { ns: 'xentry' })
     );
   });
 

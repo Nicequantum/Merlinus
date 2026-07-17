@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { BookmarkPlus, Loader2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { TemplateCategory } from '@/types';
@@ -37,6 +38,7 @@ export function SaveTemplateModal({
   repairOrderId,
   lineId,
 }: SaveTemplateModalProps) {
+  const { t } = useTranslation('templates');
   const [title, setTitle] = useState(defaultTitle);
   const [category, setCategory] = useState<TemplateCategory>(defaultCategory);
   const [preview, setPreview] = useState(storyText);
@@ -63,11 +65,11 @@ export function SaveTemplateModal({
     const trimmedTitle = title.trim();
     const trimmedPreview = preview.trim();
     if (!trimmedTitle) {
-      toast.error('Enter a template title');
+      toast.error(t('titleRequired'));
       return;
     }
     if (!trimmedPreview) {
-      toast.error('Story text cannot be empty');
+      toast.error(t('saveFailed'));
       return;
     }
 
@@ -85,11 +87,11 @@ export function SaveTemplateModal({
         repairOrderId,
         lineId,
       });
-      toast.success(`Template "${trimmedTitle}" saved — Grok will learn from this story`);
+      toast.success(t('saveSuccess'));
       onSaved(trimmedTitle, trimmedPreview);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save template');
+      toast.error(e instanceof Error ? e.message : t('saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -104,19 +106,17 @@ export function SaveTemplateModal({
           <div>
             <div className="flex items-center gap-2 text-benz-green mb-1">
               <BookmarkPlus size={18} />
-              <span className="text-xs uppercase tracking-[0.2em] font-semibold">Save as New Template</span>
+              <span className="text-xs uppercase tracking-[0.2em] font-semibold">{t('saveTitle')}</span>
             </div>
-            <h2 className="text-lg font-semibold tracking-tight">Grow the Knowledge Base</h2>
-            <p className="text-xs text-benz-secondary mt-1">
-              Your approved story trains future Grok generations for this dealership.
-            </p>
+            <h2 className="text-lg font-semibold tracking-tight">{t('saveTitle')}</h2>
+            <p className="text-xs text-benz-secondary mt-1">{t('saveSubtitle')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
             className="benz-icon-btn border border-benz-surface-3 disabled:opacity-50"
-            aria-label="Close"
+            aria-label={t('cancel')}
           >
             <X size={18} />
           </button>
@@ -124,19 +124,19 @@ export function SaveTemplateModal({
 
         <div className="p-5 space-y-4 overflow-y-auto">
           <div>
-            <label className="benz-label">Template Title</label>
+            <label className="benz-label">{t('titleLabel')}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={saving}
-              placeholder="e.g. Blind Spot Assist — S-Class Software Update"
+              placeholder={t('titlePlaceholder')}
               className="benz-input disabled:opacity-60"
             />
           </div>
 
           <div>
-            <label className="benz-label">Category</label>
+            <label className="benz-label">{t('categoryLabel')}</label>
             <div className="flex gap-2">
               {(['warranty', 'customer'] as const).map((value) => (
                 <button
@@ -148,14 +148,14 @@ export function SaveTemplateModal({
                     category === value ? 'benz-tab-btn-active' : ''
                   }`}
                 >
-                  {value === 'customer' ? 'Customer Pay' : 'Warranty Claims'}
+                  {value === 'customer' ? t('categoryCustomer') : t('categoryWarranty')}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="benz-label">Story Preview (final edits)</label>
+            <label className="benz-label">{t('previewLabel')}</label>
             <textarea
               value={preview}
               onChange={(e) => setPreview(e.target.value)}
@@ -163,9 +163,6 @@ export function SaveTemplateModal({
               rows={12}
               className="benz-textarea disabled:opacity-60"
             />
-            <p className="benz-hint mt-1.5">
-              Grok draft is stored separately so the system learns what you changed.
-            </p>
           </div>
         </div>
 
@@ -179,10 +176,10 @@ export function SaveTemplateModal({
             {saving ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                Saving template…
+                {t('saving')}
               </>
             ) : (
-              'Save to library'
+              t('save')
             )}
           </button>
           <button
@@ -191,7 +188,7 @@ export function SaveTemplateModal({
             disabled={saving}
             className="secondary-btn h-12 px-4 text-sm disabled:opacity-60"
           >
-            Cancel
+            {t('cancel')}
           </button>
         </div>
       </div>
