@@ -76,5 +76,7 @@
   "pdfNoStoryCp": "Aún no hay historia para exportar",
   "addToStoryNotes": "Agregar a historia + notas",
   "addToStoryConcern": "Agregar a historia + preocupación",
+  "addToStoryDiagnostic": "Agregar diagnóstico a la historia",
+  "addToStoryWorkflow": "Agregar flujo de trabajo a la historia",
   "addToStory": "Agregar a la historia"
 }

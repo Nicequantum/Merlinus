@@ -76,5 +76,7 @@
   "pdfNoStoryCp": "No story to export yet",
   "addToStoryNotes": "Add to Story + Notes",
   "addToStoryConcern": "Add to Story + Concern",
+  "addToStoryDiagnostic": "Add Diagnostic to Story",
+  "addToStoryWorkflow": "Add Workflow to Story",
   "addToStory": "Add to Story"
 }

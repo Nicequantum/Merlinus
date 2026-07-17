@@ -97,9 +97,9 @@ export function technicianDetailActionLabel(field: TechnicianDetailPrompt['field
     case 'customerConcern':
       return t('addToStoryConcern');
     case 'diagnostic':
-      return t('addToStory');
+      return t('addToStoryDiagnostic');
     case 'workflow':
-      return t('addToStory');
+      return t('addToStoryWorkflow');
     default:
       return t('addToStory');
   }

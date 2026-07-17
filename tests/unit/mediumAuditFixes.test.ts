@@ -17,7 +17,9 @@ function readSrc(relativePath: string): string {
 describe('Medium audit fixes (M1–M30)', () => {
   it('M1: clear Customer Pay API and UI', () => {
     assert.ok(readSrc('src/app/api/repair-orders/[id]/lines/[lineId]/clear-customer-pay/route.ts').includes('clearCustomerPayMode'));
-    assert.ok(readSrc('src/components/LineView.tsx').includes('Switch to warranty AI'));
+    // UI copy lives in i18n catalogs; LineView must wire the clear-CP switch CTA key.
+    assert.ok(readSrc('src/components/LineView.tsx').includes("switchToWarranty"));
+    assert.ok(readSrc('src/i18n/locales/en/line.json').includes('Switch to warranty AI'));
   });
 
   it('M2/M3: transactional idempotent Customer Pay apply', () => {
